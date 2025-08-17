@@ -1,0 +1,55 @@
+site_name: CORTEX
+site_description: OpenAI-compatible gateway and admin UI for operating vLLM engines. Built by Aulendur LLC.
+theme:
+  name: material
+  features:
+    - navigation.tracking
+    - navigation.sections
+    - content.code.copy
+    - content.tabs.link
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true
+  - def_list
+  - attr_list
+  - footnotes
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - pymdownx.details
+  - pymdownx.emoji
+  - pymdownx.tasklist:
+      custom_checkbox: true
+plugins:
+  - search
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Quickstart (Docker): getting-started/quickstart-docker.md
+      - Quickstart (Local Dev): getting-started/quickstart-local.md
+      - Configuration: getting-started/configuration.md
+  - Architecture:
+      - System Overview: architecture/system.md
+      - Backend: architecture/backend.md
+      - Frontend: architecture/frontend.md
+      - Observability: architecture/observability.md
+  - API:
+      - OpenAI-compatible: api/openai-compatible.md
+      - Admin API: api/admin-api.md
+  - Operations:
+      - Deployments: operations/deployments.md
+      - Scaling & Reliability: operations/scaling.md
+      - Backup & Restore: operations/backup-restore.md
+      - Upgrade Notes: operations/upgrade-notes.md
+  - Models:
+      - vLLM Guide: models/vllm.md
+      - Model Management: models/model-management.md
+  - Security:
+      - Security Posture: security/security.md
+      - Threat Model: security/threat-model.md
+  - Contributing:
+      - How to Contribute: contributing/how-to-contribute.md
+      - Coding Standards: contributing/coding-standards.md
+      - ADRs: contributing/adr/README.md
+

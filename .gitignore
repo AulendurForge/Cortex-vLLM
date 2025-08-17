@@ -13,6 +13,8 @@ dist/
 Thumbs.db
 .vscode/
 .idea/
+.cursor/*
+.docs-venv/*
 
 # Python
 __pycache__/
