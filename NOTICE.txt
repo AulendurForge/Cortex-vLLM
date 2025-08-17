@@ -1,0 +1,9 @@
+NOTICE
+
+This software is developed and maintained by Aulendur LLC.
+
+Licensed under the Apache License, Version 2.0. See `LICENSE.txt` for details.
+
+For inquiries regarding licensing or usage, contact:
+Aulendur LLC
+contact@aulendur.com

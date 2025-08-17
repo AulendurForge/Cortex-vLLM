@@ -1,0 +1,73 @@
+name: Update year in README and LICENSE
+
+on:
+  schedule:
+    # Run annually on Jan 1 at 00:17 UTC
+    - cron: '17 0 1 1 *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update-year:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Update year tokens
+        id: update
+        shell: bash
+        run: |
+          set -euo pipefail
+          YEAR="$(date +%Y)"
+          echo "year=${YEAR}" >> "$GITHUB_OUTPUT"
+          files=("README.md" "LICENSE.txt")
+
+          for f in "${files[@]}"; do
+            [[ -f "$f" ]] || continue
+
+            # 1) Replace bracketed years like [2024] -> [2025]
+            sed -i -E "s/\[[0-9]{4}\]/[${YEAR}]/g" "$f"
+
+            # 2) Replace copyright lines with a bare year: "Copyright 2024" -> "Copyright 2025"
+            sed -i -E "s/(Copyright[[:space:]]+(\(c\)[[:space:]]*)?)[0-9]{4}/\1${YEAR}/Ig" "$f"
+
+            # 3) Replace a placeholder token if present
+            sed -i -E "s/\{\{CURRENT_YEAR\}\}/${YEAR}/g" "$f"
+          done
+
+      - name: Detect changes
+        id: detect
+        shell: bash
+        run: |
+          if [[ -n "$(git status --porcelain)" ]]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create Pull Request
+        if: steps.detect.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: 'chore: update year tokens to ${{ steps.update.outputs.year }}'
+          title: 'chore: update year to ${{ steps.update.outputs.year }}'
+          body: |
+            Automated annual update of year tokens in README and LICENSE.
+            - Updated bracketed years like [YYYY]
+            - Updated copyright lines
+            - Replaced {{CURRENT_YEAR}} tokens if present
+          branch: chore/update-year
+          labels: automations
+          signoff: true
+
+      - name: No changes
+        if: steps.detect.outputs.changed != 'true'
+        run: echo "No year changes needed."
+
+

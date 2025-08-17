@@ -1,0 +1,154 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* App-level styles */
+html, body, #__next {
+  height: 100%;
+}
+
+/* CORTEX brand background */
+body {
+  @apply bg-cortex-gradient text-white antialiased;
+}
+
+/* Chart theming */
+:root {
+  --chart-grid: rgba(255,255,255,0.08);
+  --chart-axis: rgba(255,255,255,0.35);
+  --chart-label: rgba(255,255,255,0.85);
+  --chart-tooltip-bg: rgba(8, 12, 20, 0.9);
+  --chart-tooltip-border: rgba(255,255,255,0.15);
+}
+
+/* Hint browsers to render native form controls (e.g., <select>) using dark UI */
+:root {
+  color-scheme: dark;
+}
+
+/* Baseline dark styling for selects and their options */
+select.input {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-color: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.92);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='M6 8l4 4 4-4' stroke='rgba(255,255,255,0.7)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.6rem center;
+  background-size: 1rem 1rem;
+  padding-right: 2rem; /* room for chevron */
+}
+select.input:focus {
+  @apply ring-2 ring-white/20;
+}
+/* Some browsers honor option styling; safe to provide */
+select.input option {
+  background-color: rgba(13, 18, 28, 0.98);
+  color: rgba(255, 255, 255, 0.96);
+}
+select.input optgroup {
+  background-color: rgba(13, 18, 28, 0.98);
+  color: rgba(255, 255, 255, 0.96);
+}
+
+/* Frosted glass utility */
+.glass {
+  background: rgba(255, 255, 255, 0.06);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.4);
+}
+
+/* Animated mesh gradient background (subtle) */
+.mesh-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  overflow: hidden;
+}
+.mesh-bg .blob {
+  position: absolute;
+  width: 70vmax;
+  height: 70vmax;
+  border-radius: 50%;
+  filter: blur(45px);
+  opacity: 0.45;
+  mix-blend-mode: screen;
+  will-change: transform;
+}
+.mesh-bg .blob.indigo {
+  background: radial-gradient(circle at center, rgba(99,102,241,0.35) 0%, rgba(99,102,241,0) 60%);
+  left: -12vmax;
+  top: -10vmax;
+  animation: drift1m 18s ease-in-out infinite alternate;
+}
+.mesh-bg .blob.green {
+  background: radial-gradient(circle at center, rgba(34,197,94,0.28) 0%, rgba(34,197,94,0) 60%);
+  right: -14vmax;
+  top: -6vmax;
+  animation: drift2m 20s ease-in-out infinite alternate;
+}
+.mesh-bg .blob.cyan {
+  background: radial-gradient(circle at center, rgba(14,165,233,0.28) 0%, rgba(14,165,233,0) 60%);
+  left: 8vmax;
+  bottom: -14vmax;
+  animation: drift3m 22s ease-in-out infinite alternate;
+}
+@keyframes drift1m {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to   { transform: translate3d(14vmax, 10vmax, 0) scale(1.08) rotate(1deg); }
+}
+@keyframes drift2m {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to   { transform: translate3d(-12vmax, 9vmax, 0) scale(1.1) rotate(-1deg); }
+}
+@keyframes drift3m {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to   { transform: translate3d(10vmax, -12vmax, 0) scale(1.08) rotate(0.5deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mesh-bg .blob { animation: none !important; opacity: 0.3; }
+}
+
+.muted {
+  color: rgba(255,255,255,0.7);
+}
+
+/* Tables */
+.table {
+  @apply w-full text-sm border border-glass rounded overflow-hidden;
+}
+.table thead {
+  background: rgba(255,255,255,0.06);
+}
+.table th, .table td {
+  @apply px-2 py-1.5 border-t border-glass text-white/90;
+}
+.table tbody tr:hover {
+  background: rgba(255,255,255,0.04);
+}
+
+/* Buttons */
+.btn {
+  @apply inline-flex items-center justify-center px-3 py-1.5 rounded-md border border-glass text-white/90 hover:bg-white/10 transition-colors;
+}
+.btn-primary {
+  @apply bg-white/10 hover:bg-white/15;
+}
+
+/* Light-on-light fix */
+.card {
+  @apply glass text-white/90;
+}
+
+/* Inputs */
+.input {
+  @apply w-full bg-white/5 border border-glass rounded px-2 py-1 text-white/90 placeholder-white/50 outline-none focus:ring-2 focus:ring-white/20;
+}
+label.text-sm {
+  @apply text-white/90;
+}

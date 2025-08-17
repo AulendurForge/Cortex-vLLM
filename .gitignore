@@ -1,0 +1,29 @@
+# Node / Next.js
+node_modules/
+.next/
+.turbo/
+out/
+dist/
+*.log
+.env.local
+.env*.local
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+.pytest_cache/
+.venv/
+venv/
+
+# Dev artifacts
+.dev/
+cookies.txt
+cookies-*.txt
+*.cookies.txt
+# Internal planning docs
+plans/*

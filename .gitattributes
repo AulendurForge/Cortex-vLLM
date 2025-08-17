@@ -1,0 +1,55 @@
+#
+# Line ending and attribute normalization
+#
+# Goal: keep LF in the repo for all text files, avoid CRLF-induced build issues,
+# while allowing Windows-only scripts (*.bat, *.cmd) to use CRLF on checkout.
+#
+
+# Auto-detect text files and normalize to LF in the repository
+* text=auto eol=lf
+
+# Explicit text categories (always LF)
+*.py   text eol=lf
+*.pyi  text eol=lf
+*.ts   text eol=lf
+*.tsx  text eol=lf
+*.js   text eol=lf
+*.jsx  text eol=lf
+*.mjs  text eol=lf
+*.cjs  text eol=lf
+*.css  text eol=lf
+*.scss text eol=lf
+*.md   text eol=lf
+*.txt  text eol=lf
+*.json text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+*.toml text eol=lf
+*.ini  text eol=lf
+*.env  text eol=lf
+Dockerfile text eol=lf
+*.Dockerfile text eol=lf
+*.sh   text eol=lf
+*.sql  text eol=lf
+
+# Windows batch files: keep CRLF so they run in cmd.exe
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+
+# Treat images and binaries as binary (no EOL changes)
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.svg  text eol=lf  
+*.pdf  binary
+*.ico  binary
+*.woff binary
+*.woff2 binary
+*.ttf  binary
+
+# Git should not attempt to merge lock files; keep them as-is
+package-lock.json -merge
+poetry.lock       -merge
+
+

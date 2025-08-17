@@ -1,0 +1,17 @@
+Government Purpose Rights
+
+This software was developed with funding from the United States Government and is subject to the rights and restrictions defined in DFARS 252.227-7014.
+
+The Government has Government Purpose Rights as defined in DFARS 252.227-7014(a)(12), which includes the right to use, modify, reproduce, release, or disclose the software within the Government without restriction, and to authorize others to do so for Government purposes.
+
+Any reproduction or distribution of this software outside the scope of authorized Government use requires prior written permission from the Air Force Wargaming Institute.
+
+Distribution Statement: Distribution authorized to U.S. Government agencies and their contractors for administrative or operational use. Other requests shall be referred to LeMay Center, Air University, Maxwell AFB, AL.
+
+© 2025 United States Government. All rights reserved.
+
+Restrictions:
+
+- This software may not be used for commercial purposes without explicit authorization.
+- No derivative works may be created or distributed outside of authorized Government channels.
+- Source code, if included, is not authorized for release or redistribution beyond approved recipients.
