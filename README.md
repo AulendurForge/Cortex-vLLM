@@ -1,4 +1,8 @@
-<img src="frontend/src/assets/Aulendur%20LLC%20Dark%20Logo%20with%20Text_NoBackground.png" alt="Aulendur LLC" align="right" width="180" />
+<img src="frontend/src/assets/Aulendur%20LLC%20Dark%20Logo%20with%20Text_NoBackground.png" alt="Aulendur LLC" align="right" width="80" />
+
+<p align="center">
+  <img src="frontend/src/assets/cortex%20logo%20and%20text%20black.png" alt="CORTEX" width="360" />
+</p>
 
 # CORTEX
 
