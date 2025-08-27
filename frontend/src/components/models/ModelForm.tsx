@@ -118,6 +118,8 @@ export function ModelForm({ onSubmit, onCancel, defaults, fetchBaseDir, saveBase
 
   // Notify parent of initial values
   React.useEffect(() => { try { onValuesChange && onValuesChange(values); } catch {} }, []);
+  // When task = embed, treat maxModelLen as auto/derived; we don't enforce any specific value here.
+  // We simply disable the slider to communicate that the model decides its context window.
 
   const refreshFolders = React.useCallback(async () => {
     if (!listLocalFolders || !baseDir) { setFolders([]); return; }
@@ -369,9 +371,14 @@ export function ModelForm({ onSubmit, onCancel, defaults, fetchBaseDir, saveBase
           step={1024}
           value={values.maxModelLen ?? 8192}
           onChange={(e)=>set('maxModelLen', Number(e.target.value))}
+          disabled={values.task === 'embed'}
         />
-        <div className="text-[11px] text-white/60">{values.maxModelLen ?? 8192} tokens</div>
-        <p className="text-[11px] text-white/50 mt-1">Upper bound of tokens per request. Larger values need more KV cache VRAM. <Tooltip text="Also called '--max-model-len'. Start with 8192–32768 on small GPUs; 131072 requires significant VRAM." /></p>
+        <div className="text-[11px] text-white/60">{values.task === 'embed' ? 'auto (model derived)' : (values.maxModelLen ?? 8192) + ' tokens'}</div>
+        <p className="text-[11px] text-white/50 mt-1">{values.task === 'embed' ? (
+          <>Embedding models usually define the maximum sequence length in their config (e.g., max_position_embeddings). The engine will use that automatically.</>
+        ) : (
+          <>Upper bound of tokens per request. Larger values need more KV cache VRAM. <Tooltip text="Also called '--max-model-len'. Start with 8192–32768 on small GPUs; 131072 requires significant VRAM." /></>
+        )}</p>
       </label>
       <div className="text-sm flex items-center gap-2 mt-6">
         <label className="inline-flex items-center gap-2"><input type="checkbox" checked={!!values.trustRemoteCode} onChange={(e)=>set('trustRemoteCode', e.target.checked)} />Trust remote code <Tooltip text="When enabled, allows executing custom code in model repos that define custom model classes or tokenizers. Only enable for trusted sources." /></label>

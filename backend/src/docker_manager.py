@@ -72,8 +72,15 @@ def _build_command(m: Model) -> list[str]:
         pass
     if m.gpu_memory_utilization:
         cmd += ["--gpu-memory-utilization", str(m.gpu_memory_utilization)]
-    if m.max_model_len:
-        cmd += ["--max-model-len", str(m.max_model_len)]
+    # Max context length:
+    # For embeddings models, let vLLM derive the correct limit from the model config
+    # (e.g., max_position_embeddings) to remain model‑agnostic. Do not pass the flag.
+    # For generation models, pass through when provided.
+    if m.max_model_len and not ((getattr(m, "task", "") or "").lower().startswith("embed")):
+        try:
+            cmd += ["--max-model-len", str(int(m.max_model_len))]
+        except Exception:
+            cmd += ["--max-model-len", str(m.max_model_len)]
     # Optional tuning flags
     try:
         if getattr(m, "max_num_batched_tokens", None):

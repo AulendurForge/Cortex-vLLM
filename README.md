@@ -57,7 +57,7 @@ curl http://localhost:8084/admin/system/gpus
 If the UI reports a CORS error when calling the gateway, ensure the gateway is allowing your UI origin. In `docker.compose.dev.yaml` we set:
 
 ```
-CORS_ALLOW_ORIGINS: http://localhost:3001,http://127.0.0.1:3001
+CORS_ALLOW_ORIGINS: http://10.1.10.241:3001,http://localhost:3001,http://127.0.0.1:3001
 ```
 Recreate the gateway after edits:
 ```bash

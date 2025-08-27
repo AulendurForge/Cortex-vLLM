@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     CORS_ENABLED: bool = True
     # For cookie auth to work across origins, this must NOT be "*"; set your frontend origin.
     # Default dev origin aligns with the Next.js app on port 3001.
-    CORS_ALLOW_ORIGINS: str = "http://localhost:3001"  # comma-separated or *
+    CORS_ALLOW_ORIGINS: str = "http://localhost:3001,http://10.1.10.241:3001"  # comma-separated or *
     SECURITY_HEADERS_ENABLED: bool = True
     # Database
     DATABASE_URL: str = "postgresql+asyncpg://cortex:cortex@postgres:5432/cortex"

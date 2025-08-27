@@ -29,7 +29,7 @@ services:
       GATEWAY_DEV_ALLOW_ALL_KEYS: "true"
       CORS_ENABLED: "true"
       # Pin to UI origin so credentials (cookies) are allowed over CORS
-      CORS_ALLOW_ORIGINS: http://localhost:3001,http://127.0.0.1:3001
+      CORS_ALLOW_ORIGINS: http://10.1.10.241:3001,http://localhost:3001,http://127.0.0.1:3001
       NVIDIA_VISIBLE_DEVICES: all
       NVIDIA_DRIVER_CAPABILITIES: compute,utility
       # Inside the container, always use the container mount points
