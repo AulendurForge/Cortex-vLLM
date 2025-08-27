@@ -48,6 +48,7 @@ class ModelItem(BaseModel):
     device: Optional[str] = None
     tokenizer: Optional[str] = None
     hf_config_path: Optional[str] = None
+    # Never expose tokens in GET responses
     state: str
     archived: bool
     port: Optional[int] = None
@@ -84,6 +85,8 @@ class CreateModelRequest(BaseModel):
     # GGUF-specific/optional
     tokenizer: Optional[str] = None
     hf_config_path: Optional[str] = None
+    # Optional HF token for gated/private repos; stored server-side, not returned
+    hf_token: Optional[str] = None
 
 class BaseDirCfg(BaseModel):
     base_dir: str
@@ -172,6 +175,7 @@ async def create_model(body: CreateModelRequest, _: dict = Depends(require_admin
             device=body.device,
             tokenizer=body.tokenizer,
             hf_config_path=body.hf_config_path,
+            hf_token=body.hf_token,
             state="stopped",
         )
         session.add(m)
@@ -203,6 +207,7 @@ class UpdateModelRequest(BaseModel):
     archived: Optional[bool] = None
     tokenizer: Optional[str] = None
     hf_config_path: Optional[str] = None
+    hf_token: Optional[str] = None
 
 @router.patch("/models/{model_id}")
 async def update_model(model_id: int, body: UpdateModelRequest, _: dict = Depends(require_admin)):
@@ -227,7 +232,7 @@ async def update_model(model_id: int, body: UpdateModelRequest, _: dict = Depend
             raise
         except Exception:
             pass
-        # apply changes if provided
+        # apply changes if provided (including optional hf_token)
         for field, value in body.dict(exclude_unset=True).items():
             setattr(m, field, value)
         from sqlalchemy import update as _update
@@ -312,7 +317,7 @@ async def start_model(model_id: int, _: dict = Depends(require_admin)):
         if not m:
             raise HTTPException(status_code=404, detail="not_found")
         try:
-            name, host_port = start_container_for_model(m)
+            name, host_port = start_container_for_model(m, hf_token=getattr(m, 'hf_token', None))
             await session.execute(update(Model).where(Model.id == model_id).values(state="running", container_name=name, port=host_port))
             await session.commit()
             # Register served name → URL so gateway can route by model
@@ -395,7 +400,7 @@ async def apply_model_changes(model_id: int, _: dict = Depends(require_admin)):
             stop_container_for_model(m)
         except Exception:
             pass
-        name, host_port = start_container_for_model(m)
+        name, host_port = start_container_for_model(m, hf_token=getattr(m, 'hf_token', None))
         await session.execute(update(Model).where(Model.id == model_id).values(state="running", container_name=name, port=host_port))
         await session.commit()
         try:

@@ -37,9 +37,18 @@ npm run dev
 Open `http://localhost:3001`.
 
 ## Prometheus (optional)
-If you want metrics locally, start Prometheus using `docker.compose.dev.yaml` or `infra/prometheus/prometheus.yml`.
+If you want metrics locally, the simplest path is to run Prometheus via compose:
+```bash
+docker compose -f docker.compose.dev.yaml up -d prometheus
+```
+To include host and GPU metrics on Linux with NVIDIA drivers installed, enable profiles and start exporters (compose handles them):
+```bash
+export COMPOSE_PROFILES=linux,gpu
+docker compose -f docker.compose.dev.yaml up -d node-exporter dcgm-exporter
+```
+Verify targets at `http://localhost:9090/targets`.
 
 ## Troubleshooting
 - Port conflicts: change ports in compose or app config.
-- CORS: set `CORS_ALLOW_ORIGINS` (comma-separated) in the backend `.env`.
-- GPU: to run vLLM with CUDA, use the Docker compose GPU profile and ensure NVIDIA runtime is available.
+- CORS: set `CORS_ALLOW_ORIGINS` (comma-separated) in the backend `.env`. For dev UI, allow `http://localhost:3001`.
+- GPU: to run vLLM with CUDA and enable GPU monitoring, install NVIDIA Container Toolkit and run exporters with the `gpu` profile.

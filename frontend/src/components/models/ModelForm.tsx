@@ -24,6 +24,7 @@ export type ModelFormValues = {
   enforceEager?: boolean;
   trustRemoteCode?: boolean;
   hfOffline?: boolean;
+  hfToken?: string; // optional per-model HF token
   // Advanced
   cpuOffloadGb?: number;
   enablePrefixCaching?: boolean;
@@ -59,8 +60,8 @@ export function ModelForm({ onSubmit, onCancel, defaults, fetchBaseDir, saveBase
     dtype: defaults?.dtype || 'auto',
     tpSize: defaults?.tpSize ?? 1,
     gpuMemoryUtilization: defaults?.gpuMemoryUtilization ?? 0.9,
-    maxModelLen: defaults?.maxModelLen ?? undefined,
-    maxNumBatchedTokens: defaults?.maxNumBatchedTokens ?? undefined,
+    maxModelLen: defaults?.maxModelLen ?? 8192,
+    maxNumBatchedTokens: defaults?.maxNumBatchedTokens ?? 2048,
     kvCacheDtype: defaults?.kvCacheDtype || '',
     quantization: defaults?.quantization || '',
     blockSize: defaults?.blockSize ?? undefined,
@@ -68,6 +69,7 @@ export function ModelForm({ onSubmit, onCancel, defaults, fetchBaseDir, saveBase
     enforceEager: defaults?.enforceEager ?? true,
     trustRemoteCode: defaults?.trustRemoteCode ?? false,
     hfOffline: defaults?.hfOffline ?? false,
+    hfToken: (defaults as any)?.hfToken || '',
     cpuOffloadGb: (defaults as any)?.cpuOffloadGb ?? 0,
     enablePrefixCaching: (defaults as any)?.enablePrefixCaching ?? undefined,
     prefixCachingHashAlgo: (defaults as any)?.prefixCachingHashAlgo ?? '',
@@ -183,128 +185,137 @@ export function ModelForm({ onSubmit, onCancel, defaults, fetchBaseDir, saveBase
         </div>
       )}
 
-      {!modeLocked && (values.mode === 'online' ? (
-        <label className="text-sm md:col-span-2">Hugging Face repo_id
-          <input className="input mt-1" placeholder="meta-llama/Meta-Llama-3-8B-Instruct" value={values.repoId}
-            onChange={(e)=>set('repoId', e.target.value)} required readOnly={modeLocked}/>
-          <p className="text-[11px] text-white/50 mt-1">Repository identifier on Hugging Face (owner/repo). The server will download weights into the shared HF cache. <Tooltip text="Example: meta-llama/Meta-Llama-3-8B-Instruct. Requires network access or prewarmed cache." /></p>
-        </label>
-      ) : (
-		<>
-          <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-2">
-				<label className="text-sm">Models base directory
-              <input className="input mt-1" placeholder="/var/cortex/models or C:\\cortex\\models" value={baseDir}
-                onChange={(e)=>setBaseDir(e.target.value)} readOnly={modeLocked} />
-              <p className="text-[11px] text-white/50 mt-1">Root folder that contains your offline model directories. It is mounted read‑only into vLLM as /models. <Tooltip text="On Windows set to C:/cortex/models; on Linux, /var/cortex/models. Subfolders appear in the dropdown below." /></p>
-				</label>
-            <div className="flex items-end gap-2">
-					<button type="button" className="btn" onClick={refreshFolders} disabled={!baseDir || loadingFolders}>{loadingFolders ? 'Loading…' : 'Refresh'}</button>
-              {(!modeLocked && saveBaseDir) && (
-						<button type="button" className="btn" onClick={async ()=>{ setSavingBase(true); try { await saveBaseDir(baseDir); await refreshFolders(); } finally { setSavingBase(false);} }} disabled={!baseDir || savingBase}>{savingBase ? 'Saving…' : 'Save'}</button>
-					)}
-				</div>
-				<div className="flex items-end">
-					<button type="button" className="btn" onClick={()=>{
-						try {
-							const p = (baseDir || '').replace(/\\\\/g,'/');
-							const url = p.match(/^([A-Za-z]:)/) ? `file:///${p.replace(/:/,':').replace(/\\\\/g,'/')}` : `file://${p}`;
-							window.open(url);
-						} catch {}
-					}}>Open folder</button>
-				</div>
-			</div>
-      <label className="text-sm md:col-span-2">Select your model item
-				<div className="flex items-center gap-2 mt-1">
-              <select className="input w-full" value={values.localPath || ''} onChange={(e)=>{
-                const folder = e.target.value; set('localPath', folder);
-                if (!values.name) set('name', folder);
-                const derived = (values.name || folder || '').toLowerCase().replace(/[^a-z0-9\-\_\s]/g,'').replace(/\s+/g,'-');
-                if (!values.servedModelName) set('servedModelName', derived);
-                if (folder) runInspect(folder);
-              }} disabled={modeLocked}>
-						<option value="">Select a folder…</option>
-						{folders.map((f)=> (<option key={f} value={f}>{f}</option>))}
-					</select>
-				</div>
-            <p className="text-[11px] text-white/50 mt-1">Pick a subfolder (SafeTensors) or a .gguf file. <Tooltip text="Folders are mounted as /models/<name> and used as --model /models/<name>. If you choose a .gguf file, we will pass --model /models/<file.gguf> and you must provide a tokenizer HF repo id below." /></p>
-			</label>
-      {/* New: folder inspection and selection between SafeTensors and GGUF */}
-      {!!inspect && (
-        <div className="md:col-span-2 space-y-2 text-sm">
-          {(inspect.has_safetensors && (inspect.gguf_files||[]).length>0) && (
-            <div className="inline-flex items-center gap-4">
-              <label className="inline-flex items-center gap-2"><input type="radio" checked={!useGguf} onChange={()=>setUseGguf(false)} />Use SafeTensors in this folder</label>
-              <label className="inline-flex items-center gap-2"><input type="radio" checked={useGguf} onChange={()=>setUseGguf(true)} />Use GGUF</label>
-            </div>
-          )}
-          {(!inspect.has_safetensors && (inspect.gguf_files||[]).length>0) && (
-            <div className="inline-flex items-center gap-2"><input type="radio" checked readOnly /> GGUF detected</div>
-          )}
-          {useGguf && (
-            <div className="rounded border border-white/10 bg-white/5 p-2">
-              <div className="flex items-center justify-between">
-                <div className="text-[12px] text-white/80">Requirements for GGUF</div>
-                <button type="button" className="btn px-2 py-0 text-xs" onClick={()=>setShowGgufHelp((v)=>!v)}>{showGgufHelp ? 'Collapse' : 'Show more…'}</button>
-              </div>
-              {showGgufHelp && (
-                <ul className="text-[12px] text-white/70 list-disc pl-5 mt-2 space-y-1">
-                  <li>Choose a single .gguf file in this folder.</li>
-                  <li>Recommended: provide the base Hugging Face repo id for the original model (passed as <code>--tokenizer</code>).</li>
-                  <li>Advanced: use local tokenizer. Folder must contain <code>config.json</code> (or <code>params.json</code> for Mistral-family) and <code>tokenizer.json</code> or <code>tokenizer.model</code>. We pass the folder via <code>--hf-config-path</code>.</li>
-                  <li>Optional but helpful: <code>tokenizer_config.json</code>, <code>special_tokens_map.json</code>, <code>generation_config.json</code>.</li>
-                  <li>vLLM supports single-file GGUF; pass a local path (not a remote repo) for the .gguf.</li>
-                </ul>
-              )}
-              {!!(inspect.gguf_files||[]).length && (
-                <div className="text-[11px] text-white/60 mt-2">Detected GGUF files: {(inspect.gguf_files||[]).join(', ')}</div>
-              )}
-              {!!(inspect.tokenizer_files||[]).length && (
-                <div className="text-[11px] text-white/60">Detected tokenizer files: {(inspect.tokenizer_files||[]).join(', ')}</div>
-              )}
-              {!!(inspect.warnings||[]).length && (
-                <div className="text-[11px] text-amber-300/90">Warnings: {(inspect.warnings||[]).join(', ')}</div>
-              )}
-            </div>
-          )}
-          {useGguf && (inspect.gguf_files||[]).length>1 && (
-            <label className="block">Select GGUF file
-              <select className="input mt-1" value={selectedGguf} onChange={(e)=>setSelectedGguf(e.target.value)}>
-                <option value="">Select .gguf…</option>
-                {inspect.gguf_files.map((g)=> (<option key={g} value={g}>{g}</option>))}
-              </select>
+      {!modeLocked && (
+        values.mode === 'online' ? (
+          <>
+            <label className="text-sm md:col-span-2">Hugging Face repo_id
+              <input className="input mt-1" placeholder="meta-llama/Meta-Llama-3-8B-Instruct" value={values.repoId}
+                onChange={(e)=>set('repoId', e.target.value)} required readOnly={modeLocked}/>
+              <p className="text-[11px] text-white/50 mt-1">Repository identifier on Hugging Face (owner/repo). The server will download weights into the shared HF cache. <Tooltip text="Example: meta-llama/Meta-Llama-3-8B-Instruct. Requires network access or prewarmed cache." /></p>
             </label>
-          )}
-          {useGguf && (inspect.tokenizer_files||[]).length>1 && (
-            <div className="text-red-300">Multiple tokenizer files detected in this folder. Keep only one tokenizer.* file.</div>
-          )}
-        </div>
-      )}
-      {useGguf && (
-        <>
-          <div className="md:col-span-2 space-y-1">
-            <div className="text-[12px] text-white/80">Tokenizer source for GGUF</div>
-            <label className="inline-flex items-center gap-2 text-sm"><input type="radio" checked={!useLocalTokenizer} onChange={()=>setUseLocalTokenizer(false)} />Provide Hugging Face repo id (recommended)</label>
-            <label className="inline-flex items-center gap-2 text-sm"><input type="radio" checked={useLocalTokenizer} onChange={()=>setUseLocalTokenizer(true)} />Use tokenizer.json in this folder (advanced)</label>
-            {!useLocalTokenizer && (
+            <label className="text-sm md:col-span-2">Hugging Face access token (optional)
+              <input className="input mt-1" type="password" placeholder="hf_... (stored with this model)" value={values.hfToken||''}
+                onChange={(e)=>set('hfToken', e.target.value)} />
+              <p className="text-[11px] text-white/50 mt-1">Used to download gated/private repos. Leave blank to use the server environment token. Stored server‑side and not shown after saving.</p>
+            </label>
+          </>
+        ) : (
+          <>
+            <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-2">
+              <label className="text-sm">Models base directory
+                <input className="input mt-1" placeholder="/var/cortex/models or C:\\cortex\\models" value={baseDir}
+                  onChange={(e)=>setBaseDir(e.target.value)} readOnly={modeLocked} />
+                <p className="text-[11px] text-white/50 mt-1">Root folder that contains your offline model directories. It is mounted read‑only into vLLM as /models. <Tooltip text="On Windows set to C:/cortex/models; on Linux, /var/cortex/models. Subfolders appear in the dropdown below." /></p>
+              </label>
+              <div className="flex items-end gap-2">
+                <button type="button" className="btn" onClick={refreshFolders} disabled={!baseDir || loadingFolders}>{loadingFolders ? 'Loading…' : 'Refresh'}</button>
+                {(!modeLocked && saveBaseDir) && (
+                  <button type="button" className="btn" onClick={async ()=>{ setSavingBase(true); try { await saveBaseDir(baseDir); await refreshFolders(); } finally { setSavingBase(false);} }} disabled={!baseDir || savingBase}>{savingBase ? 'Saving…' : 'Save'}</button>
+                )}
+              </div>
+              <div className="flex items-end">
+                <button type="button" className="btn" onClick={()=>{
+                  try {
+                    const p = (baseDir || '').replace(/\\\\/g,'/');
+                    const url = p.match(/^([A-Za-z]:)/) ? `file:///${p.replace(/:/,':').replace(/\\\\/g,'/')}` : `file://${p}`;
+                    window.open(url);
+                  } catch {}
+                }}>Open folder</button>
+              </div>
+            </div>
+            <label className="text-sm md:col-span-2">Select your model item
+              <div className="flex items-center gap-2 mt-1">
+                <select className="input w-full" value={values.localPath || ''} onChange={(e)=>{
+                  const folder = e.target.value; set('localPath', folder);
+                  if (!values.name) set('name', folder);
+                  const derived = (values.name || folder || '').toLowerCase().replace(/[^a-z0-9\-\_\s]/g,'').replace(/\s+/g,'-');
+                  if (!values.servedModelName) set('servedModelName', derived);
+                  if (folder) runInspect(folder);
+                }} disabled={modeLocked}>
+                  <option value="">Select a folder…</option>
+                  {folders.map((f)=> (<option key={f} value={f}>{f}</option>))}
+                </select>
+              </div>
+              <p className="text-[11px] text-white/50 mt-1">Pick a subfolder (SafeTensors) or a .gguf file. <Tooltip text="Folders are mounted as /models/<name> and used as --model /models/<name>. If you choose a .gguf file, we will pass --model /models/<file.gguf> and you must provide a tokenizer HF repo id below." /></p>
+            </label>
+            {/* New: folder inspection and selection between SafeTensors and GGUF */}
+            {!!inspect && (
+              <div className="md:col-span-2 space-y-2 text-sm">
+                {(inspect.has_safetensors && (inspect.gguf_files||[]).length>0) && (
+                  <div className="inline-flex items-center gap-4">
+                    <label className="inline-flex items-center gap-2"><input type="radio" checked={!useGguf} onChange={()=>setUseGguf(false)} />Use SafeTensors in this folder</label>
+                    <label className="inline-flex items-center gap-2"><input type="radio" checked={useGguf} onChange={()=>setUseGguf(true)} />Use GGUF</label>
+                  </div>
+                )}
+                {(!inspect.has_safetensors && (inspect.gguf_files||[]).length>0) && (
+                  <div className="inline-flex items-center gap-2"><input type="radio" checked readOnly /> GGUF detected</div>
+                )}
+                {useGguf && (
+                  <div className="rounded border border-white/10 bg-white/5 p-2">
+                    <div className="flex items-center justify-between">
+                      <div className="text-[12px] text-white/80">Requirements for GGUF</div>
+                      <button type="button" className="btn px-2 py-0 text-xs" onClick={()=>setShowGgufHelp((v)=>!v)}>{showGgufHelp ? 'Collapse' : 'Show more…'}</button>
+                    </div>
+                    {showGgufHelp && (
+                      <ul className="text-[12px] text-white/70 list-disc pl-5 mt-2 space-y-1">
+                        <li>Choose a single .gguf file in this folder.</li>
+                        <li>Recommended: provide the base Hugging Face repo id for the original model (passed as <code>--tokenizer</code>).</li>
+                        <li>Advanced: use local tokenizer. Folder must contain <code>config.json</code> (or <code>params.json</code> for Mistral-family) and <code>tokenizer.json</code> or <code>tokenizer.model</code>. We pass the folder via <code>--hf-config-path</code>.</li>
+                        <li>Optional but helpful: <code>tokenizer_config.json</code>, <code>special_tokens_map.json</code>, <code>generation_config.json</code>.</li>
+                        <li>vLLM supports single-file GGUF; pass a local path (not a remote repo) for the .gguf.</li>
+                      </ul>
+                    )}
+                    {!!(inspect.gguf_files||[]).length && (
+                      <div className="text-[11px] text-white/60 mt-2">Detected GGUF files: {(inspect.gguf_files||[]).join(', ')}</div>
+                    )}
+                    {!!(inspect.tokenizer_files||[]).length && (
+                      <div className="text-[11px] text-white/60">Detected tokenizer files: {(inspect.tokenizer_files||[]).join(', ')}</div>
+                    )}
+                    {!!(inspect.warnings||[]).length && (
+                      <div className="text-[11px] text-amber-300/90">Warnings: {(inspect.warnings||[]).join(', ')}</div>
+                    )}
+                  </div>
+                )}
+                {useGguf && (inspect.gguf_files||[]).length>1 && (
+                  <label className="block">Select GGUF file
+                    <select className="input mt-1" value={selectedGguf} onChange={(e)=>setSelectedGguf(e.target.value)}>
+                      <option value="">Select .gguf…</option>
+                      {inspect.gguf_files.map((g)=> (<option key={g} value={g}>{g}</option>))}
+                    </select>
+                  </label>
+                )}
+                {useGguf && (inspect.tokenizer_files||[]).length>1 && (
+                  <div className="text-red-300">Multiple tokenizer files detected in this folder. Keep only one tokenizer.* file.</div>
+                )}
+              </div>
+            )}
+            {useGguf && (
               <>
-                <input className="input mt-1" placeholder="e.g., TinyLlama/TinyLlama-1.1B-Chat-v1.0" value={values.tokenizer||''}
-                  onChange={(e)=>set('tokenizer', e.target.value)} />
-                <p className="text-[11px] text-white/50">The HF repo id of the base Transformers model this GGUF came from (find it on Hugging Face). This is passed to vLLM as <code>--tokenizer</code>. Using the base model's tokenizer is recommended for stability.</p>
+                <div className="md:col-span-2 space-y-1">
+                  <div className="text-[12px] text-white/80">Tokenizer source for GGUF</div>
+                  <label className="inline-flex items-center gap-2 text-sm"><input type="radio" checked={!useLocalTokenizer} onChange={()=>setUseLocalTokenizer(false)} />Provide Hugging Face repo id (recommended)</label>
+                  <label className="inline-flex items-center gap-2 text-sm"><input type="radio" checked={useLocalTokenizer} onChange={()=>setUseLocalTokenizer(true)} />Use tokenizer.json in this folder (advanced)</label>
+                  {!useLocalTokenizer && (
+                    <>
+                      <input className="input mt-1" placeholder="e.g., TinyLlama/TinyLlama-1.1B-Chat-v1.0" value={values.tokenizer||''}
+                        onChange={(e)=>set('tokenizer', e.target.value)} />
+                      <p className="text-[11px] text-white/50">The HF repo id of the base Transformers model this GGUF came from (find it on Hugging Face). This is passed to vLLM as <code>--tokenizer</code>. Using the base model's tokenizer is recommended for stability.</p>
+                    </>
+                  )}
+                  {useLocalTokenizer && (
+                    <p className="text-[11px] text-amber-300/90">We will try to use the tokenizer files present in this folder via <code>--hf-config-path</code>. This may be slower/less stable for some GGUFs.</p>
+                  )}
+                </div>
+                <label className="text-sm">HF config path (optional)
+                  <input className="input mt-1" placeholder="e.g., /models/folder" value={values.hfConfigPath||''}
+                    onChange={(e)=>set('hfConfigPath', e.target.value)} />
+                  <p className="text-[11px] text-white/50 mt-1">If tokenizer conversion fails, provide a path with a compatible Hugging Face config. Passed as --hf-config-path.</p>
+                </label>
               </>
             )}
-            {useLocalTokenizer && (
-              <p className="text-[11px] text-amber-300/90">We will try to use the tokenizer files present in this folder via <code>--hf-config-path</code>. This may be slower/less stable for some GGUFs.</p>
-            )}
-          </div>
-          <label className="text-sm">HF config path (optional)
-            <input className="input mt-1" placeholder="e.g., /models/folder" value={values.hfConfigPath||''}
-              onChange={(e)=>set('hfConfigPath', e.target.value)} />
-            <p className="text-[11px] text-white/50 mt-1">If tokenizer conversion fails, provide a path with a compatible Hugging Face config. Passed as --hf-config-path.</p>
-          </label>
-        </>
+          </>
+        )
       )}
-		</>
-      ))}
 
       <label className="text-sm">Display name
         <input className="input mt-1" value={values.name} onChange={(e)=>{ const v=e.target.value; set('name', v); const derived=(v||'').toLowerCase().replace(/[^a-z0-9\-\_\s]/g,'').replace(/\s+/g,'-'); set('servedModelName', derived); }} required />

@@ -51,4 +51,25 @@ CORTEX is configured primarily via environment variables. Defaults are defined i
 - Use strong `INTERNAL_VLLM_API_KEY` when upstreams are network-reachable.
 
 ## Compose profiles
-- `linux` and `gpu` profiles enable exporters and GPU scheduling; see Deployments.
+- `linux` enables the node-exporter; `gpu` enables the DCGM exporter and requests GPU access for containers that need it.
+- Enable per command or via env:
+```bash
+# one-off
+docker compose -f docker.compose.dev.yaml --profile linux --profile gpu up -d
+
+# persistent for the shell
+export COMPOSE_PROFILES=linux,gpu
+docker compose -f docker.compose.dev.yaml up -d
+```
+
+## CORS notes (dev)
+- When the UI runs at `http://localhost:3001`, ensure the gateway allows that origin:
+```
+CORS_ALLOW_ORIGINS=http://localhost:3001,http://127.0.0.1:3001
+```
+- Preflight check (should return Access-Control-Allow-Origin):
+```bash
+curl -i -X OPTIONS http://localhost:8084/auth/login \
+  -H 'Origin: http://localhost:3001' \
+  -H 'Access-Control-Request-Method: POST'
+```

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import docker
+import os
 from docker.models.containers import Container
 from docker.types import DeviceRequest
 from typing import Optional, Tuple
@@ -171,7 +172,7 @@ def _build_command(m: Model) -> list[str]:
     return cmd
 
 
-def start_container_for_model(m: Model) -> Tuple[str, int]:
+def start_container_for_model(m: Model, hf_token: Optional[str] | None = None) -> Tuple[str, int]:
     """Create (or recreate) a vLLM container for the model.
     Returns (container_name, host_port).
     """
@@ -207,6 +208,15 @@ def start_container_for_model(m: Model) -> Tuple[str, int]:
         # online: share HF cache (optional)
         if settings.HF_CACHE_DIR_HOST or settings.HF_CACHE_DIR:
             binds[settings.HF_CACHE_DIR_HOST or settings.HF_CACHE_DIR] = {"bind": "/root/.cache/huggingface", "mode": "rw"}
+        # Pass through HF token (per-model overrides process env)
+        try:
+            token = hf_token or os.environ.get("HUGGING_FACE_HUB_TOKEN") or os.environ.get("HF_TOKEN")
+            if token:
+                environment["HUGGING_FACE_HUB_TOKEN"] = str(token)
+                # Enable faster transfer backend when downloading from HF
+                environment.setdefault("HF_HUB_ENABLE_HF_TRANSFER", "1")
+        except Exception:
+            pass
 
     # GPU vs CPU mode
     device_mode = (getattr(m, "device", None) or "cuda").lower()
@@ -220,6 +230,8 @@ def start_container_for_model(m: Model) -> Tuple[str, int]:
         environment.setdefault("NCCL_P2P_DISABLE", "1")  # safer default across docker hosts
         environment.setdefault("NCCL_IB_DISABLE", "1")   # disable InfiniBand when not present
         environment.setdefault("NCCL_SHM_DISABLE", "0")  # allow SHM for intra-node comms
+        # Reduce CUDA memory fragmentation in PyTorch allocator
+        environment.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
     except Exception:
         pass
 

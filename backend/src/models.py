@@ -94,6 +94,8 @@ class Model(Base):
     # GGUF support: optional tokenizer HF repo id and optional HF config path
     tokenizer: Mapped[str | None] = mapped_column(String(255), nullable=True)
     hf_config_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    # Optional per-model Hugging Face access token (read from env if empty)
+    hf_token: Mapped[str | None] = mapped_column(Text, nullable=True)
     state: Mapped[str] = mapped_column(String(16), default="stopped")
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
     port: Mapped[int | None] = mapped_column(Integer, nullable=True)

@@ -277,10 +277,19 @@ async def bootstrap_owner(body: BootstrapRequest, settings = Depends(get_setting
     if SessionLocal is None:
         raise HTTPException(status_code=503, detail="Database not ready")
     async with SessionLocal() as session:
-        # If any admin exists, do nothing (two-role model)
-        existing = await session.execute(select(User).where(User.role == "Admin"))
-        if existing.scalar_one_or_none():
-            return {"status": "skipped"}
+        # If any admin exists, do nothing (two-role model).
+        # Use COUNT (or a LIMIT 1 query) to avoid MultipleResultsFound when multiple admins exist.
+        try:
+            cnt = (await session.execute(
+                select(func.count()).select_from(User).where(User.role == "Admin")
+            )).scalar_one()
+            if int(cnt or 0) > 0:
+                return {"status": "skipped"}
+        except Exception:
+            # Fallback: tolerate duplicates and just detect existence.
+            exists_any = (await session.execute(select(User).where(User.role == "Admin").limit(1))).first()
+            if exists_any:
+                return {"status": "skipped"}
         org_id = None
         if body.org_name:
             org = Organization(name=body.org_name)
