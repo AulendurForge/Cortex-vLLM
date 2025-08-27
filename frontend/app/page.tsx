@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect } from 'react';
+import { getGatewayBaseUrl } from '../src/lib/api-clients';
 
 export default function Home() {
   useEffect(() => {
     let cancelled = false;
-    const base = process.env.NEXT_PUBLIC_GATEWAY_URL || 'http://localhost:8084';
+    const base = getGatewayBaseUrl();
     (async () => {
       try {
         const r = await fetch(base + '/auth/me', { credentials: 'include', cache: 'no-store' });

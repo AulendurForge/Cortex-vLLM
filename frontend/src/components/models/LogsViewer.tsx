@@ -161,6 +161,7 @@ export function LogsViewer({ fetcher, onClose, pollMs = 2000, modelName }: Props
     for (const s of spans) {
       if (!merged.length) { merged.push(s); continue; }
       const last = merged[merged.length - 1];
+      if (!last || typeof last.end !== 'number' || typeof last.start !== 'number') { merged.push(s); continue; }
       if (s.start >= last.end) { merged.push(s); continue; }
       // overlap: split; keep higher priority segment first
       const pri = (t: Span['type']) => t === 'active' ? 3 : t === 'match' ? 2 : 1;

@@ -28,7 +28,8 @@ services:
       INTERNAL_VLLM_API_KEY: dev-internal-token
       GATEWAY_DEV_ALLOW_ALL_KEYS: "true"
       CORS_ENABLED: "true"
-      CORS_ALLOW_ORIGINS: http://localhost:3001
+      # Pin to UI origin so credentials (cookies) are allowed over CORS
+      CORS_ALLOW_ORIGINS: http://10.1.10.241:3001
       NVIDIA_VISIBLE_DEVICES: all
       NVIDIA_DRIVER_CAPABILITIES: compute,utility
       # Inside the container, always use the container mount points
@@ -38,7 +39,7 @@ services:
       CORTEX_MODELS_DIR_HOST: ${CORTEX_MODELS_DIR:-/var/cortex/models}
       HF_CACHE_DIR_HOST: ${HF_CACHE_DIR:-/var/cortex/hf-cache}
       VLLM_IMAGE: ${VLLM_IMAGE:-vllm/vllm-openai:latest}
-    ports: ["${GATEWAY_PORT:-8080}:8080"]
+    ports: ["${GATEWAY_PORT:-8084}:8084"]
     depends_on:
       - redis
       - postgres
@@ -95,7 +96,7 @@ services:
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:latest
     privileged: true
-    ports: ["8085:8080"]
+    ports: ["8085:8084"]
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:ro

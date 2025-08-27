@@ -2,6 +2,7 @@
 import { SideNav } from '../../src/components/SideNav';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { getGatewayBaseUrl } from '../../src/lib/api-clients';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -9,7 +10,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     let cancelled = false;
     (async () => {
       try {
-        const r = await fetch((process.env.NEXT_PUBLIC_GATEWAY_URL || 'http://localhost:8084') + '/auth/me', { credentials: 'include', cache: 'no-store' });
+        const base = getGatewayBaseUrl();
+        const r = await fetch(base + '/auth/me', { credentials: 'include', cache: 'no-store' });
         if (!cancelled && r.status === 401) {
           router.replace('/login');
         }

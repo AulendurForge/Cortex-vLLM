@@ -28,7 +28,7 @@ curl http://localhost:8084/health
 # Bootstrap admin (one-time)
 curl -X POST http://localhost:8084/admin/bootstrap-owner \
   -H 'Content-Type: application/json' \
-  -d '{"username":"owner","password":"change-me","org_name":"Default"}'
+  -d '{"username":"admin","password":"admin","org_name":"Default"}'
 # Create API key
 curl -X POST http://localhost:8084/admin/keys -H 'Content-Type: application/json' -d '{"scopes":"chat,completions,embeddings"}'
 # Call API (replace YOUR_TOKEN)

@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import apiFetch from '../../../src/lib/api-clients';
+import { getGatewayBaseUrl } from '../../../src/lib/api-clients';
 import { UsageListSchema, UsageSeriesSchema, UsageAggListSchema, LatencySummarySchema, TtftSummarySchema } from '../../../src/lib/validators';
 import { PageHeader, Card } from '../../../src/components/UI';
 import { LineChart, BarChart } from '../../../src/components/Charts';
@@ -136,7 +137,7 @@ export default function UsagePage() {
           <div className="flex items-center gap-2">
             <button onClick={() => { list.refetch(); series.refetch(); topModels.refetch(); latency.refetch(); ttft.refetch(); }} className="btn">Refresh</button>
             <button onClick={() => setLive(v => !v)} className={"btn " + (live ? 'bg-white/10' : '')} aria-pressed={live}>Live</button>
-            <button onClick={() => { const base = (process.env.NEXT_PUBLIC_GATEWAY_URL || 'http://localhost:8084'); window.open(`${base}/admin/usage/export?${params.toString()}`, '_blank'); }} className="btn">Export CSV</button>
+            <button onClick={() => { const base = getGatewayBaseUrl(); window.open(`${base}/admin/usage/export?${params.toString()}`, '_blank'); }} className="btn">Export CSV</button>
           </div>
         )}
       />

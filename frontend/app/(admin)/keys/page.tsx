@@ -22,6 +22,31 @@ const KeyCreateSchema = z.object({
 type KeyRow = { id: number; prefix: string; scopes: string; expires_at: string | null; last_used_at: string | null; disabled: boolean };
 type CreateResp = { id: number; prefix: string; token: string };
 
+async function safeCopyToClipboard(text: string): Promise<boolean> {
+  try {
+    // Prefer modern async clipboard API when available and permitted
+    if (typeof navigator !== 'undefined' && (navigator as any).clipboard && typeof (navigator as any).clipboard.writeText === 'function') {
+      await (navigator as any).clipboard.writeText(text);
+      return true;
+    }
+  } catch {}
+  // Fallback: temporary textarea + execCommand
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
 export default function KeysPage() {
   const qc = useQueryClient();
   const [token, setToken] = useState<string | null>(null);
@@ -208,7 +233,7 @@ export default function KeysPage() {
             <code className="font-mono text-sm break-all select-all">{token}</code>
             <button
               className="btn"
-              onClick={async () => { if (token) { await navigator.clipboard.writeText(token); addToast({ title: 'Copied to clipboard', kind: 'success' }); } }}
+              onClick={async () => { if (token) { const ok = await safeCopyToClipboard(token); addToast({ title: ok ? 'Copied to clipboard' : 'Copy failed', kind: ok ? 'success' : 'error' }); } }}
               aria-label="Copy API key"
               title="Copy API key"
             >
