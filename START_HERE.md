@@ -69,31 +69,32 @@ Tests Failed:  0
 **Pick your path:**
 
 ### 🔰 I'm New to Cortex
-👉 Read: `ADMIN_SETUP_GUIDE.md`
+👉 Read: `docs/getting-started/admin-setup.md`
 - Complete walkthrough
 - All concepts explained
 - Step-by-step instructions
 
 ### ⚡ I Just Want Commands
-👉 Read: `MAKEFILE_GUIDE.md`
+👉 Read: `docs/operations/makefile-guide.md`
 - All 40+ commands
 - Examples for everything
 - Quick reference card
 
 ### 🤔 How Does It Work?
-👉 Read: `CONFIGURATION_FLOW.md`
+👉 Read: `docs/architecture/configuration-flow.md`
 - How automatic config works
 - Technical details
 - Debugging guide
 
 ### 🐛 Something's Wrong
-👉 Read: `CONFIGURATION_CHECKLIST.md`
+👉 Read: `docs/getting-started/configuration-checklist.md`
 - Troubleshooting steps
 - Validation checklist
 - Common issues & fixes
 
 ### 📖 Full Documentation
 👉 Visit: https://aulendurforge.github.io/Cortex-vLLM/
+- Or browse the `docs/` directory locally
 - Architecture guides
 - API reference
 - Security docs
@@ -219,6 +220,7 @@ make ip
 
 **Need Help?** 
 - Quick commands: `make help`
-- Complete guide: `ADMIN_SETUP_GUIDE.md`
+- Complete guide: `docs/getting-started/admin-setup.md`
 - Validate config: `make validate`
+- Browse docs: `docs/` directory
 

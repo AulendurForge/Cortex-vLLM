@@ -39,7 +39,7 @@ make info
 
 > **📌 Always use the IP shown in the output, NOT `localhost`!**
 
-For more details on how IP detection works, see `IP_DETECTION.md`.
+For more details on how IP detection works, see `docs/architecture/ip-detection.md`.
 
 ## Getting Started
 

@@ -784,10 +784,12 @@ If issues persist:
 ## 📖 Additional Documentation
 
 **In This Repository:**
-- `README.md` - Quick start guide
-- `MAKEFILE_GUIDE.md` - Complete command reference
-- `IP_DETECTION.md` - Technical details on IP detection
-- `CHANGES_SUMMARY.md` - What was implemented
+- `README.md` - Overview and quick start
+- `START_HERE.md` - 5-minute quick start guide
+- `docs/operations/makefile-guide.md` - Complete command reference
+- `docs/architecture/ip-detection.md` - Technical details on IP detection
+- `docs/architecture/configuration-flow.md` - How automatic configuration works
+- `docs/getting-started/configuration-checklist.md` - Validation checklist
 
 **Online Docs:**
 - Full documentation: https://aulendurforge.github.io/Cortex-vLLM/

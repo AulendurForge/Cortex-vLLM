@@ -307,9 +307,9 @@ Access Cortex at:
    ```
 
 4. Check documentation:
-   - `ADMIN_SETUP_GUIDE.md` - Setup walkthrough
-   - `CONFIGURATION_FLOW.md` - How config works
-   - `IP_DETECTION.md` - IP detection details
+   - `docs/getting-started/admin-setup.md` - Setup walkthrough
+   - `docs/architecture/configuration-flow.md` - How config works
+   - `docs/architecture/ip-detection.md` - IP detection details
 
 5. Quick fixes:
    - Wrong IP detected? → `export HOST_IP=192.168.1.181 && make restart`

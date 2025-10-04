@@ -1145,6 +1145,7 @@ llama-server \
 
 ---
 
-**For vLLM (standard models), see**: `vllm.md`  
-**For choosing between engines**: Review model architecture first - if vLLM doesn't support it, use llama.cpp!
+**For vLLM (standard models), see**: `vllm.md` (in this directory)  
+**For choosing between engines**: See `engine-comparison.md` (in this directory) - comprehensive decision matrix and comparison  
+**For research background**: See `engine-research.md` (in this directory)
 

@@ -25,16 +25,20 @@ OpenAI-compatible gateway and admin UI for running vLLM engines on your own infr
 
 ## Documentation
 
-**📚 Quick References** (in this repo):
-- `ADMIN_SETUP_GUIDE.md` - **START HERE** - Complete setup walkthrough for admins
-- `CONFIGURATION_FLOW.md` - How automatic configuration works
-- `MAKEFILE_GUIDE.md` - All Makefile commands
-- `IP_DETECTION.md` - Technical details on IP detection  
-- `README.md` - This file (quick start)
+**📚 Quick Start**:
+- `START_HERE.md` - **START HERE** - 5-minute quick start guide
+- `README.md` - This file (overview and quick reference)
+- `Makefile` - Run `make help` to see all commands
 
 **🌐 Full Documentation** (guides, architecture, API reference, operations):
 - Docs site: https://aulendurforge.github.io/Cortex-vLLM/
-  - If not yet live, enable GitHub Pages: Repo → Settings → Pages → "Build and deployment: GitHub Actions". The URL will appear there after the first successful docs workflow run.
+- Local docs: Browse the `docs/` directory for comprehensive guides
+  - Getting Started: Setup, configuration, admin guides
+  - Architecture: System design, IP detection, configuration flow
+  - Models: vLLM, llama.cpp, engine comparison
+  - Operations: Makefile guide, deployment, scaling
+  - API: OpenAI-compatible and admin endpoints
+  - Security: Security posture and threat model
 
 ## Quick Start (Recommended)
 

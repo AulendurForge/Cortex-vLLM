@@ -466,9 +466,9 @@ make health        # Check service health
 ---
 
 **For detailed technical information, see:**
-- `IP_DETECTION.md` - How IP detection works
-- `MAKEFILE_GUIDE.md` - All Makefile commands
-- `ADMIN_SETUP_GUIDE.md` - Step-by-step setup
+- `docs/architecture/ip-detection.md` - How IP detection works
+- `docs/operations/makefile-guide.md` - All Makefile commands
+- `docs/getting-started/admin-setup.md` - Step-by-step setup
 
 **Quick help:** `make help` or `make validate`
 

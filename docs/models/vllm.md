@@ -746,4 +746,5 @@ When to stay on llama.cpp:
 
 ---
 
-**For GPT-OSS 120B and other Harmony architecture models, see**: `llamaCPP.md`
+**For GPT-OSS 120B and other Harmony architecture models, see**: `llamaCPP.md` (in this directory)  
+**For engine comparison and decision matrix, see**: `engine-comparison.md` (in this directory)

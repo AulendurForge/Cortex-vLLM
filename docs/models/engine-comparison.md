@@ -832,7 +832,8 @@ llama.cpp (GPT-OSS 120B):
 ---
 
 **For detailed guides:**
-- vLLM: See `docs/models/vllm.md`
-- llama.cpp: See `docs/models/llamaCPP.md`
-- Model Management: See `docs/models/model-management.md`
+- vLLM: See `vllm.md` (in this directory)
+- llama.cpp: See `llamaCPP.md` (in this directory)
+- Model Management: See `model-management.md` (in this directory)
+- Engine Research: See `engine-research.md` (in this directory)
 
