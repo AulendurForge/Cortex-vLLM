@@ -28,5 +28,14 @@ venv/
 cookies.txt
 cookies-*.txt
 *.cookies.txt
+
 # Internal planning docs
 plans/*
+*Plan.md
+*_COMPLETED.md
+raid.md
+vllmExperiment*.md
+cortexUpgrade*.md
+*_FIX.md
+*_SUMMARY.md
+*_ENHANCEMENTS.md
