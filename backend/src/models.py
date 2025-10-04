@@ -96,6 +96,21 @@ class Model(Base):
     hf_config_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
     # Optional per-model Hugging Face access token (read from env if empty)
     hf_token: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Engine type selection (vllm or llamacpp)
+    engine_type: Mapped[str] = mapped_column(String(16), default="vllm")
+    # llama.cpp specific configuration fields
+    ngl: Mapped[int | None] = mapped_column(Integer, nullable=True)  # GPU layers
+    tensor_split: Mapped[str | None] = mapped_column(String(128), nullable=True)  # GPU memory distribution
+    batch_size: Mapped[int | None] = mapped_column(Integer, nullable=True)  # Batch size
+    threads: Mapped[int | None] = mapped_column(Integer, nullable=True)  # CPU threads
+    context_size: Mapped[int | None] = mapped_column(Integer, nullable=True)  # Context window
+    rope_freq_base: Mapped[float | None] = mapped_column(Float, nullable=True)  # RoPE frequency base
+    rope_freq_scale: Mapped[float | None] = mapped_column(Float, nullable=True)  # RoPE frequency scale
+    flash_attention: Mapped[bool | None] = mapped_column(Boolean, nullable=True)  # Flash attention
+    mlock: Mapped[bool | None] = mapped_column(Boolean, nullable=True)  # Memory locking
+    no_mmap: Mapped[bool | None] = mapped_column(Boolean, nullable=True)  # Disable memory mapping
+    numa_policy: Mapped[str | None] = mapped_column(String(32), nullable=True)  # NUMA policy
+    split_mode: Mapped[str | None] = mapped_column(String(32), nullable=True)  # Layer/row split mode
     state: Mapped[str] = mapped_column(String(16), default="stopped")
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
     port: Mapped[int | None] = mapped_column(Integer, nullable=True)

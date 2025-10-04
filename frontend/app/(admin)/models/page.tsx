@@ -88,6 +88,20 @@ export default function ModelsPage() {
             cuda_graph_sizes: payload.cudaGraphSizes,
             pipeline_parallel_size: payload.pipelineParallelSize,
             device: payload.device,
+            // Engine and llama.cpp fields
+            engine_type: payload.engineType,
+            ngl: payload.ngl,
+            tensor_split: payload.tensorSplit,
+            batch_size: payload.batchSize,
+            threads: payload.threads,
+            context_size: payload.contextSize,
+            rope_freq_base: payload.ropeFreqBase,
+            rope_freq_scale: payload.ropeFreqScale,
+            flash_attention: payload.flashAttention,
+            mlock: payload.mlock,
+            no_mmap: payload.noMmap,
+            numa_policy: payload.numaPolicy,
+            split_mode: payload.splitMode,
       };
       return await apiFetch('/admin/models', { method: 'POST', body: JSON.stringify(body) });
     },
@@ -144,6 +158,7 @@ export default function ModelsPage() {
               <th>Name</th>
               <th>Served</th>
               <th>Task</th>
+              <th>Engine</th>
               {isAdmin && (<><th>TP</th><th>DType</th></>)}
               <th>State</th>
               {isAdmin && (<th></th>)}
@@ -155,6 +170,14 @@ export default function ModelsPage() {
                 <td>{m.name}</td>
                 <td className="font-mono text-xs">{m.served_model_name}</td>
                 <td>{m.task}</td>
+                <td>
+                  <Badge className={
+                    m.engine_type === 'llamacpp' ? 'bg-green-500/20 text-green-200 border border-green-400/30' :
+                    'bg-blue-500/20 text-blue-200 border border-blue-400/30'
+                  }>
+                    {m.engine_type === 'llamacpp' ? 'llama.cpp' : 'vLLM'}
+                  </Badge>
+                </td>
                 {isAdmin && (<td>{m.tp_size ?? '-'}</td>)}
                 {isAdmin && (<td>{m.dtype ?? '-'}</td>)}
                 <td>

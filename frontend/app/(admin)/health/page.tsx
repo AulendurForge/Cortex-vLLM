@@ -5,6 +5,7 @@ import apiFetch from '../../../src/lib/api-clients';
 import { H1, Button, Card, Badge } from '../../../src/components/UI';
 import { Accordion, AccordionItem } from '../../../src/components/monitoring/Accordion';
 import { LineChart } from '../../../src/components/Charts';
+import { HostIpDisplay } from '../../../src/components/HostIpDisplay';
 
 type HealthSnapshot = {
   circuit_breakers: Record<string, any>;
@@ -44,6 +45,9 @@ export default function HealthPage() {
         <H1>Upstream Health</H1>
         <Button onClick={onRefresh}>Refresh</Button>
       </header>
+      
+      <HostIpDisplay variant="banner" />
+      
       {isLoading && <div className="text-sm text-white/70 mt-2">Loading...</div>}
       {isError && <div className="text-sm text-red-300 mt-2">Error loading upstream health.</div>}
       {data && (

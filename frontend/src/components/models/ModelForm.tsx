@@ -37,6 +37,21 @@ export type ModelFormValues = {
   // GGUF extras
   tokenizer?: string;
   hfConfigPath?: string;
+  // Engine selection
+  engineType?: 'vllm' | 'llamacpp';
+  // llama.cpp specific fields
+  ngl?: number;
+  tensorSplit?: string;
+  batchSize?: number;
+  threads?: number;
+  contextSize?: number;
+  ropeFreqBase?: number;
+  ropeFreqScale?: number;
+  flashAttention?: boolean;
+  mlock?: boolean;
+  noMmap?: boolean;
+  numaPolicy?: string;
+  splitMode?: string;
 };
 
 export function ModelForm({ onSubmit, onCancel, defaults, fetchBaseDir, saveBaseDir, listLocalFolders, submitLabel, modeLocked = false, onValuesChange }: {
@@ -80,6 +95,20 @@ export function ModelForm({ onSubmit, onCancel, defaults, fetchBaseDir, saveBase
     device: (defaults as any)?.device ?? 'cuda',
     tokenizer: (defaults as any)?.tokenizer || '',
     hfConfigPath: (defaults as any)?.hfConfigPath || '',
+    // Engine and llama.cpp fields
+    engineType: (defaults as any)?.engineType ?? 'vllm',
+    ngl: (defaults as any)?.ngl ?? 999,
+    tensorSplit: (defaults as any)?.tensorSplit ?? '0.25,0.25,0.25,0.25',
+    batchSize: (defaults as any)?.batchSize ?? 32,
+    threads: (defaults as any)?.threads ?? 32,
+    contextSize: (defaults as any)?.contextSize ?? 4096,
+    ropeFreqBase: (defaults as any)?.ropeFreqBase ?? undefined,
+    ropeFreqScale: (defaults as any)?.ropeFreqScale ?? undefined,
+    flashAttention: (defaults as any)?.flashAttention ?? true,
+    mlock: (defaults as any)?.mlock ?? true,
+    noMmap: (defaults as any)?.noMmap ?? true,
+    numaPolicy: (defaults as any)?.numaPolicy ?? 'isolate',
+    splitMode: (defaults as any)?.splitMode ?? undefined,
   });
 
   const set = (k: keyof ModelFormValues, v: any) => setValues(prev => { const next = { ...prev, [k]: v } as ModelFormValues; try { onValuesChange && onValuesChange(next); } catch {} return next; });
@@ -335,6 +364,14 @@ export function ModelForm({ onSubmit, onCancel, defaults, fetchBaseDir, saveBase
         </select>
         <p className="text-[11px] text-white/50 mt-1">Routing hint: generation routes to /v1/completions/chat; embed routes to /v1/embeddings.</p>
       </label>
+      
+      <label className="text-sm">Engine Type
+        <select className="input mt-1" value={values.engineType || 'vllm'} onChange={(e)=>set('engineType', e.target.value as any)}>
+          <option value="vllm">vLLM (Transformers/Safetensors)</option>
+          <option value="llamacpp">llama.cpp (GGUF)</option>
+        </select>
+        <p className="text-[11px] text-white/50 mt-1">Engine backend: vLLM for HuggingFace models, llama.cpp for GGUF files.</p>
+      </label>
       <label className="text-sm">DType
         <select className="input mt-1" value={values.dtype} onChange={(e)=>set('dtype', e.target.value)}>
           <option value="auto">auto</option>
@@ -385,9 +422,64 @@ export function ModelForm({ onSubmit, onCancel, defaults, fetchBaseDir, saveBase
         <label className="inline-flex items-center gap-2"><input type="checkbox" checked={!!values.hfOffline} onChange={(e)=>set('hfOffline', e.target.checked)} />HF offline <Tooltip text="Hint to run without reaching Hugging Face. For offline installs ensure weights/tokenizer/config exist locally or in the HF cache." /></label>
       </div>
 
+      {values.engineType === 'llamacpp' && (
+        <details className="md:col-span-2 mt-2 border-l-2 border-green-500 pl-4">
+          <summary className="cursor-pointer text-sm text-green-400">llama.cpp Configuration</summary>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-2">
+            <label className="text-sm">GPU Layers (ngl)
+              <input className="input mt-1" type="number" min={0} max={999} value={values.ngl ?? 999} 
+                onChange={(e)=>set('ngl', Number(e.target.value)||999)} />
+              <p className="text-[11px] text-white/50 mt-1">Number of layers to offload to GPU. 999 = all layers.</p>
+            </label>
+            <label className="text-sm">Tensor Split
+              <input className="input mt-1" placeholder="0.25,0.25,0.25,0.25" value={values.tensorSplit||''} 
+                onChange={(e)=>set('tensorSplit', e.target.value)} />
+              <p className="text-[11px] text-white/50 mt-1">GPU memory distribution (comma-separated ratios).</p>
+            </label>
+            <label className="text-sm">Batch Size
+              <input className="input mt-1" type="number" min={1} max={2048} value={values.batchSize ?? 32} 
+                onChange={(e)=>set('batchSize', Number(e.target.value)||32)} />
+              <p className="text-[11px] text-white/50 mt-1">Batch size for processing.</p>
+            </label>
+            <label className="text-sm">CPU Threads
+              <input className="input mt-1" type="number" min={1} max={128} value={values.threads ?? 32} 
+                onChange={(e)=>set('threads', Number(e.target.value)||32)} />
+              <p className="text-[11px] text-white/50 mt-1">Number of CPU threads to use.</p>
+            </label>
+            <label className="text-sm">Context Size
+              <input className="input mt-1" type="number" min={512} max={131072} step={512} value={values.contextSize ?? 4096} 
+                onChange={(e)=>set('contextSize', Number(e.target.value)||4096)} />
+              <p className="text-[11px] text-white/50 mt-1">Maximum context window in tokens.</p>
+            </label>
+            <div className="text-sm flex flex-col gap-2 mt-2">
+              <label className="inline-flex items-center gap-2">
+                <input type="checkbox" checked={!!values.flashAttention} onChange={(e)=>set('flashAttention', e.target.checked)} />
+                Flash Attention
+              </label>
+              <label className="inline-flex items-center gap-2">
+                <input type="checkbox" checked={!!values.mlock} onChange={(e)=>set('mlock', e.target.checked)} />
+                Memory Lock (mlock)
+              </label>
+              <label className="inline-flex items-center gap-2">
+                <input type="checkbox" checked={!!values.noMmap} onChange={(e)=>set('noMmap', e.target.checked)} />
+                Disable Memory Mapping
+              </label>
+            </div>
+            <label className="text-sm">NUMA Policy
+              <select className="input mt-1" value={values.numaPolicy||''} onChange={(e)=>set('numaPolicy', e.target.value)}>
+                <option value="">default</option>
+                <option value="isolate">isolate</option>
+                <option value="distribute">distribute</option>
+              </select>
+              <p className="text-[11px] text-white/50 mt-1">NUMA memory policy.</p>
+            </label>
+          </div>
+        </details>
+      )}
+
       <details className="md:col-span-2 mt-2">
-        <summary className="cursor-pointer text-sm text-white/80">Advanced engine tuning</summary>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-2">
+        <summary className="cursor-pointer text-sm text-white/80">Advanced engine tuning (vLLM)</summary>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-2" style={{display: values.engineType === 'vllm' ? 'grid' : 'none'}}>
           <label className="text-sm">Max batched tokens
             <input
               className="input mt-1"

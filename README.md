@@ -13,13 +13,178 @@ OpenAI-compatible gateway and admin UI for running vLLM engines on your own infr
 - Usage metering, admin APIs/UI for users, orgs, keys, models
 - Prometheus metrics; optional Redis and OpenTelemetry
 
-## Documentation
-Full documentation (guides, architecture, API reference, operations):
+## ⚡ No Configuration Required!
 
+**Cortex automatically:**
+- ✅ Detects your host IP address
+- ✅ Configures CORS for network access
+- ✅ Sets up the database and services
+- ✅ Works from any device on your network
+
+**Just run `make quick-start` and you're done!**
+
+## Documentation
+
+**📚 Quick References** (in this repo):
+- `ADMIN_SETUP_GUIDE.md` - **START HERE** - Complete setup walkthrough for admins
+- `CONFIGURATION_FLOW.md` - How automatic configuration works
+- `MAKEFILE_GUIDE.md` - All Makefile commands
+- `IP_DETECTION.md` - Technical details on IP detection  
+- `README.md` - This file (quick start)
+
+**🌐 Full Documentation** (guides, architecture, API reference, operations):
 - Docs site: https://aulendurforge.github.io/Cortex-vLLM/
   - If not yet live, enable GitHub Pages: Repo → Settings → Pages → "Build and deployment: GitHub Actions". The URL will appear there after the first successful docs workflow run.
 
-## Quickstart (Docker)
+## Quick Start (Recommended)
+
+**For administrators - simplified one-command setup:**
+
+```bash
+# 1. Install prerequisites (if needed)
+make install-deps
+
+# 2. Start everything with one command
+make quick-start
+
+# That's it! Cortex will automatically detect your host IP and display the URLs.
+# Access the Admin UI using the IP address shown (NOT localhost)
+# Example output:
+# ✓ Cortex is ready!
+# Login at: http://192.168.1.181:3001/login (admin/admin)
+```
+
+> **📌 Important**: Always use the **host machine's IP address** shown in the output, not `localhost`. The IP is automatically detected when you run `make` commands. Users on your network will access Cortex using this IP address.
+
+**Check your host IP:**
+
+```bash
+make ip            # Prominently displays your host IP and URLs
+make info          # Shows full configuration including IP
+```
+
+**Verify everything is working:**
+
+```bash
+make validate      # Complete configuration validation (IP, CORS, services, network)
+make ip            # Show host IP and access URLs
+make health        # Check service health
+```
+
+**Common operations:**
+
+```bash
+make help          # See all available commands
+make status        # Check if services are running
+make logs          # View logs from all services
+make stop          # Stop services
+make restart       # Restart services
+make clean         # Remove everything and start fresh
+```
+
+**With GPU monitoring (Linux + NVIDIA GPU):**
+
+```bash
+make up PROFILES=linux,gpu    # Start with host and GPU metrics
+make health                    # Verify all services are healthy
+```
+
+> **🔍 How IP Detection Works**: Cortex automatically detects your host machine's LAN IP address (e.g., `192.168.1.181` or `10.1.10.241`) and configures CORS to accept requests from that IP. This allows users on your network to access the Admin UI. The detection excludes Docker bridge networks and loopback addresses.
+
+<details>
+<summary><b>📚 All Available Commands</b> (click to expand)</summary>
+
+### Service Management
+- `make up` - Start all services in background
+- `make down` - Stop and remove all containers
+- `make restart` - Restart all services
+- `make stop` - Stop containers (without removing)
+- `make start` - Start existing stopped containers
+
+### Monitoring & Debugging
+- `make status` - Show running containers
+- `make health` - Check health of all services
+- `make logs` - Follow logs from all services
+- `make logs SERVICE=gateway` - View specific service logs
+- `make logs-gateway` - Gateway logs shortcut
+- `make logs-postgres` - Database logs shortcut
+
+### Setup & Configuration
+- `make bootstrap` - Create admin user (interactive)
+- `make bootstrap-default` - Create default admin (admin/admin)
+- `make login` - Login and save session
+- `make create-key` - Generate new API key
+
+### Database Operations
+- `make db-backup` - Backup database to `backups/` folder
+- `make db-restore BACKUP_FILE=backups/cortex_backup_*.sql` - Restore from backup
+- `make db-shell` - Open PostgreSQL shell
+- `make db-reset` - Reset database (⚠️ deletes all data)
+
+### Cleanup
+- `make clean` - Stop services and remove volumes
+- `make clean-all` - Also remove model containers
+- `make prune` - Remove unused Docker resources
+
+### Testing
+- `make test` - Run smoke tests
+- `make test-api` - Test API endpoints
+
+### Environment Options
+- `ENV=dev` (default) or `ENV=prod` - Choose environment
+- `PROFILES=linux,gpu` - Enable monitoring profiles
+
+**Examples:**
+```bash
+# Production deployment
+make up ENV=prod
+
+# Development with GPU monitoring
+make up PROFILES=linux,gpu
+
+# View gateway logs only
+make logs SERVICE=gateway
+
+# Backup before making changes
+make db-backup
+```
+
+</details>
+
+### Troubleshooting
+
+**Can't access the UI from another computer?**
+1. Get your host IP: `make info`
+2. Use that IP (e.g., `http://192.168.1.181:3001`), NOT `localhost`
+3. Ensure the other computer is on the same network
+4. Check firewall allows ports 3001 and 8084
+
+**Services won't start?**
+```bash
+make clean        # Clean up everything
+make install-deps # Verify Docker is installed
+make up           # Try starting again
+make status       # Check container status
+```
+
+**Can't access the UI even from the host machine?**
+- Check services are running: `make status`
+- Check health: `make health`
+- View logs: `make logs-gateway`
+- Verify your IP: `make info` (use the shown IP, not localhost)
+
+**CORS errors in browser?**
+- The detected IP is automatically added to CORS whitelist
+- Check `make info` to see your current IP
+- If your IP changed, restart: `make restart`
+
+**Need to reset everything?**
+```bash
+make clean-all    # Remove everything
+make quick-start  # Start fresh
+```
+
+## Advanced Quickstart (Docker)
 ```bash
 # From repo root
 docker compose -f docker.compose.dev.yaml up --build

@@ -48,6 +48,20 @@ class ModelItem(BaseModel):
     device: Optional[str] = None
     tokenizer: Optional[str] = None
     hf_config_path: Optional[str] = None
+    # Engine type and llama.cpp specific fields
+    engine_type: str = "vllm"
+    ngl: Optional[int] = None
+    tensor_split: Optional[str] = None
+    batch_size: Optional[int] = None
+    threads: Optional[int] = None
+    context_size: Optional[int] = None
+    rope_freq_base: Optional[float] = None
+    rope_freq_scale: Optional[float] = None
+    flash_attention: Optional[bool] = None
+    mlock: Optional[bool] = None
+    no_mmap: Optional[bool] = None
+    numa_policy: Optional[str] = None
+    split_mode: Optional[str] = None
     # Never expose tokens in GET responses
     state: str
     archived: bool
@@ -87,6 +101,21 @@ class CreateModelRequest(BaseModel):
     hf_config_path: Optional[str] = None
     # Optional HF token for gated/private repos; stored server-side, not returned
     hf_token: Optional[str] = None
+    # Engine type selection
+    engine_type: str = "vllm"
+    # llama.cpp specific configuration fields
+    ngl: Optional[int] = None
+    tensor_split: Optional[str] = None
+    batch_size: Optional[int] = None
+    threads: Optional[int] = None
+    context_size: Optional[int] = None
+    rope_freq_base: Optional[float] = None
+    rope_freq_scale: Optional[float] = None
+    flash_attention: Optional[bool] = None
+    mlock: Optional[bool] = None
+    no_mmap: Optional[bool] = None
+    numa_policy: Optional[str] = None
+    split_mode: Optional[str] = None
 
 class BaseDirCfg(BaseModel):
     base_dir: str
@@ -128,6 +157,19 @@ async def list_models(_: dict = Depends(require_admin)):
                 device=getattr(r, 'device', None),
                 tokenizer=getattr(r, 'tokenizer', None),
                 hf_config_path=getattr(r, 'hf_config_path', None),
+                engine_type=getattr(r, 'engine_type', 'vllm'),
+                ngl=getattr(r, 'ngl', None),
+                tensor_split=getattr(r, 'tensor_split', None),
+                batch_size=getattr(r, 'batch_size', None),
+                threads=getattr(r, 'threads', None),
+                context_size=getattr(r, 'context_size', None),
+                rope_freq_base=getattr(r, 'rope_freq_base', None),
+                rope_freq_scale=getattr(r, 'rope_freq_scale', None),
+                flash_attention=getattr(r, 'flash_attention', None),
+                mlock=getattr(r, 'mlock', None),
+                no_mmap=getattr(r, 'no_mmap', None),
+                numa_policy=getattr(r, 'numa_policy', None),
+                split_mode=getattr(r, 'split_mode', None),
                 state=r.state,
                 archived=bool(getattr(r, 'archived', False)),
                 port=r.port,
@@ -144,6 +186,14 @@ async def create_model(body: CreateModelRequest, _: dict = Depends(require_admin
         raise HTTPException(status_code=400, detail="repo_id_required")
     if body.mode == "offline" and not body.local_path:
         raise HTTPException(status_code=400, detail="local_path_required")
+    
+    # Engine-specific validation
+    if body.engine_type == "llamacpp":
+        if body.mode != "offline":
+            raise HTTPException(status_code=400, detail="llamacpp requires offline mode")
+        if not body.local_path:
+            raise HTTPException(status_code=400, detail="llamacpp requires local_path")
+        # GGUF validation can be added here if needed
     SessionLocal = _get_session()
     if SessionLocal is None:
         raise HTTPException(status_code=503, detail="database_unavailable")
@@ -176,6 +226,19 @@ async def create_model(body: CreateModelRequest, _: dict = Depends(require_admin
             tokenizer=body.tokenizer,
             hf_config_path=body.hf_config_path,
             hf_token=body.hf_token,
+            engine_type=body.engine_type,
+            ngl=body.ngl,
+            tensor_split=body.tensor_split,
+            batch_size=body.batch_size,
+            threads=body.threads,
+            context_size=body.context_size,
+            rope_freq_base=body.rope_freq_base,
+            rope_freq_scale=body.rope_freq_scale,
+            flash_attention=body.flash_attention,
+            mlock=body.mlock,
+            no_mmap=body.no_mmap,
+            numa_policy=body.numa_policy,
+            split_mode=body.split_mode,
             state="stopped",
         )
         session.add(m)

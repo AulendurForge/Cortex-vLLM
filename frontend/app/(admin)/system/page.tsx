@@ -13,6 +13,7 @@ import { TimeRangeControls } from '../../../src/components/monitoring/TimeRangeC
 import apiFetch from '../../../src/lib/api-clients';
 import { z } from 'zod';
 import { ThroughputSummarySchema, GpuMetricsListSchema, HostSummarySchema, HostTrendsSchema, CapabilitiesSchema } from '../../../src/lib/validators';
+import { HostIpDisplay } from '../../../src/components/HostIpDisplay';
 
 type Throughput = z.infer<typeof ThroughputSummarySchema>;
 type Gpu = z.infer<typeof GpuMetricsListSchema>[number];
@@ -103,6 +104,9 @@ export default function SystemMonitoringPage() {
   return (
     <section className="space-y-4">
       <H1>System Monitor</H1>
+      
+      <HostIpDisplay variant="banner" />
+      
       {error && <div className="text-xs text-red-400">{error}</div>}
 
       {/* Global summary + refresh */}

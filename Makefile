@@ -1,0 +1,351 @@
+# Cortex-vLLM Makefile
+# Simplified administration for Docker-based LLM inference gateway
+#
+# Usage: make <target>
+# Run 'make help' to see all available commands
+
+.PHONY: help
+.DEFAULT_GOAL := help
+
+# ============================================================================
+# Configuration Variables
+# ============================================================================
+
+# Environment selection (dev or prod)
+ENV ?= dev
+COMPOSE_FILE = docker.compose.$(ENV).yaml
+
+# Compose profiles for optional services
+PROFILES ?= 
+COMPOSE_PROFILES = $(if $(PROFILES),COMPOSE_PROFILES=$(PROFILES),)
+
+# Detect host IP address dynamically
+HOST_IP := $(shell bash scripts/detect-ip.sh 2>/dev/null || echo "localhost")
+
+# Docker Compose command with proper file and HOST_IP exported
+DOCKER_COMPOSE = HOST_IP=$(HOST_IP) $(COMPOSE_PROFILES) docker compose -f $(COMPOSE_FILE)
+
+# Colors for output
+COLOR_RESET = \033[0m
+COLOR_BOLD = \033[1m
+COLOR_GREEN = \033[32m
+COLOR_YELLOW = \033[33m
+COLOR_BLUE = \033[34m
+
+# ============================================================================
+# Help Target - Shows all available commands
+# ============================================================================
+
+help: ## Show this help message
+	@echo ""
+	@echo "$(COLOR_BOLD)Cortex-vLLM Administration Commands$(COLOR_RESET)"
+	@echo ""
+	@echo "$(COLOR_BLUE)Basic Operations:$(COLOR_RESET)"
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(COLOR_GREEN)%-20s$(COLOR_RESET) %s\n", $$1, $$2}'
+	@echo ""
+	@echo "$(COLOR_BLUE)Environment Variables:$(COLOR_RESET)"
+	@echo "  $(COLOR_YELLOW)ENV$(COLOR_RESET)              Environment to use (dev or prod), default: dev"
+	@echo "  $(COLOR_YELLOW)PROFILES$(COLOR_RESET)         Comma-separated profiles (linux,gpu), default: none"
+	@echo ""
+	@echo "$(COLOR_BLUE)Examples:$(COLOR_RESET)"
+	@echo "  make up                    # Start in dev mode"
+	@echo "  make up ENV=prod           # Start in production mode"
+	@echo "  make up PROFILES=linux,gpu # Start with Linux and GPU monitoring"
+	@echo "  make logs SERVICE=gateway  # View logs for gateway service only"
+	@echo ""
+
+# ============================================================================
+# Core Container Operations
+# ============================================================================
+
+build: ## Build all Docker images
+	@echo "$(COLOR_BOLD)Building Docker images...$(COLOR_RESET)"
+	$(DOCKER_COMPOSE) build
+
+up: ## Start all services (detached mode)
+	@echo "$(COLOR_BOLD)Starting Cortex services...$(COLOR_RESET)"
+	$(DOCKER_COMPOSE) up -d
+	@echo "$(COLOR_GREEN)✓ Services started$(COLOR_RESET)"
+	@echo "Gateway: http://$(HOST_IP):8084/health"
+	@echo "Prometheus: http://$(HOST_IP):9090"
+	@echo "PgAdmin: http://$(HOST_IP):5050"
+	@echo "Admin UI: http://$(HOST_IP):3001"
+
+up-fg: ## Start all services (foreground mode, shows logs)
+	@echo "$(COLOR_BOLD)Starting Cortex services in foreground...$(COLOR_RESET)"
+	$(DOCKER_COMPOSE) up
+
+down: ## Stop and remove all containers
+	@echo "$(COLOR_BOLD)Stopping Cortex services...$(COLOR_RESET)"
+	$(DOCKER_COMPOSE) down
+	@echo "$(COLOR_GREEN)✓ Services stopped$(COLOR_RESET)"
+
+restart: down up ## Restart all services
+
+stop: ## Stop containers without removing them
+	@echo "$(COLOR_BOLD)Stopping containers...$(COLOR_RESET)"
+	$(DOCKER_COMPOSE) stop
+
+start: ## Start existing stopped containers
+	@echo "$(COLOR_BOLD)Starting containers...$(COLOR_RESET)"
+	$(DOCKER_COMPOSE) start
+
+# ============================================================================
+# Monitoring and Debugging
+# ============================================================================
+
+logs: ## Show logs for all services (or specific SERVICE=name)
+	@echo "$(COLOR_BOLD)Showing logs...$(COLOR_RESET)"
+ifdef SERVICE
+	$(DOCKER_COMPOSE) logs -f $(SERVICE)
+else
+	$(DOCKER_COMPOSE) logs -f
+endif
+
+logs-gateway: ## Show gateway logs only
+	@$(DOCKER_COMPOSE) logs -f gateway
+
+logs-postgres: ## Show PostgreSQL logs
+	@$(DOCKER_COMPOSE) logs -f postgres
+
+ps: ## List running containers
+	@$(DOCKER_COMPOSE) ps
+
+status: ps ## Alias for ps
+
+health: ## Check health of all services
+	@echo "$(COLOR_BOLD)Checking service health...$(COLOR_RESET)"
+	@echo ""
+	@echo "$(COLOR_BLUE)Gateway Health:$(COLOR_RESET)"
+	@curl -s http://$(HOST_IP):8084/health | jq . || echo "Gateway not responding"
+	@echo ""
+	@echo "$(COLOR_BLUE)Docker Container Status:$(COLOR_RESET)"
+	@$(DOCKER_COMPOSE) ps
+	@echo ""
+	@echo "$(COLOR_BLUE)Prometheus Status:$(COLOR_RESET)"
+	@curl -s http://$(HOST_IP):9090/-/ready || echo "Prometheus not ready"
+
+# ============================================================================
+# Bootstrap and Setup Operations
+# ============================================================================
+
+bootstrap: ## Bootstrap admin user (interactive)
+	@echo "$(COLOR_BOLD)Bootstrap Admin User$(COLOR_RESET)"
+	@echo ""
+	@read -p "Enter admin username (default: admin): " username; \
+	username=$${username:-admin}; \
+	read -sp "Enter admin password: " password; \
+	echo ""; \
+	read -p "Enter organization name (default: Default): " org; \
+	org=$${org:-Default}; \
+	echo ""; \
+	echo "Creating admin user..."; \
+	curl -X POST http://$(HOST_IP):8084/admin/bootstrap-owner \
+	  -H 'Content-Type: application/json' \
+	  -d "{\"username\":\"$$username\",\"password\":\"$$password\",\"org_name\":\"$$org\"}" \
+	  | jq .
+
+bootstrap-default: ## Bootstrap with default credentials (admin/admin)
+	@echo "$(COLOR_BOLD)Bootstrapping default admin (admin/admin)...$(COLOR_RESET)"
+	@curl -X POST http://$(HOST_IP):8084/admin/bootstrap-owner \
+	  -H 'Content-Type: application/json' \
+	  -d '{"username":"admin","password":"admin","org_name":"Default"}' \
+	  | jq .
+	@echo ""
+	@echo "$(COLOR_GREEN)✓ Default admin created$(COLOR_RESET)"
+	@echo "Login at: http://$(HOST_IP):3001/login"
+	@echo "Username: admin"
+	@echo "Password: admin"
+
+create-key: ## Create a new API key (requires login cookie in cookies.txt)
+	@echo "$(COLOR_BOLD)Creating API key...$(COLOR_RESET)"
+	@curl -X POST http://$(HOST_IP):8084/admin/keys \
+	  -b cookies.txt \
+	  -H 'Content-Type: application/json' \
+	  -d '{"scopes":"chat,completions,embeddings"}' \
+	  | jq .
+	@echo ""
+	@echo "$(COLOR_YELLOW)⚠ Save the token value - it's shown only once$(COLOR_RESET)"
+
+login: ## Login and save session cookie
+	@echo "$(COLOR_BOLD)Login to Cortex$(COLOR_RESET)"
+	@read -p "Username (default: admin): " username; \
+	username=$${username:-admin}; \
+	read -sp "Password: " password; \
+	echo ""; \
+	curl -X POST http://$(HOST_IP):8084/auth/login \
+	  -H 'Content-Type: application/json' \
+	  -d "{\"username\":\"$$username\",\"password\":\"$$password\"}" \
+	  -c cookies.txt -i
+	@echo ""
+	@echo "$(COLOR_GREEN)✓ Session saved to cookies.txt$(COLOR_RESET)"
+
+# ============================================================================
+# Database Operations
+# ============================================================================
+
+db-backup: ## Backup PostgreSQL database
+	@echo "$(COLOR_BOLD)Backing up database...$(COLOR_RESET)"
+	@mkdir -p backups
+	@BACKUP_FILE="backups/cortex_backup_$$(date +%Y%m%d_%H%M%S).sql"; \
+	docker exec -t $$($(DOCKER_COMPOSE) ps -q postgres) \
+	  pg_dump -U cortex -d cortex > $$BACKUP_FILE; \
+	echo "$(COLOR_GREEN)✓ Backup saved to $$BACKUP_FILE$(COLOR_RESET)"
+
+db-restore: ## Restore database from backup (requires BACKUP_FILE=path)
+ifndef BACKUP_FILE
+	@echo "$(COLOR_YELLOW)Usage: make db-restore BACKUP_FILE=backups/cortex_backup_YYYYMMDD_HHMMSS.sql$(COLOR_RESET)"
+	@echo "Available backups:"
+	@ls -1 backups/*.sql 2>/dev/null || echo "No backups found"
+else
+	@echo "$(COLOR_BOLD)Restoring database from $(BACKUP_FILE)...$(COLOR_RESET)"
+	@docker exec -i $$($(DOCKER_COMPOSE) ps -q postgres) \
+	  psql -U cortex -d cortex < $(BACKUP_FILE)
+	@echo "$(COLOR_GREEN)✓ Database restored$(COLOR_RESET)"
+endif
+
+db-shell: ## Open PostgreSQL shell
+	@docker exec -it $$($(DOCKER_COMPOSE) ps -q postgres) psql -U cortex -d cortex
+
+db-reset: ## Reset database (DANGEROUS - deletes all data)
+	@read -p "$(COLOR_YELLOW)This will delete ALL data. Are you sure? (yes/no): $(COLOR_RESET)" confirm; \
+	if [ "$$confirm" = "yes" ]; then \
+		echo "$(COLOR_BOLD)Resetting database...$(COLOR_RESET)"; \
+		$(DOCKER_COMPOSE) down -v; \
+		$(DOCKER_COMPOSE) up -d; \
+		echo "$(COLOR_GREEN)✓ Database reset complete$(COLOR_RESET)"; \
+		echo "Run 'make bootstrap-default' to create admin user"; \
+	else \
+		echo "Cancelled"; \
+	fi
+
+# ============================================================================
+# Cleanup Operations
+# ============================================================================
+
+clean: down ## Stop services and remove volumes (keeps backups)
+	@echo "$(COLOR_BOLD)Cleaning up Docker resources...$(COLOR_RESET)"
+	$(DOCKER_COMPOSE) down -v
+	@echo "$(COLOR_GREEN)✓ Cleanup complete$(COLOR_RESET)"
+
+clean-all: clean ## Remove everything including model containers
+	@echo "$(COLOR_BOLD)Removing managed model containers...$(COLOR_RESET)"
+	@docker ps -a --filter "name=vllm-model-" -q | xargs -r docker rm -f
+	@docker ps -a --filter "name=llamacpp-model-" -q | xargs -r docker rm -f
+	@echo "$(COLOR_GREEN)✓ All containers removed$(COLOR_RESET)"
+
+prune: ## Prune unused Docker resources (images, volumes, networks)
+	@echo "$(COLOR_YELLOW)This will remove unused Docker resources$(COLOR_RESET)"
+	@docker system prune -f
+	@echo "$(COLOR_GREEN)✓ Docker system pruned$(COLOR_RESET)"
+
+# ============================================================================
+# Testing and Validation
+# ============================================================================
+
+test: ## Run smoke tests
+	@echo "$(COLOR_BOLD)Running smoke tests...$(COLOR_RESET)"
+	@bash scripts/smoke.sh
+
+test-api: ## Test API endpoints
+	@echo "$(COLOR_BOLD)Testing API endpoints...$(COLOR_RESET)"
+	@echo "Health check:"
+	@curl -s http://$(HOST_IP):8084/health | jq .
+	@echo ""
+	@echo "System summary:"
+	@curl -s http://$(HOST_IP):8084/admin/system/summary | jq .
+
+validate: ## Validate complete configuration (IP, CORS, services, network)
+	@bash scripts/validate-config.sh
+
+# ============================================================================
+# Development Helpers
+# ============================================================================
+
+shell-gateway: ## Open shell in gateway container
+	@docker exec -it $$($(DOCKER_COMPOSE) ps -q gateway) /bin/bash
+
+shell-postgres: ## Open shell in PostgreSQL container
+	@docker exec -it $$($(DOCKER_COMPOSE) ps -q postgres) /bin/bash
+
+tail: logs ## Alias for logs (follow mode)
+
+watch: ## Watch container status (refresh every 2s)
+	@watch -n 2 'docker compose -f $(COMPOSE_FILE) ps'
+
+# ============================================================================
+# Quick Start Helpers
+# ============================================================================
+
+quick-start: up bootstrap-default ## Quick start: up + bootstrap with defaults
+	@echo ""
+	@echo "$(COLOR_GREEN)$(COLOR_BOLD)✓ Cortex is ready!$(COLOR_RESET)"
+	@echo ""
+	@echo "$(COLOR_BLUE)Next steps:$(COLOR_RESET)"
+	@echo "  1. Login at: http://$(HOST_IP):3001/login (admin/admin)"
+	@echo "  2. Create API key: make login && make create-key"
+	@echo "  3. View docs: https://aulendurforge.github.io/Cortex-vLLM/"
+	@echo ""
+
+install-deps: ## Install required dependencies (Docker, Docker Compose)
+	@echo "$(COLOR_BOLD)Checking dependencies...$(COLOR_RESET)"
+	@command -v docker >/dev/null 2>&1 || { echo "$(COLOR_YELLOW)Docker not found. Install from: https://docs.docker.com/get-docker/$(COLOR_RESET)"; exit 1; }
+	@command -v docker compose >/dev/null 2>&1 || { echo "$(COLOR_YELLOW)Docker Compose not found. Install from: https://docs.docker.com/compose/install/$(COLOR_RESET)"; exit 1; }
+	@echo "$(COLOR_GREEN)✓ All dependencies installed$(COLOR_RESET)"
+
+# ============================================================================
+# Production-Specific Operations
+# ============================================================================
+
+prod-check: ## Pre-flight check for production deployment
+	@echo "$(COLOR_BOLD)Production Readiness Check$(COLOR_RESET)"
+	@echo ""
+	@echo "$(COLOR_BLUE)Checking environment variables...$(COLOR_RESET)"
+	@grep -q "GATEWAY_DEV_ALLOW_ALL_KEYS.*false" $(COMPOSE_FILE) && echo "✓ Dev auth disabled" || echo "$(COLOR_YELLOW)⚠ Dev auth still enabled$(COLOR_RESET)"
+	@grep -q "INTERNAL_VLLM_API_KEY" $(COMPOSE_FILE) && echo "✓ Internal API key configured" || echo "$(COLOR_YELLOW)⚠ Internal API key not set$(COLOR_RESET)"
+	@echo ""
+	@echo "$(COLOR_BLUE)Security recommendations:$(COLOR_RESET)"
+	@echo "  - Set GATEWAY_DEV_ALLOW_ALL_KEYS=false"
+	@echo "  - Configure strong INTERNAL_VLLM_API_KEY"
+	@echo "  - Set strict CORS_ALLOW_ORIGINS"
+	@echo "  - Enable TLS with reverse proxy"
+	@echo "  - Set up regular database backups"
+
+# ============================================================================
+# Info Commands
+# ============================================================================
+
+info: ## Show current configuration
+	@echo "$(COLOR_BOLD)Current Configuration$(COLOR_RESET)"
+	@echo ""
+	@echo "Environment:     $(ENV)"
+	@echo "Compose file:    $(COMPOSE_FILE)"
+	@echo "Profiles:        $(PROFILES)"
+	@echo "$(COLOR_YELLOW)Detected Host IP: $(HOST_IP)$(COLOR_RESET)"
+	@echo ""
+	@echo "$(COLOR_BLUE)Endpoints (use these URLs, NOT localhost):$(COLOR_RESET)"
+	@echo "Gateway:         http://$(HOST_IP):8084"
+	@echo "Admin UI:        http://$(HOST_IP):3001"
+	@echo "Prometheus:      http://$(HOST_IP):9090"
+	@echo "PgAdmin:         http://$(HOST_IP):5050"
+	@echo ""
+
+urls: info ## Alias for info (show URLs)
+
+ip: ## Show detected host IP address
+	@echo "$(COLOR_YELLOW)$(COLOR_BOLD)Host IP Address: $(HOST_IP)$(COLOR_RESET)"
+	@echo ""
+	@echo "$(COLOR_BLUE)Access Cortex at:$(COLOR_RESET)"
+	@echo "  Admin UI: http://$(HOST_IP):3001"
+	@echo "  Gateway:  http://$(HOST_IP):8084"
+	@echo ""
+	@echo "$(COLOR_YELLOW)⚠ Use this IP, NOT 'localhost'$(COLOR_RESET)"
+	@echo "$(COLOR_BLUE)ℹ Other devices on your network should use this IP too$(COLOR_RESET)"
+
+version: ## Show version information
+	@echo "Cortex-vLLM Gateway"
+	@echo "Version: 0.1.0"
+	@echo ""
+	@docker --version
+	@docker compose version
+

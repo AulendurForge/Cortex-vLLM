@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { Card, H1 } from '../../../../src/components/UI';
+import { HostIpDisplay } from '../../../../src/components/HostIpDisplay';
 
 type Step = {
   id: string;
@@ -100,6 +101,8 @@ export default function GettingStarted() {
           administration of models, access, and resources across teams and organizations.
         </p>
       </header>
+
+      <HostIpDisplay variant="banner" />
 
       <section>
         <div className="px-1 text-[11px] uppercase tracking-wider text-white/60 mb-2">Platform</div>

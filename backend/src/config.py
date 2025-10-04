@@ -37,8 +37,9 @@ class Settings(BaseSettings):
     # CORS & security headers
     CORS_ENABLED: bool = True
     # For cookie auth to work across origins, this must NOT be "*"; set your frontend origin.
-    # Default dev origin aligns with the Next.js app on port 3001.
-    CORS_ALLOW_ORIGINS: str = "http://localhost:3001,http://10.1.10.241:3001"  # comma-separated or *
+    # Docker Compose automatically sets this to detected host IP + localhost fallbacks.
+    # Format: comma-separated origins, e.g., "http://192.168.1.181:3001,http://localhost:3001"
+    CORS_ALLOW_ORIGINS: str = "http://localhost:3001,http://127.0.0.1:3001"  # Override via env
     SECURITY_HEADERS_ENABLED: bool = True
     # Database
     DATABASE_URL: str = "postgresql+asyncpg://cortex:cortex@postgres:5432/cortex"
@@ -54,12 +55,26 @@ class Settings(BaseSettings):
     CORTEX_MODELS_DIR_HOST: str | None = None
     HF_CACHE_DIR_HOST: str | None = None
     VLLM_IMAGE: str = "vllm/vllm-openai:latest"
+    # llama.cpp settings
+    LLAMACPP_IMAGE: str = "cortex/llamacpp-server:latest"
+    LLAMACPP_GEN_URLS: str = ""
+    LLAMACPP_DEFAULT_NGL: int = 999
+    LLAMACPP_DEFAULT_BATCH_SIZE: int = 512
+    LLAMACPP_DEFAULT_THREADS: int = 32
+    LLAMACPP_DEFAULT_CONTEXT: int = 8192
 
     def gen_urls(self) -> List[str]:
         return [u.strip() for u in self.VLLM_GEN_URLS.split(",") if u.strip()]
 
     def emb_urls(self) -> List[str]:
         return [u.strip() for u in self.VLLM_EMB_URLS.split(",") if u.strip()]
+
+    def llamacpp_gen_urls(self) -> List[str]:
+        return [u.strip() for u in self.LLAMACPP_GEN_URLS.split(",") if u.strip()]
+
+    def all_gen_urls(self) -> List[str]:
+        """Combined vLLM and llama.cpp generation URLs."""
+        return self.gen_urls() + self.llamacpp_gen_urls()
 
     class Config:
         env_file = ".env"

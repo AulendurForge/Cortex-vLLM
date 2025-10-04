@@ -7,6 +7,7 @@ import { useToast } from '../providers/ToastProvider';
 import { useUser } from '../providers/UserProvider';
 import apiFetch from '../lib/api-clients';
 import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
 
 type NavItem = { href: string; label: string };
 
@@ -15,6 +16,15 @@ export function SideNav() {
   const { addToast } = useToast();
   const { user, setUser } = useUser();
   const router = useRouter();
+  const [hostIP, setHostIP] = useState<string>('');
+
+  // Detect host IP from browser location
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setHostIP(window.location.hostname);
+    }
+  }, []);
+
   const onLogout = (e: React.MouseEvent) => {
     e.preventDefault();
     (async () => {
@@ -37,6 +47,19 @@ export function SideNav() {
           <Image src={require('../assets/cortex logo white.PNG')} alt="CORTEX" width={50} height={50} />
           <span className="font-semibold tracking-wide text-xl">CORTEX</span>
         </div>
+        
+        {/* Host IP Display */}
+        {hostIP && (
+          <div className="flex flex-col items-center py-3 px-2 bg-white/5 rounded-lg border border-white/10">
+            <div className="text-[10px] uppercase tracking-wider text-white/50 mb-1">
+              Cortex is running on IP:
+            </div>
+            <div className="text-sm font-mono text-emerald-400 font-medium">
+              {hostIP}
+            </div>
+          </div>
+        )}
+
         <nav className="flex flex-col text-sm">
           {/* Platform */}
           <div>

@@ -179,7 +179,152 @@ def _build_command(m: Model) -> list[str]:
     return cmd
 
 
-def start_container_for_model(m: Model, hf_token: Optional[str] | None = None) -> Tuple[str, int]:
+def _build_llamacpp_command(m: Model) -> list[str]:
+    """Build llama-server command arguments for llama.cpp containers."""
+    model_path = _resolve_llamacpp_model_path(m)
+    
+    cmd: list[str] = [
+        "llama-server",
+        "-m", model_path,
+        "--host", "0.0.0.0",
+        "--port", "8000",
+    ]
+    
+    # Core parameters with defaults from settings
+    settings = get_settings()
+    context_size = getattr(m, 'context_size', None) or settings.LLAMACPP_DEFAULT_CONTEXT
+    ngl = getattr(m, 'ngl', None) or settings.LLAMACPP_DEFAULT_NGL
+    batch_size = getattr(m, 'batch_size', None) or settings.LLAMACPP_DEFAULT_BATCH_SIZE
+    threads = getattr(m, 'threads', None) or settings.LLAMACPP_DEFAULT_THREADS
+    
+    cmd += ["-c", str(context_size)]
+    cmd += ["-ngl", str(ngl)]
+    cmd += ["-b", str(batch_size)]
+    cmd += ["-t", str(threads)]
+    
+    # GPU tensor split
+    if getattr(m, 'tensor_split', None):
+        cmd += ["--tensor-split", str(m.tensor_split)]
+    
+    # Performance flags
+    if getattr(m, 'flash_attention', None) is not None:
+        cmd += ["--flash-attn", "on" if m.flash_attention else "off"]
+    if getattr(m, 'mlock', None) and m.mlock:
+        cmd += ["--mlock"]
+    if getattr(m, 'no_mmap', None) and m.no_mmap:
+        cmd += ["--no-mmap"]
+    if getattr(m, 'numa_policy', None):
+        cmd += ["--numa", str(m.numa_policy)]
+    
+    # RoPE parameters
+    if getattr(m, 'rope_freq_base', None):
+        cmd += ["--rope-freq-base", str(m.rope_freq_base)]
+    if getattr(m, 'rope_freq_scale', None):
+        cmd += ["--rope-freq-scale", str(m.rope_freq_scale)]
+    
+    return cmd
+
+
+def _resolve_llamacpp_model_path(m: Model) -> str:
+    """Resolve GGUF file path for llama.cpp."""
+    if not m.local_path:
+        raise ValueError("llama.cpp requires local_path")
+    
+    # If local_path points directly to a .gguf file, use it
+    if m.local_path.lower().endswith('.gguf'):
+        return f"/models/{m.local_path}"
+    
+    # For our specific GPT-OSS model, use the merged file we created
+    if "huihui-ai/Huihui-gpt-oss-120b-BF16-abliterated" in m.local_path:
+        return "/models/huihui-ai/Huihui-gpt-oss-120b-BF16-abliterated/Q8_0-GGUF/gpt-oss-120b.Q8_0.gguf"
+    
+    # Otherwise, look for GGUF files in the directory
+    return f"/models/{m.local_path}/model.gguf"
+
+
+def start_llamacpp_container_for_model(m: Model) -> Tuple[str, int]:
+    """Create llama.cpp container for the model."""
+    settings = get_settings()
+    image = settings.LLAMACPP_IMAGE
+    _ensure_image(image)
+    
+    name = f"llamacpp-model-{m.id}"
+    cli = _client()
+    
+    # Stop existing container
+    try:
+        existing = cli.containers.get(name)
+        try:
+            existing.stop(timeout=10)
+        except Exception:
+            pass
+        try:
+            existing.remove(force=True)
+        except Exception:
+            pass
+    except Exception:
+        pass
+    
+    # Set up volumes - same as vLLM for models directory
+    binds = {
+        settings.CORTEX_MODELS_DIR_HOST or settings.CORTEX_MODELS_DIR: 
+        {"bind": "/models", "mode": "ro"}
+    }
+    
+    # Environment variables
+    environment = {
+        "CUDA_VISIBLE_DEVICES": "all",
+        "NVIDIA_VISIBLE_DEVICES": "all",
+        "NVIDIA_DRIVER_CAPABILITIES": "compute,utility",
+    }
+    
+    # GPU device requests
+    device_requests = [DeviceRequest(count=-1, capabilities=[["gpu"]])]
+    
+    # Health check - llama.cpp server responds to /v1/models endpoint
+    healthcheck = {
+        "Test": ["CMD-SHELL", "curl -f http://localhost:8000/v1/models || exit 1"],
+        "Interval": 10_000_000_000,  # 10s
+        "Timeout": 8_000_000_000,    # 8s (llama.cpp may be slower)
+        "Retries": 3,
+        "StartPeriod": 45_000_000_000,  # 45s (large models take time to load)
+    }
+    
+    # Build command
+    cmd = _build_llamacpp_command(m)
+    
+    print(f"[docker_manager] starting llamacpp model {m.id}, cmd: {cmd}", flush=True)
+    
+    container: Container = cli.containers.run(
+        image=image,
+        name=name,
+        command=cmd,
+        detach=True,
+        environment=environment,
+        volumes=binds,
+        device_requests=device_requests,
+        healthcheck=healthcheck,
+        restart_policy={"Name": "unless-stopped"},
+        ports={"8000/tcp": ("0.0.0.0", 0)},
+        network="cortex_default",
+        labels={"com.docker.compose.project": "cortex"},
+        shm_size="8g",  # llama.cpp may need more shared memory
+        ipc_mode="host",
+    )
+    
+    container.reload()
+    port_info = container.attrs.get("NetworkSettings", {}).get("Ports", {}).get("8000/tcp", [])
+    host_port = 0
+    if port_info:
+        try:
+            host_port = int(port_info[0].get("HostPort"))
+        except Exception:
+            host_port = 0
+    
+    return name, host_port
+
+
+def start_vllm_container_for_model(m: Model, hf_token: Optional[str] | None = None) -> Tuple[str, int]:
     """Create (or recreate) a vLLM container for the model.
     Returns (container_name, host_port).
     """
@@ -298,13 +443,28 @@ def start_container_for_model(m: Model, hf_token: Optional[str] | None = None) -
     return name, host_port
 
 
+def start_container_for_model(m: Model, hf_token: Optional[str] | None = None) -> Tuple[str, int]:
+    """Route to appropriate engine based on model.engine_type."""
+    engine_type = getattr(m, 'engine_type', 'vllm')
+    
+    if engine_type == 'llamacpp':
+        return start_llamacpp_container_for_model(m)
+    else:
+        return start_vllm_container_for_model(m, hf_token)
+
+
 def stop_container_for_model(m: Model) -> None:
+    """Stop container regardless of engine type."""
     cli = _client()
-    name = f"vllm-model-{m.id}"
+    engine_type = getattr(m, 'engine_type', 'vllm')
+    prefix = 'llamacpp' if engine_type == 'llamacpp' else 'vllm'
+    name = f"{prefix}-model-{m.id}"
+    
     try:
         c = cli.containers.get(name)
         try:
-            c.stop(timeout=5)
+            timeout = 10 if engine_type == 'llamacpp' else 5
+            c.stop(timeout=timeout)
         except Exception:
             pass
         try:
@@ -316,8 +476,12 @@ def stop_container_for_model(m: Model) -> None:
 
 
 def tail_logs_for_model(m: Model, tail: int = 1000) -> str:
+    """Get container logs regardless of engine type."""
     cli = _client()
-    name = f"vllm-model-{m.id}"
+    engine_type = getattr(m, 'engine_type', 'vllm')
+    prefix = 'llamacpp' if engine_type == 'llamacpp' else 'vllm'
+    name = f"{prefix}-model-{m.id}"
+    
     try:
         c = cli.containers.get(name)
         out = c.logs(tail=tail)
