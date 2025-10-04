@@ -28,23 +28,29 @@ nav:
   - Getting Started:
       - Quickstart (Docker): getting-started/quickstart-docker.md
       - Quickstart (Local Dev): getting-started/quickstart-local.md
+      - Admin Setup Guide: getting-started/admin-setup.md
       - Configuration: getting-started/configuration.md
+      - Configuration Checklist: getting-started/configuration-checklist.md
   - Architecture:
       - System Overview: architecture/system.md
       - Backend: architecture/backend.md
       - Frontend: architecture/frontend.md
+      - IP Detection: architecture/ip-detection.md
+      - Configuration Flow: architecture/configuration-flow.md
       - Observability: architecture/observability.md
   - API:
       - OpenAI-compatible: api/openai-compatible.md
       - Admin API: api/admin-api.md
   - Operations:
       - Deployments: operations/deployments.md
+      - Makefile Guide: operations/makefile-guide.md
       - Scaling & Reliability: operations/scaling.md
       - Backup & Restore: operations/backup-restore.md
       - Upgrade Notes: operations/upgrade-notes.md
   - Models:
       - vLLM Guide: models/vllm.md
       - llama.cpp Guide: models/llamaCPP.md
+      - Engine Research: models/engine-research.md
       - Model Management: models/model-management.md
   - Security:
       - Security Posture: security/security.md
