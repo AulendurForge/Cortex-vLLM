@@ -126,7 +126,8 @@ async def list_models(_: dict = Depends(require_admin)):
     if SessionLocal is None:
         return []
     async with SessionLocal() as session:
-        res = await session.execute(select(Model))
+        # Order by ID to maintain consistent position regardless of state changes
+        res = await session.execute(select(Model).order_by(Model.id.asc()))
         rows = res.scalars().all()
         return [
             ModelItem(

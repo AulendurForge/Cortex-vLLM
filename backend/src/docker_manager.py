@@ -304,7 +304,7 @@ def start_llamacpp_container_for_model(m: Model) -> Tuple[str, int]:
         volumes=binds,
         device_requests=device_requests,
         healthcheck=healthcheck,
-        restart_policy={"Name": "unless-stopped"},
+        restart_policy={"Name": "no"},  # No auto-restart - models start only when admin clicks Start
         ports={"8000/tcp": ("0.0.0.0", 0)},
         network="cortex_default",
         labels={"com.docker.compose.project": "cortex"},
@@ -424,7 +424,7 @@ def start_vllm_container_for_model(m: Model, hf_token: Optional[str] | None = No
         volumes=binds,
         device_requests=device_requests,
         healthcheck=healthcheck,
-        restart_policy={"Name": "unless-stopped"},
+        restart_policy={"Name": "no"},  # No auto-restart - models start only when admin clicks Start
         ports=ports,
         network=host_config_kwargs.get("network"),
         labels={"com.docker.compose.project": "cortex"},

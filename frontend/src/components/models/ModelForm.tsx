@@ -183,6 +183,36 @@ export function ModelForm({ onSubmit, onCancel, defaults, fetchBaseDir, saveBase
   return (
     <form onSubmit={(e) => {
       e.preventDefault();
+      
+      // Frontend validation before submit
+      if (values.engineType === 'llamacpp') {
+        if (values.mode === 'online') {
+          alert('llama.cpp requires Offline mode. Please select a local GGUF file.');
+          return;
+        }
+        if (!values.localPath) {
+          alert('llama.cpp requires a local file path. Please select a GGUF file from your models directory.');
+          return;
+        }
+      }
+      
+      if (values.engineType === 'vllm') {
+        if (values.mode === 'online' && !values.repoId) {
+          alert('Online mode requires a HuggingFace repository ID (e.g., meta-llama/Llama-3-8B-Instruct)');
+          return;
+        }
+        if (values.mode === 'offline' && !values.localPath) {
+          alert('Offline mode requires a local path. Please select a model folder.');
+          return;
+        }
+      }
+      
+      // Required fields for both engines
+      if (!values.name || !values.servedModelName) {
+        alert('Model name and served model name are required.');
+        return;
+      }
+      
       // If GGUF chosen, transform localPath to include selected .gguf and default hfConfigPath
       const usingGguf = !!inspect && (useGguf || (!inspect.has_safetensors && (inspect.gguf_files||[]).length>0));
       const next = { ...values } as ModelFormValues;
@@ -210,7 +240,19 @@ export function ModelForm({ onSubmit, onCancel, defaults, fetchBaseDir, saveBase
       {!modeLocked && (
         <div className="md:col-span-2">
           <div className="inline-flex items-center gap-3 text-xs">
-            <label className="inline-flex items-center gap-1"><input type="radio" name="mode" checked={values.mode==='online'} onChange={() => set('mode','online')} /> Online (Hugging Face)</label>
+            <label className="inline-flex items-center gap-1">
+              <input 
+                type="radio" 
+                name="mode" 
+                checked={values.mode==='online'} 
+                onChange={() => set('mode','online')}
+                disabled={values.engineType === 'llamacpp'}
+              /> 
+              Online (Hugging Face)
+              {values.engineType === 'llamacpp' && (
+                <span className="text-amber-300 text-[10px]">(Not available for llama.cpp)</span>
+              )}
+            </label>
             <label className="inline-flex items-center gap-1"><input type="radio" name="mode" checked={values.mode==='offline'} onChange={() => set('mode','offline')} /> Offline (Local Folder)</label>
           </div>
         </div>
@@ -245,13 +287,14 @@ export function ModelForm({ onSubmit, onCancel, defaults, fetchBaseDir, saveBase
                 )}
               </div>
               <div className="flex items-end">
-                <button type="button" className="btn" onClick={()=>{
+                <button type="button" className="btn" onClick={async ()=>{
                   try {
-                    const p = (baseDir || '').replace(/\\\\/g,'/');
-                    const url = p.match(/^([A-Za-z]:)/) ? `file:///${p.replace(/:/,':').replace(/\\\\/g,'/')}` : `file://${p}`;
-                    window.open(url);
-                  } catch {}
-                }}>Open folder</button>
+                    await navigator.clipboard.writeText(baseDir);
+                    alert('Path copied to clipboard!\n\nOpen this path in your file explorer:\n' + baseDir);
+                  } catch {
+                    alert('Path: ' + baseDir + '\n\nCopy this path and open it in your file explorer.');
+                  }
+                }} title="Copy path to clipboard">Copy Path</button>
               </div>
             </div>
             <label className="text-sm md:col-span-2">Select your model item
@@ -366,7 +409,14 @@ export function ModelForm({ onSubmit, onCancel, defaults, fetchBaseDir, saveBase
       </label>
       
       <label className="text-sm">Engine Type
-        <select className="input mt-1" value={values.engineType || 'vllm'} onChange={(e)=>set('engineType', e.target.value as any)}>
+        <select className="input mt-1" value={values.engineType || 'vllm'} onChange={(e)=>{
+          const newEngine = e.target.value as any;
+          set('engineType', newEngine);
+          // Auto-switch to offline mode for llama.cpp (required)
+          if (newEngine === 'llamacpp' && values.mode === 'online') {
+            set('mode', 'offline');
+          }
+        }}>
           <option value="vllm">vLLM (Transformers/Safetensors)</option>
           <option value="llamacpp">llama.cpp (GGUF)</option>
         </select>
