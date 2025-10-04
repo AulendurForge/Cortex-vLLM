@@ -7,6 +7,7 @@ dist/
 *.log
 .env.local
 .env*.local
+.env
 
 # OS / Editor
 .DS_Store
