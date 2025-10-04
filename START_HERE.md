@@ -20,6 +20,8 @@ make quick-start
 # That's it! ✓
 ```
 
+> **⚠️ IMPORTANT**: Always use `make` commands. Never run `docker compose` directly - it won't detect your IP and CORS will fail!
+
 ---
 
 ## 🎯 Important: Use Your Host IP, NOT localhost!

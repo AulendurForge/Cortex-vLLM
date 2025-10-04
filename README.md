@@ -58,6 +58,8 @@ make quick-start
 # Login at: http://192.168.1.181:3001/login (admin/admin)
 ```
 
+> **⚠️ CRITICAL**: Always use `make` commands, NOT `docker compose` directly. The Makefile automatically detects your IP and configures CORS. Running `docker compose up` directly will result in CORS errors and authentication failures.
+
 > **📌 Important**: Always use the **host machine's IP address** shown in the output, not `localhost`. The IP is automatically detected when you run `make` commands. Users on your network will access Cortex using this IP address.
 
 **Check your host IP:**
