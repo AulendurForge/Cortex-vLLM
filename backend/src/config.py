@@ -56,7 +56,9 @@ class Settings(BaseSettings):
     HF_CACHE_DIR_HOST: str | None = None
     VLLM_IMAGE: str = "vllm/vllm-openai:latest"
     # llama.cpp settings
-    LLAMACPP_IMAGE: str = "cortex/llamacpp-server:latest"
+    # Use official llama.cpp server with CUDA support
+    # The 'server-cuda' tag includes CUDA-compiled llama-server binary
+    LLAMACPP_IMAGE: str = "ghcr.io/ggml-org/llama.cpp:server-cuda"
     LLAMACPP_GEN_URLS: str = ""
     LLAMACPP_DEFAULT_NGL: int = 999
     LLAMACPP_DEFAULT_BATCH_SIZE: int = 512

@@ -180,11 +180,13 @@ def _build_command(m: Model) -> list[str]:
 
 
 def _build_llamacpp_command(m: Model) -> list[str]:
-    """Build llama-server command arguments for llama.cpp containers."""
+    """Build llama-server command arguments for llama.cpp containers.
+    Note: The official image has ENTRYPOINT ["/app/llama-server"], so we only pass arguments.
+    """
     model_path = _resolve_llamacpp_model_path(m)
     
+    # Don't include 'llama-server' - it's already in the ENTRYPOINT
     cmd: list[str] = [
-        "llama-server",
         "-m", model_path,
         "--host", "0.0.0.0",
         "--port", "8000",
@@ -226,20 +228,61 @@ def _build_llamacpp_command(m: Model) -> list[str]:
 
 
 def _resolve_llamacpp_model_path(m: Model) -> str:
-    """Resolve GGUF file path for llama.cpp."""
+    """Resolve and validate GGUF file path for llama.cpp.
+    
+    Args:
+        m: Model database object with local_path set
+        
+    Returns:
+        str: Validated absolute path to GGUF file in container (/models/...)
+        
+    Raises:
+        ValueError: If local_path invalid, file not found, or multiple GGUFs without selection
+    """
     if not m.local_path:
-        raise ValueError("llama.cpp requires local_path")
+        raise ValueError("llama.cpp requires local_path to be set")
     
-    # If local_path points directly to a .gguf file, use it
+    settings = get_settings()
+    # Container path (what llama-server will see)
+    container_path = f"/models/{m.local_path}"
+    # Host path (for validation - gateway has models dir mounted)
+    host_base = settings.CORTEX_MODELS_DIR
+    host_path = os.path.join(host_base, m.local_path)
+    
+    # Case 1: Direct .gguf file path
     if m.local_path.lower().endswith('.gguf'):
-        return f"/models/{m.local_path}"
+        if not os.path.isfile(host_path):
+            raise ValueError(f"GGUF file not found: {m.local_path}")
+        return container_path
     
-    # For our specific GPT-OSS model, use the merged file we created
+    # Case 2: Special handling for GPT-OSS (known location)
     if "huihui-ai/Huihui-gpt-oss-120b-BF16-abliterated" in m.local_path:
-        return "/models/huihui-ai/Huihui-gpt-oss-120b-BF16-abliterated/Q8_0-GGUF/gpt-oss-120b.Q8_0.gguf"
+        special_path = "/models/huihui-ai/Huihui-gpt-oss-120b-BF16-abliterated/Q8_0-GGUF/gpt-oss-120b.Q8_0.gguf"
+        host_special = os.path.join(host_base, "huihui-ai/Huihui-gpt-oss-120b-BF16-abliterated/Q8_0-GGUF/gpt-oss-120b.Q8_0.gguf")
+        if os.path.isfile(host_special):
+            return special_path
+        # Fall through to directory scan if special file not found
     
-    # Otherwise, look for GGUF files in the directory
-    return f"/models/{m.local_path}/model.gguf"
+    # Case 3: Directory - scan for .gguf files
+    if os.path.isdir(host_path):
+        try:
+            files = os.listdir(host_path)
+            gguf_files = sorted([f for f in files if f.lower().endswith('.gguf')])
+            
+            if not gguf_files:
+                raise ValueError(f"No GGUF files found in directory: {m.local_path}")
+            
+            if len(gguf_files) > 1:
+                print(f"[WARNING] Multiple GGUF files found in {m.local_path}: {gguf_files}", flush=True)
+                print(f"[WARNING] Using first file: {gguf_files[0]}", flush=True)
+            
+            # Use first GGUF file found
+            return f"/models/{m.local_path}/{gguf_files[0]}"
+        except OSError as e:
+            raise ValueError(f"Cannot read directory {m.local_path}: {e}")
+    
+    # Case 4: Path doesn't exist or invalid
+    raise ValueError(f"Invalid local_path: {m.local_path} - must be a .gguf file or directory containing GGUF files")
 
 
 def start_llamacpp_container_for_model(m: Model) -> Tuple[str, int]:
@@ -271,15 +314,20 @@ def start_llamacpp_container_for_model(m: Model) -> Tuple[str, int]:
         {"bind": "/models", "mode": "ro"}
     }
     
-    # Environment variables
+    # Get ngl setting to determine if GPU is needed
+    ngl = getattr(m, 'ngl', None) or settings.LLAMACPP_DEFAULT_NGL
+    
+    # Environment variables for GPU access
+    # When using nvidia runtime, these env vars tell it to expose all GPUs
     environment = {
-        "CUDA_VISIBLE_DEVICES": "all",
         "NVIDIA_VISIBLE_DEVICES": "all",
         "NVIDIA_DRIVER_CAPABILITIES": "compute,utility",
     }
     
-    # GPU device requests
-    device_requests = [DeviceRequest(count=-1, capabilities=[["gpu"]])]
+    # Device requests for Docker API (used with nvidia runtime)
+    device_requests = None
+    if ngl > 0:
+        device_requests = [DeviceRequest(count=-1, capabilities=[["gpu"]])]
     
     # Health check - llama.cpp server responds to /v1/models endpoint
     healthcheck = {
@@ -294,23 +342,36 @@ def start_llamacpp_container_for_model(m: Model) -> Tuple[str, int]:
     cmd = _build_llamacpp_command(m)
     
     print(f"[docker_manager] starting llamacpp model {m.id}, cmd: {cmd}", flush=True)
+    print(f"[docker_manager] ngl={ngl}, device_requests={device_requests}", flush=True)
     
-    container: Container = cli.containers.run(
-        image=image,
-        name=name,
-        command=cmd,
-        detach=True,
-        environment=environment,
-        volumes=binds,
-        device_requests=device_requests,
-        healthcheck=healthcheck,
-        restart_policy={"Name": "no"},  # No auto-restart - models start only when admin clicks Start
-        ports={"8000/tcp": ("0.0.0.0", 0)},
-        network="cortex_default",
-        labels={"com.docker.compose.project": "cortex"},
-        shm_size="8g",  # llama.cpp may need more shared memory
-        ipc_mode="host",
-    )
+    # Use containers.run() with runtime parameter (supported per Docker SDK docs)
+    # The nvidia runtime ensures CUDA libraries are mounted from the host
+    run_kwargs = {
+        "image": image,
+        "name": name,
+        "command": cmd,
+        "detach": True,
+        "environment": environment,
+        "volumes": binds,
+        "healthcheck": healthcheck,
+        "restart_policy": {"Name": "no"},
+        "ports": {"8000/tcp": ("0.0.0.0", 0)},
+        "network": "cortex_default",
+        "labels": {"com.docker.compose.project": "cortex"},
+        "shm_size": "8g",
+        "ipc_mode": "host",
+    }
+    
+    # Add runtime and device_requests for GPU support
+    # Both are required for nvidia runtime to expose GPUs
+    if ngl > 0 and device_requests:
+        run_kwargs["runtime"] = "nvidia"
+        run_kwargs["device_requests"] = device_requests
+        print(f"[docker_manager] GPU mode: runtime=nvidia, device_requests={device_requests}", flush=True)
+    else:
+        print(f"[docker_manager] CPU mode: ngl={ngl}", flush=True)
+    
+    container: Container = cli.containers.run(**run_kwargs)
     
     container.reload()
     port_info = container.attrs.get("NetworkSettings", {}).get("Ports", {}).get("8000/tcp", [])

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Any
 from ..auth import require_admin
 from ..config import get_settings
 from ..models import Model, ConfigKV
@@ -8,6 +8,8 @@ from sqlalchemy import select, update, delete
 from ..docker_manager import start_container_for_model, stop_container_for_model, tail_logs_for_model
 import httpx
 import os
+import time
+import re
 from ..state import register_model_endpoint, unregister_model_endpoint
 from ..state import get_model_registry as _get_registry
 
@@ -194,7 +196,36 @@ async def create_model(body: CreateModelRequest, _: dict = Depends(require_admin
             raise HTTPException(status_code=400, detail="llamacpp requires offline mode")
         if not body.local_path:
             raise HTTPException(status_code=400, detail="llamacpp requires local_path")
-        # GGUF validation can be added here if needed
+        # Clear vLLM-specific fields for llamacpp models (keep database clean)
+        body.tp_size = None
+        body.gpu_memory_utilization = None
+        body.kv_cache_dtype = None
+        body.quantization = None
+        body.block_size = None
+        body.swap_space_gb = None
+        body.max_num_batched_tokens = None
+        body.enable_prefix_caching = None
+        body.prefix_caching_hash_algo = None
+        body.enable_chunked_prefill = None
+        body.max_num_seqs = None
+        body.cuda_graph_sizes = None
+        body.pipeline_parallel_size = None
+        body.cpu_offload_gb = None
+    else:  # vllm
+        # Clear llama.cpp-specific fields for vLLM models
+        body.ngl = None
+        body.tensor_split = None
+        body.batch_size = None
+        body.threads = None
+        body.context_size = None
+        body.rope_freq_base = None
+        body.rope_freq_scale = None
+        body.flash_attention = None
+        body.mlock = None
+        body.no_mmap = None
+        body.numa_policy = None
+        body.split_mode = None
+    
     SessionLocal = _get_session()
     if SessionLocal is None:
         raise HTTPException(status_code=503, detail="database_unavailable")
@@ -370,6 +401,103 @@ async def delete_model(model_id: int, purge_cache: bool = False, _: dict = Depen
         await session.commit()
         return {"status": "deleted", "files_removed": removed, "cache_removed": cache_removed}
 
+def _handle_multipart_gguf_merge(m: Model) -> None:
+    """
+    Detect if model uses a multi-part GGUF file and merge if necessary.
+    Updates model.local_path to point to merged file if merge occurs.
+    
+    This runs automatically when starting a model that references a multi-part GGUF.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    if not m.local_path or not m.local_path.lower().endswith('.gguf'):
+        return  # Not a GGUF file
+    
+    # Check if the path matches multi-part pattern
+    filename = os.path.basename(m.local_path)
+    multipart_match = re.match(r'(.+)-(\d{5})-of-(\d{5})\.gguf$', filename, re.IGNORECASE)
+    
+    if not multipart_match:
+        return  # Not a multi-part file
+    
+    logger.info(f"Detected multi-part GGUF file: {m.local_path}")
+    
+    # Parse the pattern
+    base_name = multipart_match.group(1)
+    total_parts = int(multipart_match.group(3))
+    
+    # Get directory paths
+    s = get_settings()
+    base_dir = s.CORTEX_MODELS_DIR or "/var/cortex/models"
+    
+    # Construct full path
+    model_folder = os.path.dirname(m.local_path)  # e.g., "huihui-ai/Q8_0-GGUF"
+    target_dir = os.path.join(base_dir, model_folder)
+    
+    # Find all parts
+    all_parts = []
+    for i in range(1, total_parts + 1):
+        part_filename = f"{base_name}-{i:05d}-of-{total_parts:05d}.gguf"
+        part_path = os.path.join(target_dir, part_filename)
+        if os.path.exists(part_path):
+            all_parts.append(part_path)
+    
+    if len(all_parts) != total_parts:
+        raise Exception(f"Incomplete multi-part GGUF: found {len(all_parts)} of {total_parts} parts")
+    
+    # Extract quantization type for merged filename
+    quant_type = _detect_quantization_from_filename(filename)
+    merged_filename = f"merged-{quant_type}.gguf"
+    merged_path = os.path.join(target_dir, merged_filename)
+    
+    # Check if already merged
+    if os.path.exists(merged_path):
+        logger.info(f"Merged file already exists: {merged_path}")
+        # Update model to use merged file
+        merged_rel_path = os.path.join(model_folder, merged_filename)
+        m.local_path = merged_rel_path
+        return
+    
+    # Perform merge
+    logger.info(f"Merging {total_parts} GGUF parts into {merged_path}")
+    
+    try:
+        with open(merged_path, 'wb') as outfile:
+            for i, part_path in enumerate(sorted(all_parts), 1):
+                logger.info(f"Merging part {i}/{total_parts}: {os.path.basename(part_path)}")
+                with open(part_path, 'rb') as infile:
+                    # Stream in 64MB chunks
+                    while True:
+                        chunk = infile.read(64 * 1024 * 1024)
+                        if not chunk:
+                            break
+                        outfile.write(chunk)
+        
+        # Verify size
+        expected_size = sum(os.path.getsize(f) for f in all_parts)
+        actual_size = os.path.getsize(merged_path)
+        
+        if expected_size != actual_size:
+            os.remove(merged_path)
+            raise Exception(f"Merge failed: size mismatch (expected {expected_size}, got {actual_size})")
+        
+        logger.info(f"Successfully merged into {merged_path} ({actual_size / (1024**3):.2f} GB)")
+        
+        # Update model to use merged file
+        merged_rel_path = os.path.join(model_folder, merged_filename)
+        m.local_path = merged_rel_path
+        
+    except Exception as e:
+        # Clean up partial file
+        if os.path.exists(merged_path):
+            try:
+                os.remove(merged_path)
+            except:
+                pass
+        raise Exception(f"Failed to merge GGUF parts: {str(e)}")
+
+
 @router.post("/models/{model_id}/start")
 async def start_model(model_id: int, _: dict = Depends(require_admin)):
     SessionLocal = _get_session()
@@ -381,6 +509,14 @@ async def start_model(model_id: int, _: dict = Depends(require_admin)):
         if not m:
             raise HTTPException(status_code=404, detail="not_found")
         try:
+            # Auto-merge multi-part GGUF files if needed
+            _handle_multipart_gguf_merge(m)
+            
+            # If merge occurred, persist the updated local_path
+            if m.local_path:
+                await session.execute(update(Model).where(Model.id == model_id).values(local_path=m.local_path))
+                await session.commit()
+            
             name, host_port = start_container_for_model(m, hf_token=getattr(m, 'hf_token', None))
             await session.execute(update(Model).where(Model.id == model_id).values(state="running", container_name=name, port=host_port))
             await session.commit()
@@ -493,7 +629,7 @@ async def apply_model_changes(model_id: int, _: dict = Depends(require_admin)):
 
 @router.post("/models/{model_id}/dry-run")
 async def model_dry_run(model_id: int, _: dict = Depends(require_admin)):
-    """Return effective vLLM command that would be used; do not start container."""
+    """Return effective command that would be used (vLLM or llama.cpp); do not start container."""
     SessionLocal = _get_session()
     if SessionLocal is None:
         raise HTTPException(status_code=503, detail="database_unavailable")
@@ -502,12 +638,20 @@ async def model_dry_run(model_id: int, _: dict = Depends(require_admin)):
         m = res.scalar_one_or_none()
         if not m:
             raise HTTPException(status_code=404, detail="not_found")
-        from ..docker_manager import _build_command  # type: ignore
+        
+        engine_type = getattr(m, 'engine_type', 'vllm')
+        
         try:
-            cmd = _build_command(m)
+            if engine_type == 'llamacpp':
+                from ..docker_manager import _build_llamacpp_command  # type: ignore
+                cmd = _build_llamacpp_command(m)
+            else:
+                from ..docker_manager import _build_command  # type: ignore
+                cmd = _build_command(m)
         except Exception as e:
             raise HTTPException(status_code=400, detail=str(e))
-        return {"command": cmd}
+        
+        return {"command": cmd, "engine": engine_type}
 
 # Base directory config endpoints (persist temporarily in memory env)
 _BASE_DIR: Optional[str] = None
@@ -582,9 +726,26 @@ async def list_local_folders(base: str = Query(""), _: dict = Depends(require_ad
         return []
 
 
+class GGUFGroup(BaseModel):
+    """Represents a group of GGUF files (single or multi-part)."""
+    quant_type: str
+    display_name: str
+    files: list[str]  # Relative paths from target directory
+    full_paths: list[str]  # Absolute paths for backend use
+    is_multipart: bool
+    expected_parts: int | None = None
+    actual_parts: int
+    total_size_mb: float
+    status: str  # 'ready', 'complete_but_needs_merge', 'incomplete', 'unknown'
+    can_use: bool
+    warning: str | None = None
+    is_recommended: bool = False
+
+
 class InspectFolderResp(BaseModel):
     has_safetensors: bool
-    gguf_files: list[str]
+    gguf_files: list[str]  # Legacy: flat list
+    gguf_groups: list[GGUFGroup]  # New: smart grouped analysis
     tokenizer_files: list[str]
     config_files: list[str]
     warnings: list[str]
@@ -592,6 +753,276 @@ class InspectFolderResp(BaseModel):
     hidden_size: int | None = None
     num_hidden_layers: int | None = None
     num_attention_heads: int | None = None
+
+
+def _detect_quantization_from_filename(filename: str) -> str:
+    """Extract quantization type from GGUF filename."""
+    # Common patterns: Q8_0, Q5_K_M, Q4_K_S, F16, etc.
+    # Patterns match at word boundaries or start of string
+    # Delimiters: underscore, dash, or dot (_, -, .)
+    quant_patterns = [
+        r'(?:^|[_\-\.])(Q\d+_[KML](?:_[SML])?)',  # Q5_K_M, Q4_K_S, etc.
+        r'(?:^|[_\-\.])(Q\d+_\d+)',                # Q8_0, Q4_1, etc.
+        r'(?:^|[_\-\.])([Ff]\d+)',                 # F16, f16, F32
+        r'(?:^|[_\-\.])(IQ\d+_[A-Z]+)',            # IQ3_XXS, etc.
+    ]
+    for pattern in quant_patterns:
+        match = re.search(pattern, filename, re.IGNORECASE)
+        if match:
+            return match.group(1).upper()
+    return "Unknown"
+
+
+def _find_gguf_files_recursive(directory: str) -> list[tuple[str, str]]:
+    """Recursively find all GGUF files.
+    Returns list of (relative_path, absolute_path) tuples."""
+    gguf_files = []
+    try:
+        for root, dirs, files in os.walk(directory):
+            for filename in files:
+                if filename.lower().endswith('.gguf'):
+                    abs_path = os.path.join(root, filename)
+                    rel_path = os.path.relpath(abs_path, directory)
+                    gguf_files.append((rel_path, abs_path))
+    except Exception:
+        pass
+    return gguf_files
+
+
+def _analyze_gguf_files(directory: str) -> list[GGUFGroup]:
+    """Smart analysis of GGUF files with grouping and multi-part detection."""
+    gguf_files = _find_gguf_files_recursive(directory)
+    
+    if not gguf_files:
+        return []
+    
+    # Group files by base name and quantization
+    groups_dict: dict[str, dict[str, Any]] = {}
+    
+    for rel_path, abs_path in gguf_files:
+        filename = os.path.basename(rel_path)
+        
+        # Check for multi-part pattern: model-Q8_0-00001-of-00006.gguf
+        multipart_match = re.match(
+            r'(.+)-(\d{5})-of-(\d{5})\.gguf$',
+            filename,
+            re.IGNORECASE
+        )
+        
+        if multipart_match:
+            # Multi-part file
+            base_name = multipart_match.group(1)
+            part_num = int(multipart_match.group(2))
+            total_parts = int(multipart_match.group(3))
+            quant_type = _detect_quantization_from_filename(base_name)
+            
+            group_key = f"multipart_{base_name}_{quant_type}"
+            
+            if group_key not in groups_dict:
+                groups_dict[group_key] = {
+                    'quant_type': quant_type,
+                    'base_name': base_name,
+                    'files': [],
+                    'full_paths': [],
+                    'is_multipart': True,
+                    'expected_parts': total_parts,
+                    'parts_seen': set()
+                }
+            
+            groups_dict[group_key]['files'].append(rel_path)
+            groups_dict[group_key]['full_paths'].append(abs_path)
+            groups_dict[group_key]['parts_seen'].add(part_num)
+        else:
+            # Single file
+            quant_type = _detect_quantization_from_filename(filename)
+            group_key = f"single_{filename}_{quant_type}"
+            
+            groups_dict[group_key] = {
+                'quant_type': quant_type,
+                'base_name': filename.replace('.gguf', ''),
+                'files': [rel_path],
+                'full_paths': [abs_path],
+                'is_multipart': False,
+                'expected_parts': None,
+                'parts_seen': set()
+            }
+    
+    # Convert to GGUFGroup objects
+    groups = []
+    for group_key, group_data in groups_dict.items():
+        actual_parts = len(group_data['files'])
+        
+        # Calculate total size
+        total_size_mb = 0.0
+        try:
+            for fpath in group_data['full_paths']:
+                if os.path.isfile(fpath):
+                    total_size_mb += os.path.getsize(fpath) / (1024 * 1024)
+        except Exception:
+            pass
+        
+        # Determine status and usability
+        if group_data['is_multipart']:
+            expected = group_data['expected_parts']
+            if actual_parts == expected:
+                # Check if merged file already exists
+                parts_dir = os.path.dirname(group_data['full_paths'][0])
+                merged_filename = f"merged-{group_data['quant_type']}.gguf"
+                merged_path = os.path.join(parts_dir, merged_filename)
+                
+                if os.path.exists(merged_path):
+                    status = 'merged_available'
+                    can_use = False  # Use the merged file instead
+                    warning = f"ℹ️ Merged version available: {merged_filename}"
+                else:
+                    status = 'complete_but_needs_merge'
+                    can_use = False  # Multi-part files need merging
+                    warning = f"⚠️ Multi-part GGUF detected ({actual_parts} files). Will be auto-merged when selected."
+            else:
+                status = 'incomplete'
+                can_use = False
+                warning = f"❌ Incomplete multi-part set: Only {actual_parts} of {expected} parts found."
+        else:
+            status = 'ready'
+            can_use = True
+            warning = None
+        
+        # Create display name
+        quant = group_data['quant_type']
+        if group_data['is_multipart']:
+            display_name = f"{quant} ({actual_parts} parts)"
+        else:
+            display_name = quant
+        
+        groups.append(GGUFGroup(
+            quant_type=group_data['quant_type'],
+            display_name=display_name,
+            files=sorted(group_data['files']),
+            full_paths=sorted(group_data['full_paths']),
+            is_multipart=group_data['is_multipart'],
+            expected_parts=group_data['expected_parts'],
+            actual_parts=actual_parts,
+            total_size_mb=round(total_size_mb, 2),
+            status=status,
+            can_use=can_use,
+            warning=warning
+        ))
+    
+    # Sort: ready files first, then by quant quality (Q8 > Q5 > Q4)
+    def sort_key(g: GGUFGroup):
+        priority = 0 if g.can_use else 1
+        # Extract number from quant type for quality sorting
+        quant_num = 8  # default
+        match = re.search(r'Q(\d+)', g.quant_type)
+        if match:
+            quant_num = int(match.group(1))
+        return (priority, -quant_num, g.quant_type)
+    
+    groups.sort(key=sort_key)
+    
+    # Mark the first ready group as recommended
+    for g in groups:
+        if g.can_use:
+            g.is_recommended = True
+            break
+    
+    return groups
+
+
+def _merge_gguf_parts(group_data: dict, target_directory: str) -> str:
+    """
+    Merge multi-part GGUF files into a single file.
+    
+    Args:
+        group_data: GGUFGroup data containing files and metadata
+        target_directory: Directory containing the GGUF parts
+    
+    Returns:
+        Path to the merged file (relative to target_directory)
+    
+    Raises:
+        Exception if merge fails
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    if not group_data.get('is_multipart'):
+        raise ValueError("Group is not multi-part, no merge needed")
+    
+    # Determine output filename
+    quant_type = group_data.get('quant_type', 'Unknown')
+    base_name = group_data.get('files', [''])[0].split('/')[0] if '/' in group_data.get('files', [''])[0] else ''
+    output_filename = f"merged-{quant_type}.gguf"
+    
+    # Use first file's directory if parts are in subdirectory
+    first_file_path = group_data['full_paths'][0]
+    parts_dir = os.path.dirname(first_file_path)
+    output_path = os.path.join(parts_dir, output_filename)
+    
+    # Check if already merged
+    if os.path.exists(output_path):
+        logger.info(f"Merged file already exists: {output_path}")
+        # Return relative path from target_directory
+        return os.path.relpath(output_path, target_directory)
+    
+    logger.info(f"Merging {len(group_data['files'])} GGUF parts into {output_path}")
+    
+    # Merge files using binary concatenation
+    try:
+        with open(output_path, 'wb') as outfile:
+            for i, part_path in enumerate(sorted(group_data['full_paths']), 1):
+                logger.info(f"Merging part {i}/{len(group_data['files'])}: {os.path.basename(part_path)}")
+                with open(part_path, 'rb') as infile:
+                    # Stream in 64MB chunks to avoid memory issues
+                    while True:
+                        chunk = infile.read(64 * 1024 * 1024)
+                        if not chunk:
+                            break
+                        outfile.write(chunk)
+        
+        # Verify merged file size
+        expected_size = sum(os.path.getsize(f) for f in group_data['full_paths'])
+        actual_size = os.path.getsize(output_path)
+        
+        if expected_size != actual_size:
+            os.remove(output_path)
+            raise Exception(f"Merge failed: size mismatch (expected {expected_size}, got {actual_size})")
+        
+        logger.info(f"Successfully merged {len(group_data['files'])} parts into {output_path}")
+        logger.info(f"Merged file size: {actual_size / (1024**3):.2f} GB")
+        
+        # Return relative path from target_directory
+        return os.path.relpath(output_path, target_directory)
+        
+    except Exception as e:
+        # Clean up partial file on error
+        if os.path.exists(output_path):
+            try:
+                os.remove(output_path)
+            except:
+                pass
+        raise Exception(f"Failed to merge GGUF parts: {str(e)}")
+
+
+def _check_merged_file_exists(group_data: dict, target_directory: str) -> str | None:
+    """
+    Check if a merged file already exists for this multi-part group.
+    
+    Returns:
+        Relative path to merged file if it exists, None otherwise
+    """
+    if not group_data.get('is_multipart'):
+        return None
+    
+    quant_type = group_data.get('quant_type', 'Unknown')
+    first_file_path = group_data['full_paths'][0]
+    parts_dir = os.path.dirname(first_file_path)
+    output_filename = f"merged-{quant_type}.gguf"
+    output_path = os.path.join(parts_dir, output_filename)
+    
+    if os.path.exists(output_path):
+        return os.path.relpath(output_path, target_directory)
+    return None
 
 
 @router.get("/models/inspect-folder", response_model=InspectFolderResp)
@@ -648,9 +1079,13 @@ async def inspect_folder(base: str = Query(""), folder: str = Query(""), _: dict
                 except Exception:
                     pass
             return None
+        # Perform smart GGUF analysis
+        gguf_groups = _analyze_gguf_files(target)
+        
         out = InspectFolderResp(
             has_safetensors=bool(has_safe),
-            gguf_files=ggufs,
+            gguf_files=ggufs,  # Legacy: keep for backward compatibility
+            gguf_groups=gguf_groups,  # New: smart grouped analysis
             tokenizer_files=toks,
             config_files=cfgs,
             warnings=warnings,
@@ -669,7 +1104,14 @@ async def inspect_folder(base: str = Query(""), folder: str = Query(""), _: dict
                 pass
         return out
     except Exception:
-        return InspectFolderResp(has_safetensors=False, gguf_files=[], tokenizer_files=[], config_files=[], warnings=["inspect_error"])
+        return InspectFolderResp(
+            has_safetensors=False,
+            gguf_files=[],
+            gguf_groups=[],
+            tokenizer_files=[],
+            config_files=[],
+            warnings=["inspect_error"]
+        )
 
 
 class HfConfigResp(BaseModel):
@@ -730,4 +1172,157 @@ async def hf_config(repo_id: str = Query("")):
     except Exception:
         pass
     return out
+
+
+class ModelTestResult(BaseModel):
+    success: bool
+    test_type: str
+    request: dict[str, Any]
+    response: Optional[dict[str, Any]] = None
+    error: Optional[str] = None
+    latency_ms: int
+    timestamp: float
+
+
+@router.post("/models/{model_id}/test", response_model=ModelTestResult)
+async def test_model(model_id: int, _: dict = Depends(require_admin)):
+    """Send a sanity check request to a running model to verify it's working.
+    
+    - For chat models: Sends 'Hello' message
+    - For embedding models: Sends 'test' text
+    - Returns full request/response with timing metrics
+    """
+    SessionLocal = _get_session()
+    if SessionLocal is None:
+        raise HTTPException(status_code=503, detail="database_unavailable")
+    
+    async with SessionLocal() as session:
+        res = await session.execute(select(Model).where(Model.id == model_id))
+        m = res.scalar_one_or_none()
+        if not m:
+            raise HTTPException(status_code=404, detail="model_not_found")
+        
+        if m.state != "running":
+            raise HTTPException(status_code=400, detail=f"Model is not running (current state: {m.state})")
+        
+        if not m.container_name:
+            raise HTTPException(status_code=400, detail="No container name found for model")
+        
+        # Get model URL (prefer container name for internal routing)
+        registry = _get_registry()
+        model_entry = registry.get(m.served_model_name, {})
+        base_url = model_entry.get("url") or f"http://{m.container_name}:8000"
+        
+        # Determine test type from task field
+        test_type = "embeddings" if m.task and m.task.lower().startswith("embed") else "chat"
+        
+        start_time = time.time()
+        result_data = {}
+        
+        try:
+            if test_type == "embeddings":
+                result_data = await _test_embedding_model(base_url, m.served_model_name)
+            else:
+                result_data = await _test_chat_model(base_url, m.served_model_name)
+            
+            latency_ms = int((time.time() - start_time) * 1000)
+            
+            return ModelTestResult(
+                success=True,
+                test_type=test_type,
+                request=result_data["request"],
+                response=result_data["response"],
+                error=None,
+                latency_ms=latency_ms,
+                timestamp=time.time()
+            )
+            
+        except Exception as e:
+            latency_ms = int((time.time() - start_time) * 1000)
+            return ModelTestResult(
+                success=False,
+                test_type=test_type,
+                request=result_data.get("request", {}) if result_data else {},
+                response=None,
+                error=str(e)[:500],  # Limit error message length
+                latency_ms=latency_ms,
+                timestamp=time.time()
+            )
+
+
+async def _test_chat_model(base_url: str, model_name: str) -> dict[str, Any]:
+    """Send test chat completion request to verify model is responding."""
+    from ..main import http_client  # type: ignore
+    
+    request_data = {
+        "model": model_name,
+        "messages": [{"role": "user", "content": "Hello"}],
+        "max_tokens": 50,
+        "temperature": 0.7
+    }
+    
+    settings = get_settings()
+    headers = {"Content-Type": "application/json"}
+    if settings.INTERNAL_VLLM_API_KEY:
+        headers["Authorization"] = f"Bearer {settings.INTERNAL_VLLM_API_KEY}"
+    
+    response = await http_client.post(
+        f"{base_url}/v1/chat/completions",
+        json=request_data,
+        headers=headers,
+        timeout=httpx.Timeout(connect=5.0, read=30.0, write=10.0, pool=5.0)
+    )
+    
+    if response.status_code >= 400:
+        raise Exception(f"Model returned HTTP {response.status_code}: {response.text[:200]}")
+    
+    response_data = response.json()
+    
+    # Verify response format
+    if not response_data.get("choices"):
+        raise Exception("Invalid response: missing 'choices' field")
+    
+    return {
+        "request": request_data,
+        "response": response_data
+    }
+
+
+async def _test_embedding_model(base_url: str, model_name: str) -> dict[str, Any]:
+    """Send test embeddings request to verify model is responding."""
+    from ..main import http_client  # type: ignore
+    
+    request_data = {
+        "model": model_name,
+        "input": "test"
+    }
+    
+    settings = get_settings()
+    headers = {"Content-Type": "application/json"}
+    if settings.INTERNAL_VLLM_API_KEY:
+        headers["Authorization"] = f"Bearer {settings.INTERNAL_VLLM_API_KEY}"
+    
+    response = await http_client.post(
+        f"{base_url}/v1/embeddings",
+        json=request_data,
+        headers=headers,
+        timeout=httpx.Timeout(connect=5.0, read=10.0, write=10.0, pool=5.0)
+    )
+    
+    if response.status_code >= 400:
+        raise Exception(f"Model returned HTTP {response.status_code}: {response.text[:200]}")
+    
+    response_data = response.json()
+    
+    # Verify embedding format
+    if not response_data.get("data") or not isinstance(response_data["data"], list):
+        raise Exception("Invalid response: missing or invalid 'data' field")
+    
+    if not response_data["data"][0].get("embedding"):
+        raise Exception("Invalid response: missing 'embedding' in data")
+    
+    return {
+        "request": request_data,
+        "response": response_data
+    }
 

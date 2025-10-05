@@ -10,13 +10,17 @@ import { ModelForm, ModelFormValues } from '../../../src/components/models/Model
 import { LogsViewer } from '../../../src/components/models/LogsViewer';
 import { ConfirmDialog } from '../../../src/components/Confirm';
 import { ResourceCalculatorModal } from '../../../src/components/models/ResourceCalculatorModal';
+import { TestResultsModal } from '../../../src/components/models/TestResultsModal';
 import { useUser } from '../../../src/providers/UserProvider';
+import { Tooltip } from '../../../src/components/Tooltip';
+import { useToast } from '../../../src/providers/ToastProvider';
 
 type ModelRow = (typeof ModelListSchema extends infer T ? unknown : never) | any;
 
 export default function ModelsPage() {
   const qc = useQueryClient();
   const { user } = useUser();
+  const { addToast } = useToast();
   const isAdmin = (user?.role === 'admin');
   const [open, setOpen] = React.useState(false);
   const [logsFor, setLogsFor] = React.useState<number | null>(null);
@@ -27,6 +31,8 @@ export default function ModelsPage() {
   const [dryCmd, setDryCmd] = React.useState<string>("");
   const [calcOpen, setCalcOpen] = React.useState<boolean>(false);
   const [prefill, setPrefill] = React.useState<Partial<ModelFormValues> | null>(null);
+  const [testingId, setTestingId] = React.useState<number | null>(null);
+  const [testResult, setTestResult] = React.useState<any>(null);
 
   const list = useQuery({
     queryKey: ['models', isAdmin],
@@ -105,7 +111,20 @@ export default function ModelsPage() {
       };
       return await apiFetch('/admin/models', { method: 'POST', body: JSON.stringify(body) });
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['models'] }); setOpen(false); },
+    onSuccess: (data) => { 
+      qc.invalidateQueries({ queryKey: ['models'] }); 
+      addToast({ 
+        title: `Model created successfully!`, 
+        kind: 'success' 
+      });
+      setOpen(false); 
+    },
+    onError: (error: any) => {
+      addToast({
+        title: `Failed to create model: ${error?.message || 'Unknown error'}`,
+        kind: 'error'
+      });
+    }
   });
 
   const start = useMutation({
@@ -136,8 +155,32 @@ export default function ModelsPage() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['models'] }); setConfigId(null); setDryCmd(""); },
   });
   const dryRun = useMutation({
-    mutationFn: async (id: number) => apiFetch<{ command: string }>(`/admin/models/${id}/dry-run`, { method: 'POST' }),
-    onSuccess: (r) => { setDryCmd(Array.isArray((r as any).command) ? (r as any).command.join(' ') : (r as any).command || ''); },
+    mutationFn: async (id: number) => apiFetch<{ command: string | string[]; engine?: string }>(`/admin/models/${id}/dry-run`, { method: 'POST' }),
+    onSuccess: (r) => { 
+      const cmd = Array.isArray((r as any).command) ? (r as any).command.join(' ') : (r as any).command || '';
+      const engine = (r as any).engine || 'vllm';
+      setDryCmd(`# ${engine} command:\n${cmd}`); 
+    },
+  });
+
+  const testModel = useMutation({
+    mutationFn: async (id: number) => {
+      setTestingId(id);
+      return await apiFetch(`/admin/models/${id}/test`, { method: 'POST' });
+    },
+    onSuccess: (data) => {
+      setTestResult(data);
+      if ((data as any).success) {
+        addToast({ title: 'Model test passed! ✓', kind: 'success' });
+      } else {
+        addToast({ title: 'Model test failed', kind: 'error' });
+      }
+      setTestingId(null);
+    },
+    onError: (error: any) => {
+      addToast({ title: `Test error: ${error?.message || 'Unknown error'}`, kind: 'error' });
+      setTestingId(null);
+    }
   });
 
   return (
@@ -166,17 +209,45 @@ export default function ModelsPage() {
           </thead>
           <tbody>
             {(list.data || []).filter((m:any)=>!m.archived).map((m: any) => (
-              <tr key={m.id}>
+              <tr key={m.id} className="group">
                 <td>{m.name}</td>
-                <td className="font-mono text-xs">{m.served_model_name}</td>
+                <td className="font-mono text-xs">
+                  <div className="flex items-center gap-1">
+                    <span>{m.served_model_name}</span>
+                    <button 
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(m.served_model_name);
+                          addToast({ title: 'Model name copied!', kind: 'success' });
+                        } catch {
+                          addToast({ title: 'Copy failed', kind: 'error' });
+                        }
+                      }}
+                      className="text-emerald-400 hover:text-emerald-300 transition-colors opacity-0 group-hover:opacity-100"
+                      title="Copy model name for API calls"
+                      aria-label="Copy model name"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      </svg>
+                    </button>
+                  </div>
+                </td>
                 <td>{m.task}</td>
                 <td>
-                  <Badge className={
-                    m.engine_type === 'llamacpp' ? 'bg-green-500/20 text-green-200 border border-green-400/30' :
-                    'bg-blue-500/20 text-blue-200 border border-blue-400/30'
-                  }>
-                    {m.engine_type === 'llamacpp' ? 'llama.cpp' : 'vLLM'}
-                  </Badge>
+                  <div className="flex items-center gap-1">
+                    <Badge className={
+                      m.engine_type === 'llamacpp' ? 'bg-green-500/20 text-green-200 border border-green-400/30' :
+                      'bg-blue-500/20 text-blue-200 border border-blue-400/30'
+                    }>
+                      {m.engine_type === 'llamacpp' ? 'llama.cpp' : 'vLLM'}
+                    </Badge>
+                    <Tooltip text={
+                      m.engine_type === 'llamacpp' ? 
+                        'llama.cpp - For GGUF quantized models and GPT-OSS 120B (Harmony architecture)' :
+                        'vLLM - High-performance engine for HuggingFace Transformers models with PagedAttention'
+                    } />
+                  </div>
                 </td>
                 {isAdmin && (<td>{m.tp_size ?? '-'}</td>)}
                 {isAdmin && (<td>{m.dtype ?? '-'}</td>)}
@@ -190,10 +261,31 @@ export default function ModelsPage() {
                 {isAdmin && (
                   <td className="text-right space-x-2">
                     <Button onClick={()=>setLogsFor(m.id)}>Logs</Button>
+                    {m.state === 'running' && (
+                      <Button 
+                        onClick={()=>testModel.mutate(m.id)}
+                        disabled={testingId === m.id}
+                        className="bg-emerald-500/20 border-emerald-500/40 hover:bg-emerald-500/30"
+                        title="Send test request to verify model is working"
+                      >
+                        {testingId === m.id ? '🧪 Testing...' : '🧪 Test'}
+                      </Button>
+                    )}
                     {m.state !== 'running' ? (
-                      <Button onClick={()=>start.mutate(m.id)} disabled={start.isPending}>Start</Button>
+                      <Button 
+                        onClick={()=>start.mutate(m.id)} 
+                        disabled={start.isPending || m.state === 'starting'}
+                        className={m.state === 'starting' ? 'opacity-75' : ''}
+                      >
+                        {start.isPending || m.state === 'starting' ? 'Starting...' : 'Start'}
+                      </Button>
                     ) : (
-                      <Button onClick={()=>stop.mutate(m.id)} disabled={stop.isPending}>Stop</Button>
+                      <Button 
+                        onClick={()=>stop.mutate(m.id)} 
+                        disabled={stop.isPending}
+                      >
+                        {stop.isPending ? 'Stopping...' : 'Stop'}
+                      </Button>
                     )}
                     <Button onClick={()=>{ setConfigId(m.id); setDryCmd(""); }}>Configure</Button>
                     <Button onClick={()=>setArchiveId(m.id)}>Archive</Button>
@@ -208,9 +300,9 @@ export default function ModelsPage() {
         </Table>
       </Card>
 
-      {isAdmin && (
+      {isAdmin && (list.data || []).filter((m:any)=>m.archived).length > 0 && (
       <Card className="p-2">
-        <div className="text-white/60 text-sm mb-2">Archived</div>
+        <div className="text-white/60 text-sm mb-2">Archived ({(list.data || []).filter((m:any)=>m.archived).length})</div>
         <Table>
           <thead className="text-left">
             <tr>
@@ -232,9 +324,6 @@ export default function ModelsPage() {
                 </td>
               </tr>
             ))}
-            {(list.data || []).filter((m:any)=>m.archived).length === 0 && (
-              <tr><td colSpan={7} className="text-white/70 text-sm">No archived models.</td></tr>
-            )}
           </tbody>
         </Table>
       </Card>
@@ -310,6 +399,19 @@ export default function ModelsPage() {
             hfOffline: false,
             tokenizer: (m as any).tokenizer || '',
             hfConfigPath: (m as any).hf_config_path || '',
+            engineType: (m as any).engine_type || 'vllm',
+            ngl: (m as any).ngl ?? 999,
+            tensorSplit: (m as any).tensor_split || '',
+            batchSize: (m as any).batch_size ?? 512,
+            threads: (m as any).threads ?? 32,
+            contextSize: (m as any).context_size ?? 8192,
+            ropeFreqBase: (m as any).rope_freq_base ?? undefined,
+            ropeFreqScale: (m as any).rope_freq_scale ?? undefined,
+            flashAttention: (m as any).flash_attention ?? true,
+            mlock: (m as any).mlock ?? true,
+            noMmap: (m as any).no_mmap ?? true,
+            numaPolicy: (m as any).numa_policy || 'isolate',
+            splitMode: (m as any).split_mode ?? undefined,
           } as any;
           let draft: ModelFormValues | null = null;
           return (
@@ -321,8 +423,11 @@ export default function ModelsPage() {
               <ModelForm
                 defaults={defaults}
                 modeLocked
-                 onValuesChange={(v)=>{ draft = v; }}
+                onValuesChange={(v)=>{ draft = v; }}
                 onCancel={()=>{ setConfigId(null); setDryCmd(""); }}
+                fetchBaseDir={async ()=> { try { const r:any = await apiFetch('/admin/models/base-dir'); return r?.base_dir || ''; } catch { return ''; } }}
+                saveBaseDir={async (dir)=> { try { await apiFetch('/admin/models/base-dir', { method: 'PUT', body: JSON.stringify({ base_dir: dir }) }); } catch {} }}
+                listLocalFolders={async (base)=> { try { const r:any = await apiFetch(`/admin/models/local-folders?base=${encodeURIComponent(base)}`); return Array.isArray(r) ? r : []; } catch { return []; } }}
                 onSubmit={(v)=>{
                   const values = draft || v;
                   const body:any = {
@@ -401,7 +506,11 @@ export default function ModelsPage() {
       )}
 
       {isAdmin && (
-      <Modal open={logsFor != null} onClose={()=>setLogsFor(null)} title="Model Logs">
+      <Modal 
+        open={logsFor != null} 
+        onClose={()=>setLogsFor(null)} 
+        title={logsFor != null ? `Model Logs - ${list.data?.find((m: any) => m.id === logsFor)?.name || 'Model'} (${list.data?.find((m: any) => m.id === logsFor)?.engine_type || 'vllm'})` : 'Model Logs'}
+      >
         {logsFor != null && (
           <LogsViewer fetcher={async ()=> {
             try { return await apiFetch(`/admin/models/${logsFor}/logs`); } catch { return 'Logs not available yet.'; }
@@ -435,6 +544,13 @@ export default function ModelsPage() {
         onConfirm={()=> deleteId!=null && del.mutate(deleteId)}
         onClose={()=>{ setDeleteId(null); setPurgeCache(false); }}
       />)}
+
+      <TestResultsModal
+        open={!!testResult}
+        onClose={() => setTestResult(null)}
+        result={testResult}
+        modelName={testResult ? list.data?.find((m: any) => m.id === testingId)?.name : undefined}
+      />
     </section>
   );
 }
