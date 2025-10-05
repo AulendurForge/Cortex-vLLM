@@ -110,10 +110,20 @@ up-fg: ## Start all services (foreground mode, shows logs)
 	@echo "$(COLOR_BOLD)Starting Cortex services in foreground...$(COLOR_RESET)"
 	$(DOCKER_COMPOSE) up
 
-down: ## Stop and remove all containers
+down: ## Stop and remove all containers (including model containers)
 	@echo "$(COLOR_BOLD)Stopping Cortex services...$(COLOR_RESET)"
+	@echo "$(COLOR_YELLOW)Note: Model containers will be stopped by gateway shutdown hook$(COLOR_RESET)"
 	$(DOCKER_COMPOSE) down
 	@echo "$(COLOR_GREEN)✓ Services stopped$(COLOR_RESET)"
+	@echo ""
+	@echo "$(COLOR_BLUE)Checking for orphaned model containers...$(COLOR_RESET)"
+	@ORPHANS=$$(docker ps -q --filter "name=vllm-model-" --filter "name=llamacpp-model-" 2>/dev/null | wc -l); \
+	if [ $$ORPHANS -gt 0 ]; then \
+		echo "$(COLOR_YELLOW)Found $$ORPHANS orphaned model container(s)$(COLOR_RESET)"; \
+		echo "Run 'make clean-models' to remove them"; \
+	else \
+		echo "$(COLOR_GREEN)✓ No orphaned containers$(COLOR_RESET)"; \
+	fi
 
 restart: down up ## Restart all services
 
@@ -340,11 +350,12 @@ clean: down ## Stop services and remove volumes (keeps backups)
 	$(DOCKER_COMPOSE) down -v
 	@echo "$(COLOR_GREEN)✓ Cleanup complete$(COLOR_RESET)"
 
-clean-all: clean ## Remove everything including model containers
+clean-models: ## Stop and remove all model containers
 	@echo "$(COLOR_BOLD)Removing managed model containers...$(COLOR_RESET)"
-	@docker ps -a --filter "name=vllm-model-" -q | xargs -r docker rm -f
-	@docker ps -a --filter "name=llamacpp-model-" -q | xargs -r docker rm -f
-	@echo "$(COLOR_GREEN)✓ All containers removed$(COLOR_RESET)"
+	@bash scripts/cleanup-orphaned-containers.sh || (docker ps -a --filter "name=vllm-model-" -q | xargs -r docker rm -f && docker ps -a --filter "name=llamacpp-model-" -q | xargs -r docker rm -f)
+	@echo "$(COLOR_GREEN)✓ Model containers removed$(COLOR_RESET)"
+
+clean-all: clean clean-models ## Remove everything including model containers
 
 prune: ## Prune unused Docker resources (images, volumes, networks)
 	@echo "$(COLOR_YELLOW)This will remove unused Docker resources$(COLOR_RESET)"

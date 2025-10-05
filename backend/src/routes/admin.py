@@ -307,6 +307,26 @@ async def bootstrap_owner(body: BootstrapRequest, settings = Depends(get_setting
 async def upstreams_health():
     # Returns in-memory breaker, health snapshots, and diagnostics meta (no secrets)
     out = snapshot_states()
+    
+    # Add served names to metadata (for UI display)
+    try:
+        reg = get_model_registry()
+        # Build reverse map: url -> [served_names]
+        url_to_names: dict[str, list[str]] = {}
+        for served_name, meta in reg.items():
+            url = str(meta.get("url", ""))
+            if url:
+                url_to_names.setdefault(url, []).append(served_name)
+        
+        # Inject served_names into meta for each URL
+        meta_dict = out.get("meta", {}) or {}
+        for url, names in url_to_names.items():
+            if url in meta_dict:
+                meta_dict[url]["served_names"] = names
+        out["meta"] = meta_dict
+    except Exception:
+        pass
+    
     # Filter out stale URLs that are no longer part of active pools/registry
     try:
         settings = get_settings()

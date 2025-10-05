@@ -243,6 +243,35 @@ async def on_startup():
 @app.on_event("shutdown")
 async def on_shutdown():
     global http_client, redis, engine, _bg_health_task
+    
+    # Stop all managed model containers before shutdown
+    print("[shutdown] Stopping all managed model containers...", flush=True)
+    try:
+        if SessionLocal is not None:
+            from sqlalchemy import select as _sel
+            from .models import Model
+            from .docker_manager import stop_container_for_model
+            
+            async with SessionLocal() as session:
+                # Get all running models
+                result = await session.execute(_sel(Model).where(Model.state == "running"))
+                running_models = result.scalars().all()
+                
+                for m in running_models:
+                    try:
+                        print(f"[shutdown] Stopping container for model {m.id} ({m.name})...", flush=True)
+                        stop_container_for_model(m)
+                    except Exception as e:
+                        print(f"[shutdown] Failed to stop model {m.id}: {e}", flush=True)
+                
+                # Update all to stopped state
+                from sqlalchemy import update as _upd
+                await session.execute(_upd(Model).where(Model.state == "running").values(state="stopped", container_name=None, port=None))
+                await session.commit()
+                print(f"[shutdown] Stopped {len(running_models)} model container(s)", flush=True)
+    except Exception as e:
+        print(f"[shutdown] Error stopping model containers: {e}", flush=True)
+    
     if _bg_health_task:
         _bg_health_task.cancel()
         try:

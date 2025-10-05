@@ -119,6 +119,9 @@ def choose_url(urls):
             and (now - float(_HEALTH_STATE.get(u, {}).get("ts", 0.0)) <= ttl)
         )
     ] or urls
+    if not pool:
+        # No upstreams configured; raise a clear error instead of ZeroDivision
+        raise HTTPException(status_code=503, detail="no_upstreams_available")
     key = ",".join(pool)
     idx = _LB_INDEX.get(key, 0) % len(pool)
     _LB_INDEX[key] = idx + 1

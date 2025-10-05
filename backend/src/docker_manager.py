@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import docker
 import os
+import re
 from docker.models.containers import Container
 from docker.types import DeviceRequest
 from typing import Optional, Tuple
@@ -251,8 +252,24 @@ def _resolve_llamacpp_model_path(m: Model) -> str:
     
     # Case 1: Direct .gguf file path
     if m.local_path.lower().endswith('.gguf'):
+        # If the selected file exists, but we also find a multi-part set in the
+        # same directory, prefer the first part so llama.cpp can auto-load all parts.
         if not os.path.isfile(host_path):
             raise ValueError(f"GGUF file not found: {m.local_path}")
+        try:
+            parent_dir = os.path.dirname(host_path)
+            # Look for any file like <base>-00001-of-<total>.gguf
+            part_candidates = []
+            for name in os.listdir(parent_dir):
+                if re.match(r".+-00001-of-\d{5}\.gguf$", name, re.IGNORECASE):
+                    part_candidates.append(name)
+            if part_candidates:
+                part_candidates.sort()
+                first_part = part_candidates[0]
+                return f"/models/{os.path.relpath(os.path.join(parent_dir, first_part), settings.CORTEX_MODELS_DIR)}"
+        except Exception:
+            # Fall back to the provided file
+            pass
         return container_path
     
     # Case 2: Special handling for GPT-OSS (known location)

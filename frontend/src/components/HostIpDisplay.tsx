@@ -56,6 +56,16 @@ export function HostIpDisplay({
     }
   };
 
+  const copyFrontendUrl = async () => {
+    const url = `http://${hostIP}:3001`;
+    try {
+      await navigator.clipboard.writeText(url);
+      addToast({ title: 'UI URL copied!', kind: 'success' });
+    } catch {
+      addToast({ title: 'Copy failed', kind: 'error' });
+    }
+  };
+
   if (!hostIP) return null;
 
   if (variant === 'banner') {
@@ -64,7 +74,7 @@ export function HostIpDisplay({
         <div className="flex items-center justify-between gap-4">
           <div className="flex-1">
             <div className="text-xs font-medium text-emerald-200 mb-1">Your Cortex Instance</div>
-            <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 flex-wrap">
               <div>
                 <div className="text-[10px] text-white/60">Host IP:</div>
                 <code className="text-sm font-mono text-emerald-300 font-semibold">{hostIP}</code>
@@ -73,6 +83,10 @@ export function HostIpDisplay({
                 <div className="text-[10px] text-white/60">Gateway:</div>
                 <code className="text-sm font-mono text-emerald-300 font-semibold">http://{hostIP}:8084</code>
               </div>
+                  <div>
+                    <div className="text-[10px] text-white/60">Access Cortex on your network with:</div>
+                    <code className="text-sm font-mono text-emerald-300 font-semibold">http://{hostIP}:3001</code>
+                  </div>
             </div>
           </div>
           {showCopy && (
@@ -91,6 +105,13 @@ export function HostIpDisplay({
               >
                 Copy Gateway URL
               </button>
+                  <button 
+                    onClick={copyFrontendUrl}
+                    className="btn text-xs"
+                    title="Copy UI URL"
+                  >
+                    Copy UI URL
+                  </button>
             </div>
           )}
         </div>

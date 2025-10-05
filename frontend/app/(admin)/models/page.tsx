@@ -193,16 +193,35 @@ export default function ModelsPage() {
           </div>
         ) : undefined
       } />
+      
+      <Card className="p-4 bg-blue-500/10 border-blue-500/30">
+        <div className="flex items-start gap-3">
+          <div className="text-3xl">🔌</div>
+          <div className="flex-1">
+            <div className="font-medium text-blue-200 mb-1">Connect to Your Models</div>
+            <div className="text-sm text-white/80 mb-2">
+              Use the <strong>served model name</strong> from the table below in your API requests. 
+              Copy the name and use it in your OpenAI-compatible client with endpoint <code className="bg-black/30 px-1.5 py-0.5 rounded">http://192.168.1.181:8084</code>
+            </div>
+            <a 
+              href="/guide?tab=api-keys" 
+              className="inline-flex items-center gap-1 text-sm text-blue-300 hover:text-blue-200 underline"
+            >
+              📖 View Complete API Connection Guide →
+            </a>
+          </div>
+        </div>
+      </Card>
 
       <Card className="p-2">
         <Table>
           <thead className="text-left">
             <tr>
-              <th>Name</th>
-              <th>Served</th>
+              <th>Model Name</th>
+              <th>Served on Network As:</th>
               <th>Task</th>
               <th>Engine</th>
-              {isAdmin && (<><th>TP</th><th>DType</th></>)}
+              {isAdmin && (<><th># of Tensors/GPUs</th><th>DType</th></>)}
               <th>State</th>
               {isAdmin && (<th></th>)}
             </tr>
@@ -306,7 +325,7 @@ export default function ModelsPage() {
         <Table>
           <thead className="text-left">
             <tr>
-              <th>Name</th><th>Served</th><th>Task</th><th>TP</th><th>DType</th><th>State</th><th></th>
+              <th>Model Name</th><th>Served on the Network As:</th><th>Task</th><th># of Tensors/GPUs</th><th>DType</th><th>State</th><th></th>
             </tr>
           </thead>
           <tbody>

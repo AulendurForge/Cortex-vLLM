@@ -104,6 +104,17 @@ export default function GettingStarted() {
 
       <HostIpDisplay variant="banner" />
 
+      <details className="card rounded-xl p-3 bg-white/5 border border-white/10">
+        <summary className="cursor-pointer text-sm font-semibold text-white/90">Why are these addresses helpful?</summary>
+        <ul className="list-disc pl-5 mt-2 text-sm text-white/80 space-y-1">
+          <li><span className="text-white/90 font-medium">Host IP</span>: The IP your users and apps should use to access Cortex from your network.</li>
+          <li><span className="text-white/90 font-medium">UI URL</span>: `http://HOST_IP:3001` — the Admin UI for managing models, users, orgs, and keys.</li>
+          <li><span className="text-white/90 font-medium">Gateway URL</span>: `http://HOST_IP:8084` — the API endpoint for your applications and SDKs.</li>
+          <li>Using the Host IP (instead of localhost) ensures devices across your LAN can connect without CORS issues.</li>
+          <li>These addresses are auto-detected and kept in sync with your environment at startup.</li>
+        </ul>
+      </details>
+
       <section>
         <div className="px-1 text-[11px] uppercase tracking-wider text-white/60 mb-2">Platform</div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">

@@ -51,6 +51,7 @@ nav:
       - Engine Comparison: models/engine-comparison.md
       - vLLM Guide: models/vllm.md
       - llama.cpp Guide: models/llamaCPP.md
+      - Multi-Part GGUF Files: models/gguf-multipart.md
       - Engine Research: models/engine-research.md
       - Model Management: models/model-management.md
   - Security:

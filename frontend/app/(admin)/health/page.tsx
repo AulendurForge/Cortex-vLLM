@@ -20,6 +20,7 @@ type HealthSnapshot = {
     breaker?: { state: 'OPEN' | 'CLOSED'; cooldown_remaining_sec: number; consecutive_fails?: number };
     tokens_per_sec?: { prompt?: number; generation?: number };
     models?: string[];
+    served_names?: string[];
     category?: 'generate' | 'embed' | 'unknown' | string;
   }>;
   lb_index: Record<string, number>;
@@ -47,6 +48,25 @@ export default function HealthPage() {
       </header>
       
       <HostIpDisplay variant="banner" />
+      
+      <Card className="p-4 bg-blue-500/10 border-blue-500/30">
+        <div className="flex items-start gap-3">
+          <div className="text-3xl">📡</div>
+          <div className="flex-1">
+            <div className="font-medium text-blue-200 mb-1">Connect to Your Models</div>
+            <div className="text-sm text-white/80 mb-2">
+              Use the <strong>served model names</strong> shown below in your API requests. 
+              Each model is accessible via the OpenAI-compatible API at <code className="bg-black/30 px-1.5 py-0.5 rounded">http://192.168.1.181:8084</code>
+            </div>
+            <a 
+              href="/guide?tab=api-keys" 
+              className="inline-flex items-center gap-1 text-sm text-blue-300 hover:text-blue-200 underline"
+            >
+              📖 View API Connection Guide →
+            </a>
+          </div>
+        </div>
+      </Card>
       
       {isLoading && <div className="text-sm text-white/70 mt-2">Loading...</div>}
       {isError && <div className="text-sm text-red-300 mt-2">Error loading upstream health.</div>}
@@ -80,15 +100,41 @@ export default function HealthPage() {
               <Card key={url} className="p-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="space-y-1">
-                    <div className="font-medium">
-                      {Array.isArray(m.models) && m.models.length > 0 ? (
-                        <span>Model: {m.models[0]}</span>
+                    <div className="font-medium text-lg">
+                      {Array.isArray(m.served_names) && m.served_names.length > 0 ? (
+                        <div className="flex items-center gap-2">
+                          <code className="font-mono text-emerald-300 bg-emerald-500/10 px-2 py-1 rounded border border-emerald-500/30">
+                            {m.served_names[0]}
+                          </code>
+                          <button 
+                            onClick={async () => {
+                              try {
+                                await navigator.clipboard.writeText(m.served_names[0]);
+                                // Would need toast context here, simplified for now
+                                alert('Model name copied to clipboard!');
+                              } catch {}
+                            }}
+                            className="text-emerald-400 hover:text-emerald-300 transition-colors"
+                            title="Copy served model name for API calls"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                          </button>
+                        </div>
+                      ) : Array.isArray(m.models) && m.models.length > 0 ? (
+                        <span className="text-white/70">Model: {m.models[0]}</span>
                       ) : (
-                        <span>{url}</span>
+                        <span className="text-white/70">{url}</span>
                       )}
-                      {category !== 'unknown' && (<span className="text-xs text-white/50"> · {category}</span>)}
+                      {category !== 'unknown' && (<span className="text-xs text-white/50 ml-2">· {category}</span>)}
                     </div>
-                    <div className="text-[11px] text-white/40">Upstream: {url}</div>
+                    {Array.isArray(m.served_names) && m.served_names.length > 1 && (
+                      <div className="text-xs text-white/60">
+                        Also serving: {m.served_names.slice(1).join(', ')}
+                      </div>
+                    )}
+                    <div className="text-[11px] text-white/40">Endpoint: {url}</div>
                   <div className="text-xs text-white/60">Last check: {new Date(hh.ts * 1000).toLocaleString()} {data.health_ttl_sec ? `(TTL ${data.health_ttl_sec}s)` : ''}</div>
                   <div className="text-xs text-white/60">Latency: {latency} · HTTP: {http}</div>
                     <div className="text-xs text-white/60">Last OK: {lastOk} · Fails: {fails}

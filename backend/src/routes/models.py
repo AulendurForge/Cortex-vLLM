@@ -422,80 +422,56 @@ def _handle_multipart_gguf_merge(m: Model) -> None:
         return  # Not a multi-part file
     
     logger.info(f"Detected multi-part GGUF file: {m.local_path}")
-    
+
+    # New strategy: do NOT attempt to merge. Point to the first split file and
+    # rely on llama.cpp to auto-detect and load remaining parts.
+
     # Parse the pattern
     base_name = multipart_match.group(1)
     total_parts = int(multipart_match.group(3))
-    
+
     # Get directory paths
     s = get_settings()
     base_dir = s.CORTEX_MODELS_DIR or "/var/cortex/models"
-    
+
     # Construct full path
-    model_folder = os.path.dirname(m.local_path)  # e.g., "huihui-ai/Q8_0-GGUF"
+    model_folder = os.path.dirname(m.local_path)
     target_dir = os.path.join(base_dir, model_folder)
-    
-    # Find all parts
-    all_parts = []
+
+    # Legacy cleanup: warn if old concatenated merged-*.gguf files exist
+    try:
+        legacy_merged = [n for n in os.listdir(target_dir) if n.lower().endswith('.gguf') and n.startswith('merged-')]
+        if legacy_merged:
+            logger.warning(
+                "Detected legacy merged GGUF files in %s: %s (will ignore and use split parts)",
+                target_dir,
+                ", ".join(sorted(legacy_merged))
+            )
+    except Exception:
+        pass
+
+    # Resolve first part path
+    first_part_filename = f"{base_name}-00001-of-{total_parts:05d}.gguf"
+    first_part_path = os.path.join(target_dir, first_part_filename)
+
+    if not os.path.exists(first_part_path):
+        raise Exception(f"First GGUF part not found: {first_part_filename}")
+
+    # Best-effort: ensure all expected parts exist before starting (fast check)
+    missing = []
     for i in range(1, total_parts + 1):
         part_filename = f"{base_name}-{i:05d}-of-{total_parts:05d}.gguf"
-        part_path = os.path.join(target_dir, part_filename)
-        if os.path.exists(part_path):
-            all_parts.append(part_path)
-    
-    if len(all_parts) != total_parts:
-        raise Exception(f"Incomplete multi-part GGUF: found {len(all_parts)} of {total_parts} parts")
-    
-    # Extract quantization type for merged filename
-    quant_type = _detect_quantization_from_filename(filename)
-    merged_filename = f"merged-{quant_type}.gguf"
-    merged_path = os.path.join(target_dir, merged_filename)
-    
-    # Check if already merged
-    if os.path.exists(merged_path):
-        logger.info(f"Merged file already exists: {merged_path}")
-        # Update model to use merged file
-        merged_rel_path = os.path.join(model_folder, merged_filename)
-        m.local_path = merged_rel_path
-        return
-    
-    # Perform merge
-    logger.info(f"Merging {total_parts} GGUF parts into {merged_path}")
-    
-    try:
-        with open(merged_path, 'wb') as outfile:
-            for i, part_path in enumerate(sorted(all_parts), 1):
-                logger.info(f"Merging part {i}/{total_parts}: {os.path.basename(part_path)}")
-                with open(part_path, 'rb') as infile:
-                    # Stream in 64MB chunks
-                    while True:
-                        chunk = infile.read(64 * 1024 * 1024)
-                        if not chunk:
-                            break
-                        outfile.write(chunk)
-        
-        # Verify size
-        expected_size = sum(os.path.getsize(f) for f in all_parts)
-        actual_size = os.path.getsize(merged_path)
-        
-        if expected_size != actual_size:
-            os.remove(merged_path)
-            raise Exception(f"Merge failed: size mismatch (expected {expected_size}, got {actual_size})")
-        
-        logger.info(f"Successfully merged into {merged_path} ({actual_size / (1024**3):.2f} GB)")
-        
-        # Update model to use merged file
-        merged_rel_path = os.path.join(model_folder, merged_filename)
-        m.local_path = merged_rel_path
-        
-    except Exception as e:
-        # Clean up partial file
-        if os.path.exists(merged_path):
-            try:
-                os.remove(merged_path)
-            except:
-                pass
-        raise Exception(f"Failed to merge GGUF parts: {str(e)}")
+        if not os.path.exists(os.path.join(target_dir, part_filename)):
+            missing.append(part_filename)
+    if missing:
+        raise Exception(f"Incomplete multi-part GGUF: missing {len(missing)} parts; e.g. {missing[:3]}")
+
+    # Update model to use the first part; llama.cpp will load the rest
+    m.local_path = os.path.join(model_folder, first_part_filename)
+    logger.info(
+        "Using multi-part GGUF without merge; selected first part: %s",
+        m.local_path,
+    )
 
 
 @router.post("/models/{model_id}/start")
@@ -525,6 +501,23 @@ async def start_model(model_id: int, _: dict = Depends(require_admin)):
                 if m.served_model_name and host_port:
                     # Prefer direct container address on the compose network for reliability
                     register_model_endpoint(m.served_model_name, f"http://{name}:8000", m.task or "generate")
+                    # Persist registry after register (best-effort)
+                    try:
+                        from ..models import ConfigKV  # type: ignore
+                        import json as _json
+                        SessionLocal2 = _get_session()
+                        if SessionLocal2 is not None:
+                            async with SessionLocal2() as s:
+                                from sqlalchemy import select as _select
+                                val = _json.dumps(_get_registry())
+                                row = (await s.execute(_select(ConfigKV).where(ConfigKV.key == "model_registry"))).scalar_one_or_none()
+                                if row:
+                                    row.value = val
+                                else:
+                                    s.add(ConfigKV(key="model_registry", value=val))
+                                await s.commit()
+                    except Exception:
+                        pass
             except Exception:
                 pass
             return {"status": "running", "container": name, "port": host_port}
@@ -1325,4 +1318,64 @@ async def _test_embedding_model(base_url: str, model_name: str) -> dict[str, Any
         "request": request_data,
         "response": response_data
     }
+
+
+class ReadinessResp(BaseModel):
+    status: str  # 'ready' | 'loading' | 'stopped' | 'error'
+    detail: Optional[str] = None
+
+
+@router.get("/models/{model_id}/readiness", response_model=ReadinessResp)
+async def model_readiness(model_id: int, _: dict = Depends(require_admin)):
+    """Check whether a model is ready to serve requests.
+
+    For llama.cpp, a 503 with message 'Loading model' indicates the server is up but
+    still loading weights; we report 'loading' in that case. On 200 from chat, we
+    report 'ready'.
+    """
+    SessionLocal = _get_session()
+    if SessionLocal is None:
+        return ReadinessResp(status="error", detail="database_unavailable")
+
+    async with SessionLocal() as session:
+        res = await session.execute(select(Model).where(Model.id == model_id))
+        m = res.scalar_one_or_none()
+        if not m:
+            return ReadinessResp(status="error", detail="model_not_found")
+        if m.state != "running":
+            return ReadinessResp(status="stopped")
+        if not m.container_name:
+            return ReadinessResp(status="error", detail="no_container")
+
+        # Prefer internal container address
+        base_url = f"http://{m.container_name}:8000"
+        # Minimal chat request
+        request_data = {
+            "model": getattr(m, "served_model_name", ""),
+            "messages": [{"role": "user", "content": "Hi"}],
+            "max_tokens": 1,
+            "temperature": 0.0,
+        }
+        try:
+            from ..main import http_client  # type: ignore
+            r = await http_client.post(
+                f"{base_url}/v1/chat/completions",
+                json=request_data,
+                headers={"Content-Type": "application/json"},
+                timeout=httpx.Timeout(connect=2.0, read=2.0, write=2.0, pool=5.0),
+            )
+            if r.status_code == 200:
+                return ReadinessResp(status="ready")
+            if r.status_code == 503:
+                try:
+                    j = r.json()
+                    msg = (j or {}).get("error", {}).get("message", "")
+                except Exception:
+                    msg = r.text[:200]
+                if "Loading model" in msg:
+                    return ReadinessResp(status="loading", detail="loading_model")
+                return ReadinessResp(status="error", detail=f"503: {msg}")
+            return ReadinessResp(status="error", detail=f"HTTP {r.status_code}")
+        except Exception as e:
+            return ReadinessResp(status="error", detail=str(e)[:200])
 
