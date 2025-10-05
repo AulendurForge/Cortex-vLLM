@@ -6,6 +6,7 @@ from ..config import get_settings
 from ..models import Model, ConfigKV
 from sqlalchemy import select, update, delete
 from ..docker_manager import start_container_for_model, stop_container_for_model, tail_logs_for_model
+from ..services.registry_persistence import persist_model_registry
 import httpx
 import os
 import time
@@ -501,23 +502,8 @@ async def start_model(model_id: int, _: dict = Depends(require_admin)):
                 if m.served_model_name and host_port:
                     # Prefer direct container address on the compose network for reliability
                     register_model_endpoint(m.served_model_name, f"http://{name}:8000", m.task or "generate")
-                    # Persist registry after register (best-effort)
-                    try:
-                        from ..models import ConfigKV  # type: ignore
-                        import json as _json
-                        SessionLocal2 = _get_session()
-                        if SessionLocal2 is not None:
-                            async with SessionLocal2() as s:
-                                from sqlalchemy import select as _select
-                                val = _json.dumps(_get_registry())
-                                row = (await s.execute(_select(ConfigKV).where(ConfigKV.key == "model_registry"))).scalar_one_or_none()
-                                if row:
-                                    row.value = val
-                                else:
-                                    s.add(ConfigKV(key="model_registry", value=val))
-                                await s.commit()
-                    except Exception:
-                        pass
+                    # Persist registry after register
+                    await persist_model_registry()
             except Exception:
                 pass
             return {"status": "running", "container": name, "port": host_port}
@@ -544,23 +530,8 @@ async def stop_model(model_id: int, _: dict = Depends(require_admin)):
         try:
             if m.served_model_name:
                 unregister_model_endpoint(m.served_model_name)
-                # Persist registry after unregister (best-effort)
-                try:
-                    from ..models import ConfigKV  # type: ignore
-                    import json as _json
-                    SessionLocal2 = _get_session()
-                    if SessionLocal2 is not None:
-                        async with SessionLocal2() as s:
-                            from sqlalchemy import select as _select
-                            val = _json.dumps(_get_registry())
-                            row = (await s.execute(_select(ConfigKV).where(ConfigKV.key == "model_registry"))).scalar_one_or_none()
-                            if row:
-                                row.value = val
-                            else:
-                                s.add(ConfigKV(key="model_registry", value=val))
-                            await s.commit()
-                except Exception:
-                    pass
+                # Persist registry after unregister
+                await persist_model_registry()
         except Exception:
             pass
         await session.commit()
@@ -599,23 +570,8 @@ async def apply_model_changes(model_id: int, _: dict = Depends(require_admin)):
         try:
             if m.served_model_name and host_port:
                 register_model_endpoint(m.served_model_name, f"http://{name}:8000", m.task or "generate")
-                # Persist registry after (best-effort)
-                try:
-                    from ..models import ConfigKV  # type: ignore
-                    import json as _json
-                    SessionLocal2 = _get_session()
-                    if SessionLocal2 is not None:
-                        async with SessionLocal2() as s:
-                            from sqlalchemy import select as _select
-                            val = _json.dumps(_get_registry())
-                            row = (await s.execute(_select(ConfigKV).where(ConfigKV.key == "model_registry"))).scalar_one_or_none()
-                            if row:
-                                row.value = val
-                            else:
-                                s.add(ConfigKV(key="model_registry", value=val))
-                            await s.commit()
-                except Exception:
-                    pass
+                # Persist registry after register
+                await persist_model_registry()
         except Exception:
             pass
         return {"status": "applied", "container": name, "port": host_port}
@@ -922,100 +878,8 @@ def _analyze_gguf_files(directory: str) -> list[GGUFGroup]:
     return groups
 
 
-def _merge_gguf_parts(group_data: dict, target_directory: str) -> str:
-    """
-    Merge multi-part GGUF files into a single file.
-    
-    Args:
-        group_data: GGUFGroup data containing files and metadata
-        target_directory: Directory containing the GGUF parts
-    
-    Returns:
-        Path to the merged file (relative to target_directory)
-    
-    Raises:
-        Exception if merge fails
-    """
-    import logging
-    logger = logging.getLogger(__name__)
-    
-    if not group_data.get('is_multipart'):
-        raise ValueError("Group is not multi-part, no merge needed")
-    
-    # Determine output filename
-    quant_type = group_data.get('quant_type', 'Unknown')
-    base_name = group_data.get('files', [''])[0].split('/')[0] if '/' in group_data.get('files', [''])[0] else ''
-    output_filename = f"merged-{quant_type}.gguf"
-    
-    # Use first file's directory if parts are in subdirectory
-    first_file_path = group_data['full_paths'][0]
-    parts_dir = os.path.dirname(first_file_path)
-    output_path = os.path.join(parts_dir, output_filename)
-    
-    # Check if already merged
-    if os.path.exists(output_path):
-        logger.info(f"Merged file already exists: {output_path}")
-        # Return relative path from target_directory
-        return os.path.relpath(output_path, target_directory)
-    
-    logger.info(f"Merging {len(group_data['files'])} GGUF parts into {output_path}")
-    
-    # Merge files using binary concatenation
-    try:
-        with open(output_path, 'wb') as outfile:
-            for i, part_path in enumerate(sorted(group_data['full_paths']), 1):
-                logger.info(f"Merging part {i}/{len(group_data['files'])}: {os.path.basename(part_path)}")
-                with open(part_path, 'rb') as infile:
-                    # Stream in 64MB chunks to avoid memory issues
-                    while True:
-                        chunk = infile.read(64 * 1024 * 1024)
-                        if not chunk:
-                            break
-                        outfile.write(chunk)
-        
-        # Verify merged file size
-        expected_size = sum(os.path.getsize(f) for f in group_data['full_paths'])
-        actual_size = os.path.getsize(output_path)
-        
-        if expected_size != actual_size:
-            os.remove(output_path)
-            raise Exception(f"Merge failed: size mismatch (expected {expected_size}, got {actual_size})")
-        
-        logger.info(f"Successfully merged {len(group_data['files'])} parts into {output_path}")
-        logger.info(f"Merged file size: {actual_size / (1024**3):.2f} GB")
-        
-        # Return relative path from target_directory
-        return os.path.relpath(output_path, target_directory)
-        
-    except Exception as e:
-        # Clean up partial file on error
-        if os.path.exists(output_path):
-            try:
-                os.remove(output_path)
-            except:
-                pass
-        raise Exception(f"Failed to merge GGUF parts: {str(e)}")
-
-
-def _check_merged_file_exists(group_data: dict, target_directory: str) -> str | None:
-    """
-    Check if a merged file already exists for this multi-part group.
-    
-    Returns:
-        Relative path to merged file if it exists, None otherwise
-    """
-    if not group_data.get('is_multipart'):
-        return None
-    
-    quant_type = group_data.get('quant_type', 'Unknown')
-    first_file_path = group_data['full_paths'][0]
-    parts_dir = os.path.dirname(first_file_path)
-    output_filename = f"merged-{quant_type}.gguf"
-    output_path = os.path.join(parts_dir, output_filename)
-    
-    if os.path.exists(output_path):
-        return os.path.relpath(output_path, target_directory)
-    return None
+# Legacy merge functions removed - we now use llama.cpp's native split-file loading
+# See docs/models/gguf-multipart.md for details on the new approach
 
 
 @router.get("/models/inspect-folder", response_model=InspectFolderResp)
