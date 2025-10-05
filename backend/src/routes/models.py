@@ -8,6 +8,8 @@ from sqlalchemy import select, update, delete
 from ..docker_manager import start_container_for_model, stop_container_for_model, tail_logs_for_model
 from ..services.registry_persistence import persist_model_registry
 from ..services.model_testing import ModelTestResult, ReadinessResp, test_chat_model, test_embedding_model, check_model_readiness
+from ..services.folder_inspector import inspect_model_folder
+from ..services.hf_inspector import fetch_hf_config
 from ..schemas.models import ModelItem, CreateModelRequest, UpdateModelRequest, BaseDirCfg, InspectFolderResp, HfConfigResp
 from ..utils.gguf_utils import GGUFGroup, detect_quantization_from_filename, find_gguf_files_recursive, analyze_gguf_files
 import httpx
@@ -577,124 +579,19 @@ async def inspect_folder(base: str = Query(""), folder: str = Query(""), _: dict
     target = os.path.join(base, folder or "")
     if not os.path.isdir(target):
         raise HTTPException(status_code=404, detail="folder_not_found")
-    try:
-        names = []
-        for name in os.listdir(target):
-            try:
-                names.append(name)
-            except Exception:
-                pass
-        has_safe = any(n.lower().endswith('.safetensors') for n in names)
-        ggufs = sorted([n for n in names if n.lower().endswith('.gguf')])
-        toks = sorted([n for n in names if n.lower() in ('tokenizer.json', 'tokenizer.model', 'tokenizer_config.json')])
-        cfgs = sorted([n for n in names if n.lower() in ('config.json', 'generation_config.json', 'special_tokens_map.json')])
-        warnings: list[str] = []
-        if len(toks) > 1:
-            warnings.append("multiple_tokenizer_files_detected")
-        parsed = None
-        try:
-            cfg_path = os.path.join(target, 'config.json')
-            if os.path.isfile(cfg_path):
-                import json as _json
-                with open(cfg_path, 'r', encoding='utf-8') as f:
-                    parsed = _json.load(f)
-        except Exception:
-            parsed = None
-        def _get_int(keys: list[str]) -> int | None:
-            for k in keys:
-                try:
-                    v = parsed.get(k) if parsed else None
-                    if isinstance(v, int):
-                        return v
-                except Exception:
-                    pass
-            return None
-        # Perform smart GGUF analysis
-        gguf_groups = analyze_gguf_files(target)
-        
-        out = InspectFolderResp(
-            has_safetensors=bool(has_safe),
-            gguf_files=ggufs,  # Legacy: keep for backward compatibility
-            gguf_groups=gguf_groups,  # New: smart grouped analysis
-            tokenizer_files=toks,
-            config_files=cfgs,
-            warnings=warnings,
-        )
-        if parsed:
-            try:
-                if isinstance(parsed.get('params'), (int, float)):
-                    try:
-                        out.params_b = float(parsed.get('params')) / 1e9
-                    except Exception:
-                        pass
-                out.hidden_size = _get_int(['hidden_size', 'n_embd'])
-                out.num_hidden_layers = _get_int(['num_hidden_layers', 'n_layer'])
-                out.num_attention_heads = _get_int(['num_attention_heads', 'n_head'])
-            except Exception:
-                pass
-        return out
-    except Exception:
-        return InspectFolderResp(
-            has_safetensors=False,
-            gguf_files=[],
-            gguf_groups=[],
-            tokenizer_files=[],
-            config_files=[],
-            warnings=["inspect_error"]
-        )
+    
+    # Delegate to inspection service
+    return inspect_model_folder(target)
 
 
 @router.get("/models/hf-config", response_model=HfConfigResp)
 async def hf_config(repo_id: str = Query("")):
+    """Fetch HuggingFace model config.json and extract architecture info."""
     if not repo_id:
         raise HTTPException(status_code=400, detail="repo_id_required")
-    urls = [
-        f"https://huggingface.co/{repo_id}/resolve/main/config.json",
-        f"https://huggingface.co/{repo_id}/raw/main/config.json",
-    ]
-    headers = {}
-    try:
-        token = os.environ.get('HUGGING_FACE_HUB_TOKEN', '')
-        if token:
-            headers['Authorization'] = f"Bearer {token}"
-    except Exception:
-        pass
-    parsed = None
-    async with httpx.AsyncClient(timeout=6.0) as client:
-        last_err = None
-        for u in urls:
-            try:
-                r = await client.get(u, headers=headers)
-                if r.status_code < 400:
-                    parsed = r.json()
-                    break
-                last_err = r.text
-            except Exception as e:
-                last_err = str(e)
-    if not isinstance(parsed, dict):
-        raise HTTPException(status_code=404, detail="config_not_found")
-    def _get_int(keys: list[str]) -> int | None:
-        for k in keys:
-            try:
-                v = parsed.get(k)
-                if isinstance(v, int):
-                    return v
-            except Exception:
-                pass
-        return None
-    out = HfConfigResp()
-    try:
-        if isinstance(parsed.get('params'), (int, float)):
-            try:
-                out.params_b = float(parsed.get('params')) / 1e9
-            except Exception:
-                pass
-        out.hidden_size = _get_int(['hidden_size', 'n_embd'])
-        out.num_hidden_layers = _get_int(['num_hidden_layers', 'n_layer'])
-        out.num_attention_heads = _get_int(['num_attention_heads', 'n_head'])
-    except Exception:
-        pass
-    return out
+    
+    # Delegate to HF inspection service
+    return await fetch_hf_config(repo_id)
 
 
 @router.post("/models/{model_id}/test", response_model=ModelTestResult)
