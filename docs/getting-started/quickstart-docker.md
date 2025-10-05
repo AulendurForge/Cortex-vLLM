@@ -6,19 +6,37 @@ This is the fastest way to run CORTEX locally.
 - Docker and Docker Compose
 - Optional: NVIDIA GPU + drivers for running vLLM with CUDA
 
-## Start the stack
+## Recommended: Use Makefile (Easier)
+
+The Makefile provides automatic configuration:
+
+```bash
+make quick-start
+# - Auto-detects your IP
+# - Auto-enables monitoring on Linux
+# - Creates admin user
+# - Shows access URLs
+```
+
+## Alternative: Direct Docker Compose
+
+You can also use Docker Compose directly:
 
 ```bash
 # From repo root
-# Basic (CPU, no exporters):
 docker compose -f docker.compose.dev.yaml up --build
 
-# Linux host metrics (node-exporter) and GPU metrics (DCGM exporter):
-# Prereqs: NVIDIA driver + NVIDIA Container Toolkit installed.
-# Enable profiles once, or pass them per command.
+# Cortex will:
+# ✓ Auto-detect host IP in the gateway container (fallback)
+# ✓ Configure CORS automatically
+# ✓ Work from your network
+
+# Note: Monitoring profiles (linux, gpu) need manual enabling:
 export COMPOSE_PROFILES=linux,gpu
 docker compose -f docker.compose.dev.yaml up -d --build
 ```
+
+**Recommendation**: Use `make up` instead - it auto-enables monitoring on Linux!
 
 Services exposed:
 - Gateway (FastAPI): `http://localhost:8084`
@@ -72,13 +90,33 @@ curl -H "Authorization: Bearer YOUR_TOKEN" \
   -d '{"model":"meta-llama/Llama-3-8B-Instruct","messages":[{"role":"user","content":"Hello!"}]}'
 ```
 
-## GPU monitoring (optional)
-- Start exporters with profiles (see above). Verify targets in Prometheus at `http://localhost:9090/targets`.
-- Gateway endpoints to inspect from the CLI:
+## Monitoring
+
+**With Makefile** (automatic on Linux):
 ```bash
+make up                    # Auto-enables monitoring
+make monitoring-status     # Check monitoring health
+```
+
+**With Docker Compose** (manual):
+```bash
+export COMPOSE_PROFILES=linux,gpu
+docker compose -f docker.compose.dev.yaml up -d
+```
+
+**Verify monitoring:**
+```bash
+# Check Prometheus targets
+curl http://localhost:9090/targets
+
+# Check GPU metrics
 curl http://localhost:8084/admin/system/gpus
+
+# Check host metrics
 curl http://localhost:8084/admin/system/summary
 ```
+
+All metrics are visible in the Admin UI → System Monitor page.
 
 ## Smoke test script
 You can also run `scripts/smoke.sh` after bringing the stack up.

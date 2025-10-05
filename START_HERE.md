@@ -20,7 +20,7 @@ make quick-start
 # That's it! ✓
 ```
 
-> **⚠️ IMPORTANT**: Always use `make` commands. Never run `docker compose` directly - it won't detect your IP and CORS will fail!
+> **💡 TIP**: Use `make` commands for the best experience! They auto-enable monitoring on Linux and provide helpful output. (`docker compose` now works standalone too, with automatic IP detection fallback)
 
 ---
 
@@ -106,13 +106,19 @@ Tests Failed:  0
 ## 🆘 Quick Help
 
 ```bash
-make help       # See all commands
-make ip         # Show your access URLs
-make status     # Check if running
-make health     # Check if healthy
-make logs       # View logs
-make validate   # Verify configuration
+make help              # See all commands
+make ip                # Show your access URLs
+make status            # Check if running
+make health            # Check if healthy
+make monitoring-status # Check monitoring stack (host + GPU metrics)
+make logs              # View logs
+make validate          # Verify configuration
 ```
+
+**On Linux with NVIDIA GPU:**
+- ✅ Host metrics auto-enabled (CPU, memory, disk, network)
+- ✅ GPU metrics auto-enabled (utilization, memory, temperature)
+- ✅ View in System Monitor page
 
 ---
 

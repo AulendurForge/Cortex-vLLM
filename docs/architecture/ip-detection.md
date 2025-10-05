@@ -47,7 +47,7 @@ The script uses a **scoring algorithm** to select the best IP address:
 
 ## Integration Points
 
-### 1. Makefile
+### 1. Makefile (Primary Detection)
 
 The Makefile detects the IP at runtime:
 
@@ -60,6 +60,20 @@ HOST_IP := $(shell bash scripts/detect-ip.sh 2>/dev/null || echo "localhost")
 ```
 
 **Every `make` command** automatically uses the current IP.
+
+### 1.5. Gateway Entrypoint (Fallback Detection)
+
+**New in v0.2**: The gateway container has a fallback IP detector:
+
+```bash
+# backend/entrypoint.sh
+# If CORS is localhost-only, try to detect better IP
+# Enhances CORS automatically if needed
+```
+
+**Why this matters**: If someone runs `docker compose up` directly (without `make`), the gateway will still attempt to detect the host IP and configure CORS. This prevents authentication failures.
+
+**Detection happens at container startup**, not just at `make` time.
 
 ### 2. Docker Compose
 

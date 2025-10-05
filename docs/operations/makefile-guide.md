@@ -16,15 +16,21 @@ To verify prerequisites:
 make install-deps
 ```
 
-## 🌐 Automatic IP Detection
+## 🌐 Automatic Configuration
 
-**Important**: Cortex automatically detects your host machine's IP address and uses it throughout the system.
+**Cortex automatically detects and configures:**
 
-**What this means for you**:
-- ✅ All URLs in terminal output use your real IP (e.g., `192.168.1.181`)
+### IP Detection
+- ✅ Detects your host machine's IP address (e.g., `192.168.1.181`)
 - ✅ CORS is automatically configured for your IP
-- ✅ Other devices on your network can access Cortex
-- ✅ No manual IP configuration needed
+- ✅ Works with `make` commands or `docker compose` standalone
+- ✅ Fallback detection in gateway container if needed
+
+### Monitoring (Linux Systems)
+- ✅ Auto-detects Linux OS and NVIDIA GPU
+- ✅ Enables `linux` profile → node-exporter (host metrics)
+- ✅ Enables `gpu` profile → dcgm-exporter + cadvisor (GPU metrics)
+- ✅ No manual profile configuration needed
 
 **Check your detected IP**:
 ```bash
@@ -122,11 +128,11 @@ make logs-postgres
 ```bash
 # Check health of all services
 make health
+# Shows: Gateway, containers, Prometheus, exporters (if enabled)
 
-# This will show:
-# - Gateway health endpoint status
-# - Container status
-# - Prometheus readiness
+# Check monitoring stack specifically
+make monitoring-status
+# Shows: node-exporter, dcgm-exporter, cadvisor, GPU count
 ```
 
 ### Managing the Database
@@ -186,6 +192,28 @@ Available profiles:
 - `linux` - Enables node-exporter for host CPU/memory/disk metrics
 - `gpu` - Enables DCGM exporter for NVIDIA GPU metrics
 
+### Monitoring Commands
+
+```bash
+# Check monitoring stack status
+make monitoring-status
+
+# View monitoring logs
+make logs-prometheus        # Prometheus scraper
+make logs-node-exporter     # Host metrics (CPU, mem, disk, net)
+make logs-dcgm              # GPU metrics (utilization, memory, temp)
+make logs-cadvisor          # Container metrics
+```
+
+**What gets monitored automatically:**
+
+On Linux systems:
+- ✅ **Host metrics** (node-exporter): CPU usage, memory, disk I/O, network traffic
+- ✅ **GPU metrics** (dcgm-exporter): GPU utilization, VRAM, temperature (if NVIDIA detected)
+- ✅ **Container metrics** (cadvisor): Per-container CPU, memory, network
+
+All metrics visualized in Admin UI → System Monitor page with real-time charts.
+
 ### Running Tests
 
 ```bash
@@ -194,6 +222,9 @@ make test
 
 # Test API endpoints
 make test-api
+
+# Validate complete configuration
+make validate
 ```
 
 ### Production Deployment Check

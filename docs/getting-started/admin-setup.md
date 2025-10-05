@@ -21,6 +21,7 @@ make quick-start
 **That's it!** The system automatically:
 - ✅ Detects your host machine's IP address
 - ✅ Configures CORS for network access
+- ✅ Enables monitoring on Linux (host + GPU metrics)
 - ✅ Sets up the database
 - ✅ Creates admin user
 - ✅ Starts all services

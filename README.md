@@ -16,8 +16,9 @@ OpenAI-compatible gateway and admin UI for running vLLM engines on your own infr
 ## ⚡ No Configuration Required!
 
 **Cortex automatically:**
-- ✅ Detects your host IP address
+- ✅ Detects your host IP address (even without Makefile!)
 - ✅ Configures CORS for network access
+- ✅ Enables monitoring on Linux systems (host + GPU metrics)
 - ✅ Sets up the database and services
 - ✅ Works from any device on your network
 
@@ -58,7 +59,7 @@ make quick-start
 # Login at: http://192.168.1.181:3001/login (admin/admin)
 ```
 
-> **⚠️ CRITICAL**: Always use `make` commands, NOT `docker compose` directly. The Makefile automatically detects your IP and configures CORS. Running `docker compose up` directly will result in CORS errors and authentication failures.
+> **⚠️ IMPORTANT**: While `docker compose` will now work standalone (with automatic IP detection), using `make` commands is **strongly recommended** for the best experience. The Makefile provides additional features like automatic monitoring enablement, better error messages, and helpful output.
 
 > **📌 Important**: Always use the **host machine's IP address** shown in the output, not `localhost`. The IP is automatically detected when you run `make` commands. Users on your network will access Cortex using this IP address.
 
@@ -88,12 +89,20 @@ make restart       # Restart services
 make clean         # Remove everything and start fresh
 ```
 
-**With GPU monitoring (Linux + NVIDIA GPU):**
+**Monitoring (automatic on Linux):**
 
 ```bash
-make up PROFILES=linux,gpu    # Start with host and GPU metrics
-make health                    # Verify all services are healthy
+make up                        # Auto-enables linux,gpu profiles on Linux with NVIDIA
+make monitoring-status         # Check monitoring stack health
+make info                      # See what's auto-detected
 ```
+
+On Linux systems with NVIDIA GPUs, Cortex automatically enables:
+- **node-exporter**: Host CPU, memory, disk, and network metrics
+- **dcgm-exporter**: GPU utilization, memory, and temperature
+- **cadvisor**: Container resource usage
+
+All metrics visible in the **System Monitor** page of the Admin UI.
 
 > **🔍 How IP Detection Works**: Cortex automatically detects your host machine's LAN IP address (e.g., `192.168.1.181` or `10.1.10.241`) and configures CORS to accept requests from that IP. This allows users on your network to access the Admin UI. The detection excludes Docker bridge networks and loopback addresses.
 

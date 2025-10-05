@@ -377,13 +377,14 @@ make quick-start
 - Works from any IP without reconfiguration!
 ```
 
-### The Three-Way Auto-Detection System
+### The Multi-Tier Auto-Detection System
 
-1. **IP Detection Script** → Finds your LAN IP
-2. **Docker Compose Interpolation** → Sets CORS with detected IP
-3. **Frontend Browser Detection** → Calls gateway at correct IP
+1. **Makefile IP Detection** → Finds your LAN IP via `detect-ip.sh`
+2. **Docker Compose Interpolation** → Sets CORS with detected IP  
+3. **Gateway Entrypoint Fallback** → Detects IP if not provided by Makefile
+4. **Frontend Browser Detection** → Calls gateway at correct IP
 
-**Result**: Zero manual configuration! 🎉
+**Result**: Works whether you use `make` or `docker compose` directly! 🎉
 
 ---
 
