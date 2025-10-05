@@ -67,10 +67,12 @@ help: ## Show this help message
 	@echo "  Monitoring:      $(if $(PROFILES),Enabled ($(PROFILES)),Disabled)"
 	@echo ""
 	@echo "$(COLOR_BLUE)Examples:$(COLOR_RESET)"
-	@echo "  make up                    # Start in dev mode"
-	@echo "  make up ENV=prod           # Start in production mode"
-	@echo "  make up PROFILES=linux,gpu # Start with Linux and GPU monitoring"
-	@echo "  make logs SERVICE=gateway  # View logs for gateway service only"
+	@echo "  make up                      # Start (auto-enables monitoring on Linux)"
+	@echo "  make up ENV=prod             # Start in production mode"
+	@echo "  make up PROFILES=''          # Disable auto-detected monitoring"
+	@echo "  make logs SERVICE=gateway    # View logs for gateway service only"
+	@echo "  make logs-dcgm               # View GPU metrics logs"
+	@echo "  make monitoring-status       # Check monitoring stack health"
 	@echo ""
 
 # ============================================================================
@@ -83,12 +85,26 @@ build: ## Build all Docker images
 
 up: ## Start all services (detached mode)
 	@echo "$(COLOR_BOLD)Starting Cortex services...$(COLOR_RESET)"
+	@if [ -n "$(PROFILES)" ]; then \
+		echo "$(COLOR_BLUE)With monitoring profiles: $(PROFILES)$(COLOR_RESET)"; \
+	fi
 	$(DOCKER_COMPOSE) up -d
 	@echo "$(COLOR_GREEN)✓ Services started$(COLOR_RESET)"
-	@echo "Gateway: http://$(HOST_IP):8084/health"
-	@echo "Prometheus: http://$(HOST_IP):9090"
-	@echo "PgAdmin: http://$(HOST_IP):5050"
-	@echo "Admin UI: http://$(HOST_IP):3001"
+	@echo ""
+	@echo "$(COLOR_BLUE)Core Services:$(COLOR_RESET)"
+	@echo "  Gateway:    http://$(HOST_IP):8084/health"
+	@echo "  Admin UI:   http://$(HOST_IP):3001"
+	@echo "  Prometheus: http://$(HOST_IP):9090"
+	@echo "  PgAdmin:    http://$(HOST_IP):5050"
+	@if [ -n "$(findstring linux,$(PROFILES))" ]; then \
+		echo ""; \
+		echo "$(COLOR_BLUE)Monitoring (auto-enabled):$(COLOR_RESET)"; \
+		echo "  ✓ Host metrics (node-exporter) on port 9100"; \
+	fi
+	@if [ -n "$(findstring gpu,$(PROFILES))" ]; then \
+		echo "  ✓ GPU metrics (dcgm-exporter) on port 9400"; \
+		echo "  ✓ Container metrics (cadvisor) on port 8085"; \
+	fi
 
 up-fg: ## Start all services (foreground mode, shows logs)
 	@echo "$(COLOR_BOLD)Starting Cortex services in foreground...$(COLOR_RESET)"
@@ -127,6 +143,18 @@ logs-gateway: ## Show gateway logs only
 logs-postgres: ## Show PostgreSQL logs
 	@$(DOCKER_COMPOSE) logs -f postgres
 
+logs-prometheus: ## Show Prometheus logs
+	@$(DOCKER_COMPOSE) logs -f prometheus
+
+logs-node-exporter: ## Show node-exporter logs (host metrics)
+	@$(DOCKER_COMPOSE) logs -f node-exporter
+
+logs-dcgm: ## Show DCGM exporter logs (GPU metrics)
+	@$(DOCKER_COMPOSE) logs -f dcgm-exporter
+
+logs-cadvisor: ## Show cAdvisor logs (container metrics)
+	@$(DOCKER_COMPOSE) logs -f cadvisor
+
 ps: ## List running containers
 	@$(DOCKER_COMPOSE) ps
 
@@ -142,7 +170,72 @@ health: ## Check health of all services
 	@$(DOCKER_COMPOSE) ps
 	@echo ""
 	@echo "$(COLOR_BLUE)Prometheus Status:$(COLOR_RESET)"
-	@curl -s http://$(HOST_IP):9090/-/ready || echo "Prometheus not ready"
+	@curl -s http://$(HOST_IP):9090/-/ready && echo "✓ Ready" || echo "⨯ Not ready"
+	@echo ""
+	@if [ -n "$(findstring linux,$(PROFILES))" ]; then \
+		echo "$(COLOR_BLUE)Host Metrics (node-exporter):$(COLOR_RESET)"; \
+		curl -s http://$(HOST_IP):9100/metrics > /dev/null && echo "✓ Collecting host metrics" || echo "⨯ Not responding"; \
+		echo ""; \
+	fi
+	@if [ -n "$(findstring gpu,$(PROFILES))" ]; then \
+		echo "$(COLOR_BLUE)GPU Metrics (dcgm-exporter):$(COLOR_RESET)"; \
+		curl -s http://$(HOST_IP):9400/metrics > /dev/null && echo "✓ Collecting GPU metrics" || echo "⨯ Not responding (check NVIDIA runtime)"; \
+		echo ""; \
+	fi
+
+monitoring-status: ## Check monitoring stack (exporters, Prometheus targets)
+	@echo "$(COLOR_BOLD)Monitoring Stack Status$(COLOR_RESET)"
+	@echo ""
+	@if [ -z "$(PROFILES)" ]; then \
+		echo "$(COLOR_YELLOW)⨯ Monitoring not enabled$(COLOR_RESET)"; \
+		echo ""; \
+		echo "$(COLOR_BLUE)To enable:$(COLOR_RESET)"; \
+		echo "  On Linux: Monitoring auto-enables by default"; \
+		echo "  Manual:   make up PROFILES=linux,gpu"; \
+		exit 0; \
+	fi
+	@echo "$(COLOR_GREEN)✓ Monitoring enabled: $(PROFILES)$(COLOR_RESET)"
+	@echo ""
+	@if [ -n "$(findstring linux,$(PROFILES))" ]; then \
+		echo "$(COLOR_BLUE)node-exporter (host metrics):$(COLOR_RESET)"; \
+		if curl -sf http://localhost:9100/metrics > /dev/null; then \
+			echo "  ✓ Running and collecting metrics"; \
+			echo "  Port: 9100"; \
+		else \
+			echo "  ⨯ Not responding"; \
+		fi; \
+		echo ""; \
+	fi
+	@if [ -n "$(findstring gpu,$(PROFILES))" ]; then \
+		echo "$(COLOR_BLUE)dcgm-exporter (GPU metrics):$(COLOR_RESET)"; \
+		if curl -sf http://localhost:9400/metrics > /dev/null; then \
+			GPU_COUNT=$$(curl -s http://localhost:9400/metrics 2>/dev/null | grep -c "DCGM_FI_DEV_GPU_UTIL{" || echo "0"); \
+			echo "  ✓ Running and collecting from $$GPU_COUNT GPUs"; \
+			echo "  Port: 9400"; \
+		else \
+			echo "  ⨯ Not responding (check: docker logs cortex-dcgm-exporter-1)"; \
+			echo "  Requires: NVIDIA runtime + nvidia-docker2"; \
+		fi; \
+		echo ""; \
+		echo "$(COLOR_BLUE)cadvisor (container metrics):$(COLOR_RESET)"; \
+		if docker ps --filter "name=cortex-cadvisor-1" --format "{{.Status}}" | grep -q "Up"; then \
+			echo "  ✓ Running"; \
+			echo "  Port: 8085"; \
+		else \
+			echo "  ⨯ Not running"; \
+		fi; \
+		echo ""; \
+	fi
+	@echo "$(COLOR_BLUE)Prometheus:$(COLOR_RESET)"
+	@if curl -sf http://localhost:9090/-/ready > /dev/null; then \
+		echo "  ✓ Ready and scraping targets"; \
+		echo "  Dashboard: http://$(HOST_IP):9090"; \
+		echo ""; \
+		echo "$(COLOR_BLUE)Prometheus Targets:$(COLOR_RESET)"; \
+		echo "  View at: http://$(HOST_IP):9090/targets"; \
+	else \
+		echo "  ⨯ Not ready"; \
+	fi
 
 # ============================================================================
 # Bootstrap and Setup Operations
@@ -300,10 +393,20 @@ quick-start: up bootstrap-default ## Quick start: up + bootstrap with defaults
 	@echo ""
 	@echo "$(COLOR_GREEN)$(COLOR_BOLD)✓ Cortex is ready!$(COLOR_RESET)"
 	@echo ""
+	@echo "$(COLOR_BLUE)Access Cortex:$(COLOR_RESET)"
+	@echo "  Admin UI: http://$(HOST_IP):3001/login (admin/admin)"
+	@echo "  Gateway:  http://$(HOST_IP):8084"
+	@if [ -n "$(PROFILES)" ]; then \
+		echo ""; \
+		echo "$(COLOR_GREEN)✓ Monitoring enabled:$(COLOR_RESET) $(PROFILES)"; \
+		echo "  View metrics in System Monitor page"; \
+	fi
+	@echo ""
 	@echo "$(COLOR_BLUE)Next steps:$(COLOR_RESET)"
 	@echo "  1. Login at: http://$(HOST_IP):3001/login (admin/admin)"
 	@echo "  2. Create API key: make login && make create-key"
-	@echo "  3. View docs: https://aulendurforge.github.io/Cortex-vLLM/"
+	@echo "  3. Check System Monitor for host/GPU metrics"
+	@echo "  4. View docs: https://aulendurforge.github.io/Cortex-vLLM/"
 	@echo ""
 
 install-deps: ## Install required dependencies (Docker, Docker Compose)
