@@ -125,10 +125,12 @@ make validate          # Verify configuration
 ## 🎉 Success Checklist
 
 **You're ready when:**
-- [ ] Ran `make quick-start`
-- [ ] Saw "✓ Cortex is ready!" message
+- [ ] Ran `make quick-start` (or `docker compose up`)
+- [ ] Saw "✓ Cortex is ready!" message (if using make)
+- [ ] Admin user automatically created (check logs: `docker logs cortex-gateway-1 | grep startup`)
 - [ ] Noted the IP address shown
 - [ ] Can access Admin UI in browser
+- [ ] Can login with admin/admin
 - [ ] Ran `make validate` - all tests passed
 
 ---

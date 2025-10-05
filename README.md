@@ -18,6 +18,7 @@ OpenAI-compatible gateway and admin UI for running vLLM engines on your own infr
 **Cortex automatically:**
 - ✅ Detects your host IP address (even without Makefile!)
 - ✅ Configures CORS for network access
+- ✅ Creates default admin user (admin/admin) on first startup
 - ✅ Enables monitoring on Linux systems (host + GPU metrics)
 - ✅ Sets up the database and services
 - ✅ Works from any device on your network
