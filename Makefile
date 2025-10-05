@@ -15,8 +15,21 @@
 ENV ?= dev
 COMPOSE_FILE = docker.compose.$(ENV).yaml
 
+# Auto-detect OS and GPU for monitoring profiles
+UNAME_S := $(shell uname -s 2>/dev/null || echo "unknown")
+HAS_NVIDIA := $(shell command -v nvidia-smi >/dev/null 2>&1 && echo "yes" || echo "no")
+
 # Compose profiles for optional services
-PROFILES ?= 
+# Auto-enable Linux monitoring on Linux, and GPU monitoring if NVIDIA detected
+PROFILES ?= $(shell \
+	if [ "$(UNAME_S)" = "Linux" ]; then \
+		if [ "$(HAS_NVIDIA)" = "yes" ]; then \
+			echo "linux,gpu"; \
+		else \
+			echo "linux"; \
+		fi; \
+	fi)
+
 COMPOSE_PROFILES = $(if $(PROFILES),COMPOSE_PROFILES=$(PROFILES),)
 
 # Detect host IP address dynamically
@@ -45,7 +58,13 @@ help: ## Show this help message
 	@echo ""
 	@echo "$(COLOR_BLUE)Environment Variables:$(COLOR_RESET)"
 	@echo "  $(COLOR_YELLOW)ENV$(COLOR_RESET)              Environment to use (dev or prod), default: dev"
-	@echo "  $(COLOR_YELLOW)PROFILES$(COLOR_RESET)         Comma-separated profiles (linux,gpu), default: none"
+	@echo "  $(COLOR_YELLOW)PROFILES$(COLOR_RESET)         Comma-separated profiles (linux,gpu), default: auto-detected"
+	@echo ""
+	@echo "$(COLOR_BLUE)Auto-Detection:$(COLOR_RESET)"
+	@echo "  Host IP:         $(HOST_IP)"
+	@echo "  OS:              $(UNAME_S)"
+	@echo "  GPU:             $(if $(filter yes,$(HAS_NVIDIA)),✓ NVIDIA detected,⨯ No NVIDIA GPU)"
+	@echo "  Monitoring:      $(if $(PROFILES),Enabled ($(PROFILES)),Disabled)"
 	@echo ""
 	@echo "$(COLOR_BLUE)Examples:$(COLOR_RESET)"
 	@echo "  make up                    # Start in dev mode"
@@ -320,14 +339,22 @@ info: ## Show current configuration
 	@echo ""
 	@echo "Environment:     $(ENV)"
 	@echo "Compose file:    $(COMPOSE_FILE)"
-	@echo "Profiles:        $(PROFILES)"
 	@echo "$(COLOR_YELLOW)Detected Host IP: $(HOST_IP)$(COLOR_RESET)"
+	@echo ""
+	@echo "$(COLOR_BLUE)System Detection:$(COLOR_RESET)"
+	@echo "Operating System: $(UNAME_S)"
+	@echo "NVIDIA GPU:       $(HAS_NVIDIA)"
+	@echo "$(COLOR_GREEN)Auto Profiles:    $(if $(PROFILES),$(PROFILES),none)$(COLOR_RESET)"
 	@echo ""
 	@echo "$(COLOR_BLUE)Endpoints (use these URLs, NOT localhost):$(COLOR_RESET)"
 	@echo "Gateway:         http://$(HOST_IP):8084"
 	@echo "Admin UI:        http://$(HOST_IP):3001"
 	@echo "Prometheus:      http://$(HOST_IP):9090"
 	@echo "PgAdmin:         http://$(HOST_IP):5050"
+	@echo ""
+	@echo "$(COLOR_BLUE)Monitoring:$(COLOR_RESET)"
+	@echo "$(if $(findstring linux,$(PROFILES)),✓ Host metrics enabled (node-exporter),⨯ Host metrics disabled (not Linux))"
+	@echo "$(if $(findstring gpu,$(PROFILES)),✓ GPU metrics enabled (dcgm-exporter),⨯ GPU metrics disabled (no NVIDIA GPU detected))"
 	@echo ""
 
 urls: info ## Alias for info (show URLs)
