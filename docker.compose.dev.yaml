@@ -30,6 +30,10 @@ services:
       CORS_ENABLED: "true"
       # Dynamic CORS origins using detected host IP, plus localhost fallbacks
       CORS_ALLOW_ORIGINS: http://${HOST_IP:-localhost}:3001,http://localhost:3001,http://127.0.0.1:3001
+      # Auto-bootstrap admin user on first startup (dev mode)
+      ADMIN_BOOTSTRAP_USERNAME: ${ADMIN_BOOTSTRAP_USERNAME:-admin}
+      ADMIN_BOOTSTRAP_PASSWORD: ${ADMIN_BOOTSTRAP_PASSWORD:-admin}
+      ADMIN_BOOTSTRAP_ORG: ${ADMIN_BOOTSTRAP_ORG:-Default}
       NVIDIA_VISIBLE_DEVICES: all
       NVIDIA_DRIVER_CAPABILITIES: compute,utility
       # Inside the container, always use the container mount points

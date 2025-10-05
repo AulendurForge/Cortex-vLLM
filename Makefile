@@ -389,7 +389,7 @@ watch: ## Watch container status (refresh every 2s)
 # Quick Start Helpers
 # ============================================================================
 
-quick-start: up bootstrap-default ## Quick start: up + bootstrap with defaults
+quick-start: up ## Quick start: up with automatic admin bootstrap
 	@echo ""
 	@echo "$(COLOR_GREEN)$(COLOR_BOLD)✓ Cortex is ready!$(COLOR_RESET)"
 	@echo ""

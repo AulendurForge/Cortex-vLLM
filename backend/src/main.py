@@ -194,6 +194,51 @@ async def on_startup():
     except Exception:
         pass
 
+    # Auto-bootstrap admin user if environment variables are set (best-effort)
+    try:
+        if settings.ADMIN_BOOTSTRAP_USERNAME and settings.ADMIN_BOOTSTRAP_PASSWORD:
+            if SessionLocal is not None:
+                from sqlalchemy import select as _sel, func as _func
+                from .models import User, Organization
+                from .crypto import pwd_context
+                
+                async with SessionLocal() as session:
+                    # Check if any admin exists
+                    try:
+                        admin_count = (await session.execute(
+                            _sel(_func.count()).select_from(User).where(User.role == "Admin")
+                        )).scalar_one()
+                        
+                        if int(admin_count or 0) == 0:
+                            print("[startup] No admin found, bootstrapping from environment variables...", flush=True)
+                            
+                            # Create org if specified
+                            org_id = None
+                            if settings.ADMIN_BOOTSTRAP_ORG:
+                                org = Organization(name=settings.ADMIN_BOOTSTRAP_ORG)
+                                session.add(org)
+                                await session.flush()
+                                org_id = org.id
+                            
+                            # Create admin user
+                            hashed = pwd_context.hash(settings.ADMIN_BOOTSTRAP_PASSWORD)
+                            admin = User(
+                                username=settings.ADMIN_BOOTSTRAP_USERNAME,
+                                role="Admin",
+                                org_id=org_id,
+                                password_hash=hashed
+                            )
+                            session.add(admin)
+                            await session.commit()
+                            print(f"[startup] ✓ Admin user '{settings.ADMIN_BOOTSTRAP_USERNAME}' created successfully", flush=True)
+                        else:
+                            print(f"[startup] Admin user already exists (count: {admin_count}), skipping bootstrap", flush=True)
+                    except Exception as e:
+                        print(f"[startup] Bootstrap check/creation failed: {e}", flush=True)
+    except Exception as e:
+        print(f"[startup] Auto-bootstrap error: {e}", flush=True)
+        # Don't fail startup if bootstrap fails
+
 
 @app.on_event("shutdown")
 async def on_shutdown():
