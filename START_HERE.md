@@ -9,6 +9,17 @@
 ## ⚡ The Easy Way (Recommended)
 
 ```bash
+# Step 0: Install prerequisites (if not already installed)
+# Ubuntu/Debian:
+sudo apt-get update && sudo apt-get install -y make docker.io docker-compose-plugin
+
+# CentOS/RHEL:
+sudo yum install -y make docker docker-compose-plugin
+
+# Verify:
+make --version  # Should show GNU Make
+docker --version  # Should show Docker version
+
 # Step 1: Run this one command
 make quick-start
 

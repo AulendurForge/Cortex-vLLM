@@ -47,8 +47,16 @@ OpenAI-compatible gateway and admin UI for running vLLM and llama.cpp inference 
 **For administrators - simplified one-command setup:**
 
 ```bash
-# 1. Install prerequisites (if needed)
-make install-deps
+# 1. Install prerequisites (if not already installed)
+# Ubuntu/Debian:
+sudo apt-get update && sudo apt-get install -y make docker.io docker-compose-plugin
+
+# CentOS/RHEL:
+sudo yum install -y make docker docker-compose-plugin
+
+# Verify prerequisites:
+make --version     # Should show GNU Make
+docker --version   # Should show Docker
 
 # 2. Start everything with one command
 make quick-start
