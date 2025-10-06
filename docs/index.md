@@ -1,6 +1,6 @@
 # CORTEX
 
-CORTEX is an OpenAI-compatible gateway and admin UI for running vLLM engines on your own infrastructure. It provides secure access control, health‑aware routing, usage metering, and a modern admin interface.
+CORTEX is an OpenAI-compatible gateway and admin UI for running vLLM and llama.cpp inference engines on your own infrastructure. It provides secure access control, health‑aware routing, usage metering, and a modern admin interface.
 
 - OpenAI-compatible endpoints: `/v1/chat/completions`, `/v1/completions`, `/v1/embeddings`
 - Health checks, circuit breaking, retries, and metrics via Prometheus

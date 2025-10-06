@@ -6,7 +6,7 @@
 
 # CORTEX
 
-OpenAI-compatible gateway and admin UI for running vLLM engines on your own infrastructure. Built and maintained by Aulendur LLC.
+OpenAI-compatible gateway and admin UI for running vLLM and llama.cpp inference engines on your own infrastructure. Built and maintained by Aulendur LLC.
 
 - OpenAI-compatible endpoints: `/v1/chat/completions`, `/v1/completions`, `/v1/embeddings`
 - Health-aware routing, circuit breaking, retries
