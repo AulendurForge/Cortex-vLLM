@@ -29,6 +29,12 @@ cookies.txt
 cookies-*.txt
 *.cookies.txt
 
+# Stress testing
+stress_test_env/
+*stress_test*.py
+*stress_test*.log
+cortex_stress_test_results/
+
 # Internal planning docs
 plans/*
 *Plan.md

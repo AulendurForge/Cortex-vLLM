@@ -4,7 +4,7 @@ from typing import AsyncIterator
 import asyncio
 import uuid
 from prometheus_client import Counter
-from ..metrics import UPSTREAM_LATENCY, UPSTREAM_LATENCY_BY_UPSTREAM, STREAM_TTFT_SECONDS, UPSTREAM_SELECTED
+from ..metrics import UPSTREAM_LATENCY, UPSTREAM_LATENCY_BY_UPSTREAM, STREAM_TTFT_SECONDS, UPSTREAM_SELECTED, TIMEOUT_ERRORS, REQUEST_CANCELLATIONS
 from starlette.background import BackgroundTask
 from fastapi import APIRouter, Request, Depends, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -129,6 +129,25 @@ def choose_url(urls):
     # Best-effort: increment selection once per call site using path stored later
     return chosen
 
+def get_timeout_for_request(model_name: str, max_tokens: int, is_streaming: bool) -> httpx.Timeout:
+    """Calculate appropriate timeout based on model size and request complexity."""
+    # Base timeouts by model size
+    if "120b" in model_name.lower():
+        base_timeout = 180 if is_streaming else 120
+    elif "70b" in model_name.lower():
+        base_timeout = 120 if is_streaming else 90
+    elif "13b" in model_name.lower():
+        base_timeout = 90 if is_streaming else 60
+    else:
+        base_timeout = 60 if is_streaming else 45
+    
+    # Scale by max_tokens (cap at 3x multiplier)
+    token_factor = min(max_tokens / 1000, 3.0)
+    read_timeout = base_timeout * token_factor
+    
+    return httpx.Timeout(connect=5.0, read=read_timeout, write=10.0, pool=5.0)
+
+
 def choose_by_model_or_task(model: str | None, task_hint: str | None, settings) -> tuple[str, str]:
     """Return (base_url, path_prefix) based on model registry or task hint.
     Defaults to generation pool when unknown.
@@ -189,8 +208,8 @@ async def forward_json(request: Request, base_url: str, path: str, internal_key:
         if not ok:
             STREAM_BLOCKED.labels(identifier=identifier).inc()
             raise HTTPException(status_code=429, detail="too_many_concurrent_streams")
-        # Tight timeouts for streams: longer read, bounded connect
-        timeout = httpx.Timeout(connect=5.0, read=65.0, write=10.0, pool=5.0)
+        # Dynamic timeout based on model size and request complexity
+        timeout = get_timeout_for_request(payload.get("model", ""), payload.get("max_tokens", 1000), True)
         # Manually manage stream context so it stays open until response completes
         resp_ctx = client.stream("POST", f"{base_url}{path}", headers=headers, json=payload, timeout=timeout)
         resp = await resp_ctx.__aenter__()
@@ -243,7 +262,8 @@ async def forward_json(request: Request, base_url: str, path: str, internal_key:
     last_exc = None
     for attempt in range(retries + 1):
         try:
-            timeout = httpx.Timeout(connect=5.0, read=30.0, write=10.0, pool=5.0)
+            # Dynamic timeout based on model size and request complexity
+            timeout = get_timeout_for_request(payload.get("model", ""), payload.get("max_tokens", 1000), False)
             t0 = time.time()
             resp = await client.post(f"{base_url}{path}", headers=headers, json=payload, timeout=timeout)
             elapsed = time.time() - t0
@@ -254,7 +274,22 @@ async def forward_json(request: Request, base_url: str, path: str, internal_key:
             last_exc = exc
             if attempt == retries:
                 _cb_record_failure(base_url)
-                raise HTTPException(status_code=502, detail="upstream_unreachable")
+                # Provide informative error messages for timeouts
+                if isinstance(exc, httpx.ReadTimeout):
+                    model_name = payload.get("model", "unknown")
+                    TIMEOUT_ERRORS.labels(model=model_name, error_type="read_timeout", path=path).inc()
+                    raise HTTPException(
+                        status_code=408, 
+                        content={
+                            "error": {
+                                "message": "Request timeout - model is processing but taking longer than expected. Please try again with a shorter prompt or fewer tokens.",
+                                "type": "timeout_error",
+                                "retry_after": 30
+                            }
+                        }
+                    )
+                else:
+                    raise HTTPException(status_code=502, detail="upstream_unreachable")
             await asyncio.sleep(0.2 * (attempt + 1))
             RETRY_COUNT.labels(path=path).inc()
     else:
@@ -280,7 +315,7 @@ async def forward_json(request: Request, base_url: str, path: str, internal_key:
                     "temperature": payload.get("temperature", 0.7),
                     "stream": False,
                 }
-                timeout = httpx.Timeout(connect=5.0, read=30.0, write=10.0, pool=5.0)
+                timeout = get_timeout_for_request(payload.get("model", ""), comp_payload.get("max_tokens", 128), False)
                 t1 = time.time()
                 comp_resp = await client.post(f"{base_url}/v1/completions", headers=headers, json=comp_payload, timeout=timeout)
                 UPSTREAM_LATENCY.labels(path="/v1/completions").observe(time.time() - t1)

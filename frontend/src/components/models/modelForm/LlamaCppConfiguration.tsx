@@ -14,7 +14,7 @@ export function LlamaCppConfiguration({ values, onChange }: LlamaCppConfiguratio
 
   return (
     <>
-      {/* Basic context size */}
+      {/* Basic llama.cpp Settings */}
       <label className="text-sm">Context Size
         <input 
           className="input mt-1" 
@@ -22,12 +22,77 @@ export function LlamaCppConfiguration({ values, onChange }: LlamaCppConfiguratio
           min={512} 
           max={131072} 
           step={512} 
-          value={values.contextSize ?? 8192} 
-          onChange={(e) => onChange('contextSize', Number(e.target.value) || 8192)} 
+          value={values.contextSize ?? 16384} 
+          onChange={(e) => onChange('contextSize', Number(e.target.value) || 16384)} 
         />
         <p className="text-[11px] text-white/50 mt-1">
-          Maximum context window in tokens. 
-          <Tooltip text="Also called '-c'. Controls how much context the model can process. Larger values require more memory." />
+          Total context window in tokens. Divided among parallel slots. 
+          <Tooltip text="Also called '-c'. Total context is split: context_per_slot = total_context / parallel_slots. For 36K+ prompts, use fewer slots or higher total context." />
+        </p>
+      </label>
+
+      <label className="text-sm">Parallel Slots
+        <input 
+          className="input mt-1" 
+          type="number" 
+          min={1} 
+          max={32} 
+          step={1} 
+          value={values.parallelSlots ?? 16} 
+          onChange={(e) => onChange('parallelSlots', Number(e.target.value) || 16)} 
+        />
+        <div className="mt-2 p-2 bg-blue-500/10 border border-blue-500/30 rounded text-xs">
+          <div className="font-medium text-blue-200 mb-1">📊 Context per slot calculation:</div>
+          <div className="text-white/80">
+            {Math.floor((values.contextSize ?? 16384) / (values.parallelSlots ?? 16)).toLocaleString()} tokens per slot
+          </div>
+          <div className="text-white/60 mt-1">
+            ({(values.contextSize ?? 16384).toLocaleString()} total context ÷ {values.parallelSlots ?? 16} slots)
+          </div>
+        </div>
+        <p className="text-[11px] text-white/50 mt-1">
+          Number of concurrent request slots. Each slot gets: total_context / parallel_slots. 
+          <Tooltip text="Also called '--parallel'. More slots = more concurrency but less context per request. For large prompts (30K+ tokens), use 1-2 slots. For many small requests, use 16-32 slots." />
+        </p>
+      </label>
+
+      <label className="text-sm">Ubatch Size
+        <input 
+          className="input mt-1" 
+          type="number" 
+          min={128} 
+          max={4096} 
+          step={128} 
+          value={values.ubatchSize ?? 2048} 
+          onChange={(e) => onChange('ubatchSize', Number(e.target.value) || 2048)} 
+        />
+        <p className="text-[11px] text-white/50 mt-1">
+          Physical batch size for prompt processing. Higher = faster prefill. 
+          <Tooltip text="Also called '-ub' or '--ubatch-size'. Controls how many tokens are processed in parallel during prompt ingestion. Larger values speed up long prompts but use more VRAM." />
+        </p>
+      </label>
+
+      <label className="text-sm">KV Cache Type K
+        <select className="input mt-1" value={values.cacheTypeK ?? 'q8_0'} onChange={(e) => onChange('cacheTypeK', e.target.value)}>
+          <option value="f16">f16 (2 bytes, full precision)</option>
+          <option value="q8_0">q8_0 (1 byte, 50% savings, recommended)</option>
+          <option value="q4_0">q4_0 (0.5 bytes, 75% savings)</option>
+        </select>
+        <p className="text-[11px] text-white/50 mt-1">
+          Quantization for KV cache keys. q8_0 recommended (50% memory reduction, minimal quality loss). 
+          <Tooltip text="Also called '--cache-type-k'. Reduces KV cache memory usage. q8_0 is near-lossless. q4_0 saves more but may reduce quality." />
+        </p>
+      </label>
+
+      <label className="text-sm">KV Cache Type V
+        <select className="input mt-1" value={values.cacheTypeV ?? 'q8_0'} onChange={(e) => onChange('cacheTypeV', e.target.value)}>
+          <option value="f16">f16 (2 bytes, full precision)</option>
+          <option value="q8_0">q8_0 (1 byte, 50% savings, recommended)</option>
+          <option value="q4_0">q4_0 (0.5 bytes, 75% savings)</option>
+        </select>
+        <p className="text-[11px] text-white/50 mt-1">
+          Quantization for KV cache values. q8_0 recommended (50% memory reduction, minimal quality loss). 
+          <Tooltip text="Also called '--cache-type-v'. Reduces KV cache memory usage. q8_0 is near-lossless. q4_0 saves more but may reduce quality." />
         </p>
       </label>
 

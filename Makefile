@@ -92,8 +92,9 @@ up: ## Start all services (detached mode)
 	@echo "$(COLOR_GREEN)✓ Services started$(COLOR_RESET)"
 	@echo ""
 	@echo "$(COLOR_BLUE)Core Services:$(COLOR_RESET)"
-	@echo "  Gateway:    http://$(HOST_IP):8084/health"
-	@echo "  Admin UI:   http://$(HOST_IP):3001"
+	@echo "  Login to Cortex at: http://$(HOST_IP):3001/login (admin/admin)"	
+	@echo ""
+	@echo "  Gateway:    http://$(HOST_IP):8084"
 	@echo "  Prometheus: http://$(HOST_IP):9090"
 	@echo "  PgAdmin:    http://$(HOST_IP):5050"
 	@if [ -n "$(findstring linux,$(PROFILES))" ]; then \
@@ -398,26 +399,27 @@ watch: ## Watch container status (refresh every 2s)
 
 # ============================================================================
 # Quick Start Helpers
-# ============================================================================
+# ============================================================================sup
 
 quick-start: up ## Quick start: up with automatic admin bootstrap
 	@echo ""
 	@echo "$(COLOR_GREEN)$(COLOR_BOLD)✓ Cortex is ready!$(COLOR_RESET)"
 	@echo ""
-	@echo "$(COLOR_BLUE)Access Cortex:$(COLOR_RESET)"
-	@echo "  Admin UI: http://$(HOST_IP):3001/login (admin/admin)"
-	@echo "  Gateway:  http://$(HOST_IP):8084"
 	@if [ -n "$(PROFILES)" ]; then \
 		echo ""; \
 		echo "$(COLOR_GREEN)✓ Monitoring enabled:$(COLOR_RESET) $(PROFILES)"; \
 		echo "  View metrics in System Monitor page"; \
 	fi
 	@echo ""
-	@echo "$(COLOR_BLUE)Next steps:$(COLOR_RESET)"
-	@echo "  1. Login at: http://$(HOST_IP):3001/login (admin/admin)"
-	@echo "  2. Create API key: make login && make create-key"
-	@echo "  3. Check System Monitor for host/GPU metrics"
-	@echo "  4. View docs: https://aulendurforge.github.io/Cortex-vLLM/"
+	@echo "$(COLOR_GREEN)$(COLOR_BOLD)Next steps:$(COLOR_RESET)"
+	@echo "  1. Login to Cortex at: http://$(HOST_IP):3001/login"
+	@echo "     Username: admin"
+	@echo "     Password: admin"
+	@echo ""
+	@echo "$(COLOR_GREEN)$(COLOR_BOLD)For admins:$(COLOR_RESET)"
+	@echo "  2. Test creating an API key on the API Keys page"
+	@echo "  3. Check System Monitor page for host machine's GPU & Hardwaremetrics"
+	@echo "  4. View additional docs: https://aulendurforge.github.io/Cortex-vLLM/"
 	@echo ""
 
 install-deps: ## Install required dependencies (Docker, Docker Compose)

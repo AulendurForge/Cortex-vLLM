@@ -101,9 +101,11 @@ class Model(Base):
     # llama.cpp specific configuration fields
     ngl: Mapped[int | None] = mapped_column(Integer, nullable=True)  # GPU layers
     tensor_split: Mapped[str | None] = mapped_column(String(128), nullable=True)  # GPU memory distribution
-    batch_size: Mapped[int | None] = mapped_column(Integer, nullable=True)  # Batch size
+    batch_size: Mapped[int | None] = mapped_column(Integer, nullable=True)  # Logical batch size
+    ubatch_size: Mapped[int | None] = mapped_column(Integer, nullable=True)  # Physical batch size
     threads: Mapped[int | None] = mapped_column(Integer, nullable=True)  # CPU threads
     context_size: Mapped[int | None] = mapped_column(Integer, nullable=True)  # Context window
+    parallel_slots: Mapped[int | None] = mapped_column(Integer, nullable=True)  # Number of parallel slots
     rope_freq_base: Mapped[float | None] = mapped_column(Float, nullable=True)  # RoPE frequency base
     rope_freq_scale: Mapped[float | None] = mapped_column(Float, nullable=True)  # RoPE frequency scale
     flash_attention: Mapped[bool | None] = mapped_column(Boolean, nullable=True)  # Flash attention
@@ -111,6 +113,8 @@ class Model(Base):
     no_mmap: Mapped[bool | None] = mapped_column(Boolean, nullable=True)  # Disable memory mapping
     numa_policy: Mapped[str | None] = mapped_column(String(32), nullable=True)  # NUMA policy
     split_mode: Mapped[str | None] = mapped_column(String(32), nullable=True)  # Layer/row split mode
+    cache_type_k: Mapped[str | None] = mapped_column(String(16), nullable=True)  # KV cache type for K
+    cache_type_v: Mapped[str | None] = mapped_column(String(16), nullable=True)  # KV cache type for V
     state: Mapped[str] = mapped_column(String(16), default="stopped")
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
     port: Mapped[int | None] = mapped_column(Integer, nullable=True)

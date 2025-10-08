@@ -198,11 +198,16 @@ def _build_llamacpp_command(m: Model) -> list[str]:
     context_size = getattr(m, 'context_size', None) or settings.LLAMACPP_DEFAULT_CONTEXT
     ngl = getattr(m, 'ngl', None) or settings.LLAMACPP_DEFAULT_NGL
     batch_size = getattr(m, 'batch_size', None) or settings.LLAMACPP_DEFAULT_BATCH_SIZE
+    ubatch_size = getattr(m, 'ubatch_size', None) or settings.LLAMACPP_DEFAULT_UBATCH_SIZE
     threads = getattr(m, 'threads', None) or settings.LLAMACPP_DEFAULT_THREADS
+    parallel_slots = getattr(m, 'parallel_slots', None) or settings.LLAMACPP_MAX_PARALLEL
+    cache_type_k = getattr(m, 'cache_type_k', None) or settings.LLAMACPP_CACHE_TYPE_K
+    cache_type_v = getattr(m, 'cache_type_v', None) or settings.LLAMACPP_CACHE_TYPE_V
     
     cmd += ["-c", str(context_size)]
     cmd += ["-ngl", str(ngl)]
     cmd += ["-b", str(batch_size)]
+    cmd += ["-ub", str(ubatch_size)]
     cmd += ["-t", str(threads)]
     
     # GPU tensor split
@@ -214,8 +219,8 @@ def _build_llamacpp_command(m: Model) -> list[str]:
         cmd += ["--flash-attn", "on" if m.flash_attention else "off"]
     if getattr(m, 'mlock', None) and m.mlock:
         cmd += ["--mlock"]
-    if getattr(m, 'no_mmap', None) and m.no_mmap:
-        cmd += ["--no-mmap"]
+    # Note: --no-mmap removed for better memory management and faster loading
+    # Memory-mapping is more efficient than loading entire model into RAM
     if getattr(m, 'numa_policy', None):
         cmd += ["--numa", str(m.numa_policy)]
     
@@ -224,6 +229,18 @@ def _build_llamacpp_command(m: Model) -> list[str]:
         cmd += ["--rope-freq-base", str(m.rope_freq_base)]
     if getattr(m, 'rope_freq_scale', None):
         cmd += ["--rope-freq-scale", str(m.rope_freq_scale)]
+    
+    # Server-side timeout controls for multi-user stability
+    cmd += ["--timeout", str(settings.LLAMACPP_SERVER_TIMEOUT)]
+    cmd += ["--parallel", str(parallel_slots)]
+    
+    # Enable continuous batching for better throughput
+    if settings.LLAMACPP_CONT_BATCHING:
+        cmd += ["--cont-batching"]
+    
+    # KV cache quantization for 50% memory reduction
+    cmd += ["--cache-type-k", cache_type_k]
+    cmd += ["--cache-type-v", cache_type_v]
     
     return cmd
 

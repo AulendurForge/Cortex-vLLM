@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     CB_ENABLED: bool = False
     CB_FAILURE_THRESHOLD: int = 5
     CB_COOLDOWN_SEC: int = 30
+    # Enhanced circuit breaker for timeout scenarios
+    CB_TIMEOUT_THRESHOLD: int = 3      # Timeouts before opening breaker
+    CB_TIMEOUT_COOLDOWN: int = 60      # Cooldown after timeout surge
+    CB_HEALTH_CHECK_INTERVAL: int = 10 # More frequent health checks
     # Upstream health checks
     HEALTH_CHECK_TTL_SEC: int = 10
     HEALTH_CHECK_PATH: str = "/health"
@@ -61,9 +65,17 @@ class Settings(BaseSettings):
     LLAMACPP_IMAGE: str = "ghcr.io/ggml-org/llama.cpp:server-cuda"
     LLAMACPP_GEN_URLS: str = ""
     LLAMACPP_DEFAULT_NGL: int = 999
-    LLAMACPP_DEFAULT_BATCH_SIZE: int = 512
+    LLAMACPP_DEFAULT_BATCH_SIZE: int = 2048  # Increased from 512 for better throughput
+    LLAMACPP_DEFAULT_UBATCH_SIZE: int = 2048  # Physical batch size for prompt processing
     LLAMACPP_DEFAULT_THREADS: int = 32
-    LLAMACPP_DEFAULT_CONTEXT: int = 8192
+    LLAMACPP_DEFAULT_CONTEXT: int = 16384  # Increased from 8192 for longer prompts
+    # Server-side timeout controls for multi-user stability
+    LLAMACPP_SERVER_TIMEOUT: int = 300  # 5 minutes max per request
+    LLAMACPP_MAX_PARALLEL: int = 16  # Increased from 4 for better concurrency (16 slots)
+    LLAMACPP_CONT_BATCHING: bool = True  # Enable continuous batching
+    # KV cache optimization (50% memory reduction with q8_0)
+    LLAMACPP_CACHE_TYPE_K: str = "q8_0"  # KV cache quantization for K (keys)
+    LLAMACPP_CACHE_TYPE_V: str = "q8_0"  # KV cache quantization for V (values)
 
     def gen_urls(self) -> List[str]:
         return [u.strip() for u in self.VLLM_GEN_URLS.split(",") if u.strip()]

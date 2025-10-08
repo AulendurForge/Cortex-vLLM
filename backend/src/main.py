@@ -138,8 +138,12 @@ _bg_health_task: asyncio.Task | None = None
 @app.on_event("startup")
 async def on_startup():
     global http_client, redis, _bg_health_task
-    # Single shared client (connection pooling)
-    http_client = httpx.AsyncClient(timeout=60.0)
+    # Single shared client with connection pooling for high concurrency
+    # Limits set to handle 100+ concurrent requests to llama.cpp
+    http_client = httpx.AsyncClient(
+        timeout=60.0,
+        limits=httpx.Limits(max_connections=200, max_keepalive_connections=100)
+    )
     # Redis connection (optional)
     settings = get_settings()
     try:

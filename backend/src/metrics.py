@@ -34,4 +34,21 @@ KEY_AUTH_BLOCKED = Counter(
     ["reason"],
 )
 
+# Timeout and reliability metrics
+TIMEOUT_ERRORS = Counter(
+    "gateway_timeout_errors_total",
+    "Request timeout errors by model and type",
+    ["model", "error_type", "path"],
+)
+REQUEST_CANCELLATIONS = Counter(
+    "gateway_request_cancellations_total", 
+    "Request cancellations by model and reason",
+    ["model", "reason", "path"],
+)
+UPSTREAM_HEALTH_DEGRADATION = Counter(
+    "gateway_upstream_health_degradation_total",
+    "Upstream health degradation events",
+    ["base_url", "reason"],
+)
+
 

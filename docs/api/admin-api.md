@@ -31,7 +31,7 @@ curl -X POST "$GATEWAY/admin/keys" -H 'Content-Type: application/json' -d '{"sco
 - `POST /admin/models/{id}/test` — test model inference
 - `GET /admin/models/{id}/readiness` — check model readiness
 - `GET /admin/models/{id}/logs` — recent container logs
-- `DELETE /admin/models/{id}` — delete model
+- `DELETE /admin/models/{id}` — delete model (database entry only; files preserved)
 - Registry: `GET/POST/DELETE /admin/models/registry` — manage model routing registry
 
 ## Usage

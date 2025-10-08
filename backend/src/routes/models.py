@@ -70,8 +70,10 @@ async def list_models(_: dict = Depends(require_admin)):
                 ngl=getattr(r, 'ngl', None),
                 tensor_split=getattr(r, 'tensor_split', None),
                 batch_size=getattr(r, 'batch_size', None),
+                ubatch_size=getattr(r, 'ubatch_size', None),
                 threads=getattr(r, 'threads', None),
                 context_size=getattr(r, 'context_size', None),
+                parallel_slots=getattr(r, 'parallel_slots', None),
                 rope_freq_base=getattr(r, 'rope_freq_base', None),
                 rope_freq_scale=getattr(r, 'rope_freq_scale', None),
                 flash_attention=getattr(r, 'flash_attention', None),
@@ -79,6 +81,8 @@ async def list_models(_: dict = Depends(require_admin)):
                 no_mmap=getattr(r, 'no_mmap', None),
                 numa_policy=getattr(r, 'numa_policy', None),
                 split_mode=getattr(r, 'split_mode', None),
+                cache_type_k=getattr(r, 'cache_type_k', None),
+                cache_type_v=getattr(r, 'cache_type_v', None),
                 state=r.state,
                 archived=bool(getattr(r, 'archived', False)),
                 port=r.port,
@@ -168,8 +172,10 @@ async def create_model(body: CreateModelRequest, _: dict = Depends(require_admin
             ngl=body.ngl,
             tensor_split=body.tensor_split,
             batch_size=body.batch_size,
+            ubatch_size=body.ubatch_size,
             threads=body.threads,
             context_size=body.context_size,
+            parallel_slots=body.parallel_slots,
             rope_freq_base=body.rope_freq_base,
             rope_freq_scale=body.rope_freq_scale,
             flash_attention=body.flash_attention,
@@ -177,6 +183,8 @@ async def create_model(body: CreateModelRequest, _: dict = Depends(require_admin
             no_mmap=body.no_mmap,
             numa_policy=body.numa_policy,
             split_mode=body.split_mode,
+            cache_type_k=body.cache_type_k,
+            cache_type_v=body.cache_type_v,
             state="stopped",
         )
         session.add(m)
@@ -229,9 +237,20 @@ async def archive_model(model_id: int, _: dict = Depends(require_admin)):
         return {"status": "archived"}
 
 @router.delete("/models/{model_id}")
-async def delete_model(model_id: int, purge_cache: bool = False, _: dict = Depends(require_admin)):
-    """Delete DB record and, if offline/local_path, remove model files from host (dangerous)."""
-    import os
+async def delete_model(model_id: int, _: dict = Depends(require_admin)):
+    """Delete model database record only. Model files are NEVER deleted from disk.
+    
+    This removes the model from Cortex's management but preserves all model files
+    in the offline models directory. This is critical for manually-placed models
+    that may be difficult or impossible to re-download in offline/air-gapped environments.
+    
+    To remove a model configuration:
+    - The database record is deleted
+    - The container is stopped (if running)
+    - Model files remain on disk untouched
+    
+    Administrators must manually delete model files from the filesystem if desired.
+    """
     SessionLocal = _get_session()
     if SessionLocal is None:
         raise HTTPException(status_code=503, detail="database_unavailable")
@@ -250,35 +269,11 @@ async def delete_model(model_id: int, purge_cache: bool = False, _: dict = Depen
                 unregister_model_endpoint(m.served_model_name)
         except Exception:
             pass
-        # Dangerous: remove local files only for offline/local_path
-        removed = False
-        cache_removed = False
-        try:
-            if m.local_path:
-                base = get_settings().CORTEX_MODELS_DIR.rstrip("/")
-                target = os.path.join(base, m.local_path)
-                if os.path.isdir(target) and target.startswith(base):
-                    import shutil
-                    shutil.rmtree(target, ignore_errors=True)
-                    removed = True
-        except Exception:
-            removed = False
-        # Optional: purge Hugging Face cache for online models when requested
-        try:
-            if purge_cache and (not m.local_path) and m.repo_id:
-                hf_base = get_settings().HF_CACHE_DIR.rstrip("/")
-                # HF cache layout uses models--{org}--{repo}
-                safe_name = str(m.repo_id).replace("/", "--")
-                hf_target = os.path.join(hf_base, f"models--{safe_name}")
-                if os.path.isdir(hf_target) and hf_target.startswith(hf_base):
-                    import shutil
-                    shutil.rmtree(hf_target, ignore_errors=True)
-                    cache_removed = True
-        except Exception:
-            cache_removed = False
+        # Delete database record only - NEVER delete model files from disk
+        # This protects manually-placed offline models from accidental deletion
         await session.execute(delete(Model).where(Model.id == model_id))
         await session.commit()
-        return {"status": "deleted", "files_removed": removed, "cache_removed": cache_removed}
+        return {"status": "deleted", "files_preserved": True, "note": "Model files remain on disk - delete manually if needed"}
 
 def _handle_multipart_gguf_merge(m: Model) -> None:
     """

@@ -26,7 +26,6 @@ export default function ModelsPage() {
   const [logsFor, setLogsFor] = React.useState<number | null>(null);
   const [archiveId, setArchiveId] = React.useState<number | null>(null);
   const [deleteId, setDeleteId] = React.useState<number | null>(null);
-  const [purgeCache, setPurgeCache] = React.useState<boolean>(false);
   const [configId, setConfigId] = React.useState<number | null>(null);
   const [dryCmd, setDryCmd] = React.useState<string>("");
   const [calcOpen, setCalcOpen] = React.useState<boolean>(false);
@@ -99,8 +98,10 @@ export default function ModelsPage() {
             ngl: payload.ngl,
             tensor_split: payload.tensorSplit,
             batch_size: payload.batchSize,
+            ubatch_size: payload.ubatchSize,
             threads: payload.threads,
             context_size: payload.contextSize,
+            parallel_slots: payload.parallelSlots,
             rope_freq_base: payload.ropeFreqBase,
             rope_freq_scale: payload.ropeFreqScale,
             flash_attention: payload.flashAttention,
@@ -108,6 +109,8 @@ export default function ModelsPage() {
             no_mmap: payload.noMmap,
             numa_policy: payload.numaPolicy,
             split_mode: payload.splitMode,
+            cache_type_k: payload.cacheTypeK,
+            cache_type_v: payload.cacheTypeV,
       };
       return await apiFetch('/admin/models', { method: 'POST', body: JSON.stringify(body) });
     },
@@ -140,7 +143,7 @@ export default function ModelsPage() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['models'] }); setArchiveId(null); },
   });
   const del = useMutation({
-    mutationFn: async (id: number) => apiFetch(`/admin/models/${id}?purge_cache=${purgeCache ? 'true' : 'false'}`, { method: 'DELETE' }),
+    mutationFn: async (id: number) => apiFetch(`/admin/models/${id}`, { method: 'DELETE' }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['models'] }); setDeleteId(null); },
   });
   const update = useMutation({
@@ -421,16 +424,20 @@ export default function ModelsPage() {
             engineType: (m as any).engine_type || 'vllm',
             ngl: (m as any).ngl ?? 999,
             tensorSplit: (m as any).tensor_split || '',
-            batchSize: (m as any).batch_size ?? 512,
+            batchSize: (m as any).batch_size ?? 2048,
+            ubatchSize: (m as any).ubatch_size ?? 2048,
             threads: (m as any).threads ?? 32,
-            contextSize: (m as any).context_size ?? 8192,
+            contextSize: (m as any).context_size ?? 16384,
+            parallelSlots: (m as any).parallel_slots ?? 16,
             ropeFreqBase: (m as any).rope_freq_base ?? undefined,
             ropeFreqScale: (m as any).rope_freq_scale ?? undefined,
             flashAttention: (m as any).flash_attention ?? true,
             mlock: (m as any).mlock ?? true,
-            noMmap: (m as any).no_mmap ?? true,
+            noMmap: (m as any).no_mmap ?? false,
             numaPolicy: (m as any).numa_policy || 'isolate',
             splitMode: (m as any).split_mode ?? undefined,
+            cacheTypeK: (m as any).cache_type_k ?? 'q8_0',
+            cacheTypeV: (m as any).cache_type_v ?? 'q8_0',
           } as any;
           let draft: ModelFormValues | null = null;
           return (
@@ -474,6 +481,23 @@ export default function ModelsPage() {
                     cuda_graph_sizes: values.cudaGraphSizes,
                     pipeline_parallel_size: values.pipelineParallelSize,
                     device: values.device,
+                    // llama.cpp-specific fields
+                    ngl: values.ngl,
+                    tensor_split: values.tensorSplit,
+                    batch_size: values.batchSize,
+                    ubatch_size: values.ubatchSize,
+                    threads: values.threads,
+                    context_size: values.contextSize,
+                    parallel_slots: values.parallelSlots,
+                    rope_freq_base: values.ropeFreqBase,
+                    rope_freq_scale: values.ropeFreqScale,
+                    flash_attention: values.flashAttention,
+                    mlock: values.mlock,
+                    no_mmap: values.noMmap,
+                    numa_policy: values.numaPolicy,
+                    split_mode: values.splitMode,
+                    cache_type_k: values.cacheTypeK,
+                    cache_type_v: values.cacheTypeV,
                   };
                   apply.mutate({ id: configId, body });
                 }}
@@ -512,6 +536,23 @@ export default function ModelsPage() {
                       cuda_graph_sizes: draft.cudaGraphSizes,
                       pipeline_parallel_size: draft.pipelineParallelSize,
                       device: draft.device,
+                      // llama.cpp-specific fields
+                      ngl: draft.ngl,
+                      tensor_split: draft.tensorSplit,
+                      batch_size: draft.batchSize,
+                      ubatch_size: draft.ubatchSize,
+                      threads: draft.threads,
+                      context_size: draft.contextSize,
+                      parallel_slots: draft.parallelSlots,
+                      rope_freq_base: draft.ropeFreqBase,
+                      rope_freq_scale: draft.ropeFreqScale,
+                      flash_attention: draft.flashAttention,
+                      mlock: draft.mlock,
+                      no_mmap: draft.noMmap,
+                      numa_policy: draft.numaPolicy,
+                      split_mode: draft.splitMode,
+                      cache_type_k: draft.cacheTypeK,
+                      cache_type_v: draft.cacheTypeV,
                     }});
                     else if (m) apply.mutate({ id: configId!, body: {} });
                   }} disabled={apply.isPending}>Apply (restart)</PrimaryButton>
@@ -549,19 +590,27 @@ export default function ModelsPage() {
 
       {isAdmin && (<ConfirmDialog
         open={deleteId != null}
-        title="Delete model permanently?"
+        title="Delete model from Cortex?"
         description={
           <div className="space-y-3">
-            <div className="text-red-300">This will remove the model from Cortex. If it was added from a local folder, its files will be deleted from the host machine. This action cannot be undone.</div>
-            <label className="flex items-center gap-2 text-white/90 text-sm">
-              <input type="checkbox" className="accent-red-500" checked={purgeCache} onChange={(e)=>setPurgeCache(e.target.checked)} />
-              Also delete downloaded Hugging Face cache for this model (online installs)
-            </label>
+            <div className="text-white/80">
+              This will remove the model from Cortex's management and stop its container.
+            </div>
+            <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg">
+              <div className="font-medium text-emerald-300 mb-1">✓ Your model files are safe</div>
+              <div className="text-sm text-white/80">
+                Model files in <code className="bg-black/30 px-1 py-0.5 rounded">/var/cortex/models</code> will NOT be deleted.
+                You can safely re-add this model later without re-downloading or re-transferring files.
+              </div>
+            </div>
+            <div className="text-xs text-white/60">
+              To permanently remove model files from disk, you must manually delete them from the filesystem.
+            </div>
           </div>
         }
-        confirmLabel={del.isPending ? 'Deleting…' : 'Delete'}
+        confirmLabel={del.isPending ? 'Deleting…' : 'Delete Configuration'}
         onConfirm={()=> deleteId!=null && del.mutate(deleteId)}
-        onClose={()=>{ setDeleteId(null); setPurgeCache(false); }}
+        onClose={()=>{ setDeleteId(null); }}
       />)}
 
       <TestResultsModal

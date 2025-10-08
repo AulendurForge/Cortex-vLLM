@@ -39,8 +39,10 @@ class ModelItem(BaseModel):
     ngl: Optional[int] = None
     tensor_split: Optional[str] = None
     batch_size: Optional[int] = None
+    ubatch_size: Optional[int] = None
     threads: Optional[int] = None
     context_size: Optional[int] = None
+    parallel_slots: Optional[int] = None
     rope_freq_base: Optional[float] = None
     rope_freq_scale: Optional[float] = None
     flash_attention: Optional[bool] = None
@@ -48,6 +50,8 @@ class ModelItem(BaseModel):
     no_mmap: Optional[bool] = None
     numa_policy: Optional[str] = None
     split_mode: Optional[str] = None
+    cache_type_k: Optional[str] = None
+    cache_type_v: Optional[str] = None
     # Runtime state
     state: str
     archived: bool
@@ -92,8 +96,10 @@ class CreateModelRequest(BaseModel):
     ngl: Optional[int] = None
     tensor_split: Optional[str] = None
     batch_size: Optional[int] = None
+    ubatch_size: Optional[int] = None
     threads: Optional[int] = None
     context_size: Optional[int] = None
+    parallel_slots: Optional[int] = None
     rope_freq_base: Optional[float] = None
     rope_freq_scale: Optional[float] = None
     flash_attention: Optional[bool] = None
@@ -101,6 +107,8 @@ class CreateModelRequest(BaseModel):
     no_mmap: Optional[bool] = None
     numa_policy: Optional[str] = None
     split_mode: Optional[str] = None
+    cache_type_k: Optional[str] = None
+    cache_type_v: Optional[str] = None
 
 
 class UpdateModelRequest(BaseModel):
@@ -130,6 +138,23 @@ class UpdateModelRequest(BaseModel):
     tokenizer: Optional[str] = None
     hf_config_path: Optional[str] = None
     hf_token: Optional[str] = None
+    # llama.cpp specific fields for updates
+    ngl: Optional[int] = None
+    tensor_split: Optional[str] = None
+    batch_size: Optional[int] = None
+    ubatch_size: Optional[int] = None
+    threads: Optional[int] = None
+    context_size: Optional[int] = None
+    parallel_slots: Optional[int] = None
+    rope_freq_base: Optional[float] = None
+    rope_freq_scale: Optional[float] = None
+    flash_attention: Optional[bool] = None
+    mlock: Optional[bool] = None
+    no_mmap: Optional[bool] = None
+    numa_policy: Optional[str] = None
+    split_mode: Optional[str] = None
+    cache_type_k: Optional[str] = None
+    cache_type_v: Optional[str] = None
 
 
 class BaseDirCfg(BaseModel):

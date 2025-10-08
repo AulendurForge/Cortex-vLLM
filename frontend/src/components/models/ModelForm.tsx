@@ -46,8 +46,10 @@ export type ModelFormValues = {
   ngl?: number;
   tensorSplit?: string;
   batchSize?: number;
+  ubatchSize?: number;
   threads?: number;
   contextSize?: number;
+  parallelSlots?: number;
   ropeFreqBase?: number;
   ropeFreqScale?: number;
   flashAttention?: boolean;
@@ -55,6 +57,8 @@ export type ModelFormValues = {
   noMmap?: boolean;
   numaPolicy?: string;
   splitMode?: string;
+  cacheTypeK?: string;
+  cacheTypeV?: string;
 };
 
 export function ModelForm({ onSubmit, onCancel, defaults, fetchBaseDir, saveBaseDir, listLocalFolders, submitLabel, modeLocked = false, onValuesChange }: {
@@ -101,16 +105,20 @@ export function ModelForm({ onSubmit, onCancel, defaults, fetchBaseDir, saveBase
     engineType: (defaults as any)?.engineType || defaults?.engineType || 'vllm',
     ngl: (defaults as any)?.ngl ?? 999,
     tensorSplit: (defaults as any)?.tensorSplit ?? '0.25,0.25,0.25,0.25',
-    batchSize: (defaults as any)?.batchSize ?? 512,
+    batchSize: (defaults as any)?.batchSize ?? 2048,
+    ubatchSize: (defaults as any)?.ubatchSize ?? 2048,
     threads: (defaults as any)?.threads ?? 32,
-    contextSize: (defaults as any)?.contextSize ?? 8192,
+    contextSize: (defaults as any)?.contextSize ?? 16384,
+    parallelSlots: (defaults as any)?.parallelSlots ?? 16,
     ropeFreqBase: (defaults as any)?.ropeFreqBase ?? undefined,
     ropeFreqScale: (defaults as any)?.ropeFreqScale ?? undefined,
     flashAttention: (defaults as any)?.flashAttention ?? true,
     mlock: (defaults as any)?.mlock ?? true,
-    noMmap: (defaults as any)?.noMmap ?? true,
+    noMmap: (defaults as any)?.noMmap ?? false,
     numaPolicy: (defaults as any)?.numaPolicy ?? 'isolate',
     splitMode: (defaults as any)?.splitMode ?? undefined,
+    cacheTypeK: (defaults as any)?.cacheTypeK ?? 'q8_0',
+    cacheTypeV: (defaults as any)?.cacheTypeV ?? 'q8_0',
   });
 
   const set = (k: keyof ModelFormValues, v: any) => setValues(prev => { 

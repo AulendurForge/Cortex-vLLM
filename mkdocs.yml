@@ -60,5 +60,7 @@ nav:
   - Contributing:
       - How to Contribute: contributing/how-to-contribute.md
       - Coding Standards: contributing/coding-standards.md
-      - ADRs: contributing/adr/README.md
+      - ADRs: 
+          - Overview: contributing/adr/README.md
+          - "ADR 001: Never Delete Model Files": contributing/adr/001-never-delete-model-files.md
 
