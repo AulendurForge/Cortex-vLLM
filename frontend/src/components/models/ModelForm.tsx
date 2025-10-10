@@ -21,6 +21,7 @@ export type ModelFormValues = {
   task: 'generate' | 'embed';
   dtype?: string;
   tpSize?: number;
+  selectedGpus?: number[];
   gpuMemoryUtilization?: number;
   maxModelLen?: number;
   maxNumBatchedTokens?: number;
@@ -59,6 +60,13 @@ export type ModelFormValues = {
   splitMode?: string;
   cacheTypeK?: string;
   cacheTypeV?: string;
+  // Repetition control parameters
+  repetitionPenalty?: number;
+  frequencyPenalty?: number;
+  presencePenalty?: number;
+  temperature?: number;
+  topK?: number;
+  topP?: number;
 };
 
 export function ModelForm({ onSubmit, onCancel, defaults, fetchBaseDir, saveBaseDir, listLocalFolders, submitLabel, modeLocked = false, onValuesChange }: {
@@ -81,6 +89,7 @@ export function ModelForm({ onSubmit, onCancel, defaults, fetchBaseDir, saveBase
     task: (defaults?.task as any) || 'generate',
     dtype: defaults?.dtype || 'auto',
     tpSize: defaults?.tpSize ?? 1,
+    selectedGpus: defaults?.selectedGpus ?? [0],
     gpuMemoryUtilization: defaults?.gpuMemoryUtilization ?? 0.9,
     maxModelLen: defaults?.maxModelLen ?? 8192,
     maxNumBatchedTokens: defaults?.maxNumBatchedTokens ?? 2048,
@@ -119,6 +128,13 @@ export function ModelForm({ onSubmit, onCancel, defaults, fetchBaseDir, saveBase
     splitMode: (defaults as any)?.splitMode ?? undefined,
     cacheTypeK: (defaults as any)?.cacheTypeK ?? 'q8_0',
     cacheTypeV: (defaults as any)?.cacheTypeV ?? 'q8_0',
+    // Repetition control parameters
+    repetitionPenalty: (defaults as any)?.repetitionPenalty ?? 1.2,
+    frequencyPenalty: (defaults as any)?.frequencyPenalty ?? 0.5,
+    presencePenalty: (defaults as any)?.presencePenalty ?? 0.5,
+    temperature: (defaults as any)?.temperature ?? 0.8,
+    topK: (defaults as any)?.topK ?? 40,
+    topP: (defaults as any)?.topP ?? 0.9,
   });
 
   const set = (k: keyof ModelFormValues, v: any) => setValues(prev => { 

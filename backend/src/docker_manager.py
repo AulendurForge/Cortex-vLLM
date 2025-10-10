@@ -177,6 +177,22 @@ def _build_command(m: Model) -> list[str]:
             cmd += ["--download-dir", "/root/.cache/huggingface"]
     except Exception:
         pass
+    
+    # Repetition control parameters (with optimal defaults)
+    repetition_penalty = getattr(m, 'repetition_penalty', None) or 1.2
+    frequency_penalty = getattr(m, 'frequency_penalty', None) or 0.5
+    presence_penalty = getattr(m, 'presence_penalty', None) or 0.5
+    temperature = getattr(m, 'temperature', None) or 0.8
+    top_k = getattr(m, 'top_k', None) or 40
+    top_p = getattr(m, 'top_p', None) or 0.9
+    
+    cmd += ["--repetition-penalty", str(repetition_penalty)]
+    cmd += ["--frequency-penalty", str(frequency_penalty)]
+    cmd += ["--presence-penalty", str(presence_penalty)]
+    cmd += ["--temperature", str(temperature)]
+    cmd += ["--top-k", str(top_k)]
+    cmd += ["--top-p", str(top_p)]
+    
     return cmd
 
 
@@ -241,6 +257,21 @@ def _build_llamacpp_command(m: Model) -> list[str]:
     # KV cache quantization for 50% memory reduction
     cmd += ["--cache-type-k", cache_type_k]
     cmd += ["--cache-type-v", cache_type_v]
+    
+    # Repetition control parameters (with optimal defaults)
+    repetition_penalty = getattr(m, 'repetition_penalty', None) or 1.2
+    frequency_penalty = getattr(m, 'frequency_penalty', None) or 0.5
+    presence_penalty = getattr(m, 'presence_penalty', None) or 0.5
+    temperature = getattr(m, 'temperature', None) or 0.8
+    top_k = getattr(m, 'top_k', None) or 40
+    top_p = getattr(m, 'top_p', None) or 0.9
+    
+    cmd += ["--repeat-penalty", str(repetition_penalty)]
+    cmd += ["--frequency-penalty", str(frequency_penalty)]
+    cmd += ["--presence-penalty", str(presence_penalty)]
+    cmd += ["--temp", str(temperature)]  # llama.cpp uses --temp, not --temperature
+    cmd += ["--top-k", str(top_k)]
+    cmd += ["--top-p", str(top_p)]
     
     return cmd
 
@@ -358,10 +389,38 @@ def start_llamacpp_container_for_model(m: Model) -> Tuple[str, int]:
         "NVIDIA_DRIVER_CAPABILITIES": "compute,utility",
     }
     
-    # Device requests for Docker API (used with nvidia runtime)
+    # GPU configuration for Docker API (used with nvidia runtime)
     device_requests = None
     if ngl > 0:
-        device_requests = [DeviceRequest(count=-1, capabilities=[["gpu"]])]
+        # Use selected_gpus if available, otherwise use all GPUs
+        selected_gpus = getattr(m, 'selected_gpus', None)
+        if selected_gpus:
+            try:
+                import json
+                # Handle both string and list types
+                if isinstance(selected_gpus, str):
+                    gpu_indices = json.loads(selected_gpus)
+                    # If the result is still a string, parse it again
+                    if isinstance(gpu_indices, str):
+                        gpu_indices = json.loads(gpu_indices)
+                else:
+                    gpu_indices = selected_gpus
+                if gpu_indices:
+                    # Create device request for specific GPUs
+                    device_ids = [str(gpu_id) for gpu_id in gpu_indices]
+                    device_requests = [DeviceRequest(device_ids=device_ids, capabilities=[["gpu"]])]
+                    # Update NVIDIA_VISIBLE_DEVICES to only show selected GPUs
+                    environment["NVIDIA_VISIBLE_DEVICES"] = ",".join(map(str, gpu_indices))
+                else:
+                    # No GPUs selected, use CPU mode
+                    ngl = 0
+            except Exception as e:
+                print(f"[docker_manager] DEBUG: Exception in GPU parsing: {e}", flush=True)
+                # Fallback to all GPUs if parsing fails
+                device_requests = [DeviceRequest(count=-1, capabilities=[["gpu"]])]
+        else:
+            # No selected_gpus, use all available GPUs
+            device_requests = [DeviceRequest(count=-1, capabilities=[["gpu"]])]
     
     # Health check - llama.cpp server responds to /v1/models endpoint
     healthcheck = {
@@ -469,8 +528,31 @@ def start_vllm_container_for_model(m: Model, hf_token: Optional[str] | None = No
     device_mode = (getattr(m, "device", None) or "cuda").lower()
     device_requests = None
     if device_mode != "cpu":
-        devreq = DeviceRequest(count=-1, capabilities=[["gpu"]])
-        device_requests = [devreq]
+        # Use selected_gpus if available, otherwise use all GPUs
+        selected_gpus = getattr(m, 'selected_gpus', None)
+        if selected_gpus:
+            try:
+                import json
+                # Handle both string and list types
+                if isinstance(selected_gpus, str):
+                    gpu_indices = json.loads(selected_gpus)
+                    # If the result is still a string, parse it again
+                    if isinstance(gpu_indices, str):
+                        gpu_indices = json.loads(gpu_indices)
+                else:
+                    gpu_indices = selected_gpus
+                if gpu_indices:
+                    # Create device request for specific GPUs
+                    device_requests = [DeviceRequest(device_ids=[str(gpu_id) for gpu_id in gpu_indices], capabilities=[["gpu"]])]
+                else:
+                    # No GPUs selected, use CPU mode
+                    device_mode = "cpu"
+            except (json.JSONDecodeError, ValueError):
+                # Fallback to all GPUs if parsing fails
+                device_requests = [DeviceRequest(count=-1, capabilities=[["gpu"]])]
+        else:
+            # No selected_gpus, use all available GPUs
+            device_requests = [DeviceRequest(count=-1, capabilities=[["gpu"]])]
 
     # NCCL/SHM defaults to improve multi-GPU stability inside containers
     try:

@@ -11,6 +11,8 @@ import { LogsViewer } from '../../../src/components/models/LogsViewer';
 import { ConfirmDialog } from '../../../src/components/Confirm';
 import { ResourceCalculatorModal } from '../../../src/components/models/ResourceCalculatorModal';
 import { TestResultsModal } from '../../../src/components/models/TestResultsModal';
+import { SaveRecipeDialog } from '../../../src/components/models/SaveRecipeDialog';
+import { MyRecipesModal } from '../../../src/components/models/MyRecipesModal';
 import { useUser } from '../../../src/providers/UserProvider';
 import { Tooltip } from '../../../src/components/Tooltip';
 import { useToast } from '../../../src/providers/ToastProvider';
@@ -32,6 +34,9 @@ export default function ModelsPage() {
   const [prefill, setPrefill] = React.useState<Partial<ModelFormValues> | null>(null);
   const [testingId, setTestingId] = React.useState<number | null>(null);
   const [testResult, setTestResult] = React.useState<any>(null);
+  const [saveRecipeOpen, setSaveRecipeOpen] = React.useState(false);
+  const [saveRecipeModelId, setSaveRecipeModelId] = React.useState<number | null>(null);
+  const [myRecipesOpen, setMyRecipesOpen] = React.useState(false);
 
   const list = useQuery({
     queryKey: ['models', isAdmin],
@@ -72,6 +77,7 @@ export default function ModelsPage() {
         task: payload.task,
         dtype: payload.dtype,
         tp_size: payload.tpSize,
+        selected_gpus: payload.selectedGpus,
         gpu_memory_utilization: payload.gpuMemoryUtilization,
         max_model_len: payload.maxModelLen,
         max_num_batched_tokens: payload.maxNumBatchedTokens,
@@ -111,6 +117,13 @@ export default function ModelsPage() {
             split_mode: payload.splitMode,
             cache_type_k: payload.cacheTypeK,
             cache_type_v: payload.cacheTypeV,
+            // Repetition control parameters
+            repetition_penalty: payload.repetitionPenalty,
+            frequency_penalty: payload.frequencyPenalty,
+            presence_penalty: payload.presencePenalty,
+            temperature: payload.temperature,
+            top_k: payload.topK,
+            top_p: payload.topP,
       };
       return await apiFetch('/admin/models', { method: 'POST', body: JSON.stringify(body) });
     },
@@ -192,6 +205,7 @@ export default function ModelsPage() {
         isAdmin ? (
           <div className="flex items-center gap-2">
             <Button onClick={()=>setCalcOpen(true)}>Resource calculator</Button>
+            <Button onClick={()=>setMyRecipesOpen(true)}>My Recipes</Button>
             <PrimaryButton onClick={()=>setOpen(true)}>Add Model</PrimaryButton>
           </div>
         ) : undefined
@@ -271,7 +285,9 @@ export default function ModelsPage() {
                     } />
                   </div>
                 </td>
-                {isAdmin && (<td>{m.tp_size ?? '-'}</td>)}
+                {isAdmin && (<td>{m.engine_type === 'llamacpp' && m.tensor_split ? 
+                  (m.tensor_split.split(',').length) : 
+                  (m.tp_size ?? '-')}</td>)}
                 {isAdmin && (<td>{m.dtype ?? '-'}</td>)}
                 <td>
                   <Badge className={
@@ -283,6 +299,16 @@ export default function ModelsPage() {
                 {isAdmin && (
                   <td className="text-right space-x-2">
                     <Button onClick={()=>setLogsFor(m.id)}>Logs</Button>
+                    <Button 
+                      onClick={()=>{
+                        setSaveRecipeModelId(m.id);
+                        setSaveRecipeOpen(true);
+                      }}
+                      className="bg-purple-500/20 border-purple-500/40 hover:bg-purple-500/30"
+                      title="Save this model's configuration as a recipe"
+                    >
+                      📝 Save Recipe
+                    </Button>
                     {m.state === 'running' && (
                       <Button 
                         onClick={()=>testModel.mutate(m.id)}
@@ -337,11 +363,23 @@ export default function ModelsPage() {
                 <td>{m.name}</td>
                 <td className="font-mono text-xs">{m.served_model_name}</td>
                 <td>{m.task}</td>
-                <td>{m.tp_size ?? '-'}</td>
+                <td>{m.engine_type === 'llamacpp' && m.tensor_split ? 
+                  (m.tensor_split.split(',').length) : 
+                  (m.tp_size ?? '-')}</td>
                 <td>{m.dtype ?? '-'}</td>
                 <td><Badge>{m.state}</Badge></td>
                 <td className="text-right space-x-2">
                   <Button onClick={()=>setLogsFor(m.id)}>Logs</Button>
+                  <Button 
+                    onClick={()=>{
+                      setSaveRecipeModelId(m.id);
+                      setSaveRecipeOpen(true);
+                    }}
+                    className="bg-purple-500/20 border-purple-500/40 hover:bg-purple-500/30"
+                    title="Save this model's configuration as a recipe"
+                  >
+                    📝 Save Recipe
+                  </Button>
                   <Button onClick={()=>setDeleteId(m.id)} className="bg-red-600/30 border border-red-500/40">Delete</Button>
                 </td>
               </tr>
@@ -409,6 +447,7 @@ export default function ModelsPage() {
             task: (m.task || 'generate'),
             dtype: m.dtype || 'auto',
             tpSize: m.tp_size ?? 1,
+            selectedGpus: m.selected_gpus ? JSON.parse(m.selected_gpus) : [0],
             gpuMemoryUtilization: m.gpu_memory_utilization ?? 0.9,
             maxModelLen: m.max_model_len ?? 8192,
             maxNumBatchedTokens: m.max_num_batched_tokens ?? (m.max_model_len ?? 8192),
@@ -438,6 +477,13 @@ export default function ModelsPage() {
             splitMode: (m as any).split_mode ?? undefined,
             cacheTypeK: (m as any).cache_type_k ?? 'q8_0',
             cacheTypeV: (m as any).cache_type_v ?? 'q8_0',
+            // Repetition control parameters
+            repetitionPenalty: (m as any).repetition_penalty ?? 1.2,
+            frequencyPenalty: (m as any).frequency_penalty ?? 0.5,
+            presencePenalty: (m as any).presence_penalty ?? 0.5,
+            temperature: (m as any).temperature ?? 0.8,
+            topK: (m as any).top_k ?? 40,
+            topP: (m as any).top_p ?? 0.9,
           } as any;
           let draft: ModelFormValues | null = null;
           return (
@@ -462,6 +508,7 @@ export default function ModelsPage() {
                     task: values.task,
                     dtype: values.dtype,
                     tp_size: values.tpSize,
+                    selected_gpus: values.selectedGpus,
                     gpu_memory_utilization: values.gpuMemoryUtilization,
                     max_model_len: values.maxModelLen,
                     max_num_batched_tokens: values.maxNumBatchedTokens,
@@ -495,9 +542,16 @@ export default function ModelsPage() {
                     mlock: values.mlock,
                     no_mmap: values.noMmap,
                     numa_policy: values.numaPolicy,
-                    split_mode: values.splitMode,
-                    cache_type_k: values.cacheTypeK,
-                    cache_type_v: values.cacheTypeV,
+            split_mode: values.splitMode,
+            cache_type_k: values.cacheTypeK,
+            cache_type_v: values.cacheTypeV,
+            // Repetition control parameters
+            repetition_penalty: values.repetitionPenalty,
+            frequency_penalty: values.frequencyPenalty,
+            presence_penalty: values.presencePenalty,
+            temperature: values.temperature,
+            top_k: values.topK,
+            top_p: values.topP,
                   };
                   apply.mutate({ id: configId, body });
                 }}
@@ -517,6 +571,7 @@ export default function ModelsPage() {
                       task: draft.task,
                       dtype: draft.dtype,
                       tp_size: draft.tpSize,
+                      selected_gpus: draft.selectedGpus,
                       gpu_memory_utilization: draft.gpuMemoryUtilization,
                       max_model_len: draft.maxModelLen,
                       max_num_batched_tokens: draft.maxNumBatchedTokens,
@@ -553,6 +608,13 @@ export default function ModelsPage() {
                       split_mode: draft.splitMode,
                       cache_type_k: draft.cacheTypeK,
                       cache_type_v: draft.cacheTypeV,
+                      // Repetition control parameters
+                      repetition_penalty: draft.repetitionPenalty,
+                      frequency_penalty: draft.frequencyPenalty,
+                      presence_penalty: draft.presencePenalty,
+                      temperature: draft.temperature,
+                      top_k: draft.topK,
+                      top_p: draft.topP,
                     }});
                     else if (m) apply.mutate({ id: configId!, body: {} });
                   }} disabled={apply.isPending}>Apply (restart)</PrimaryButton>
@@ -619,6 +681,97 @@ export default function ModelsPage() {
         result={testResult}
         modelName={testResult ? list.data?.find((m: any) => m.id === testingId)?.name : undefined}
       />
+
+      {isAdmin && saveRecipeModelId && (
+        <SaveRecipeDialog
+          open={saveRecipeOpen}
+          onClose={() => {
+            setSaveRecipeOpen(false);
+            setSaveRecipeModelId(null);
+          }}
+          onSuccess={() => {
+            qc.invalidateQueries({ queryKey: ['recipes'] });
+          }}
+          modelId={saveRecipeModelId}
+          modelName={list.data?.find((m: any) => m.id === saveRecipeModelId)?.name || 'Unknown Model'}
+          engineType={list.data?.find((m: any) => m.id === saveRecipeModelId)?.engine_type || 'vllm'}
+        />
+      )}
+
+      {isAdmin && (
+        <MyRecipesModal
+          open={myRecipesOpen}
+          onClose={() => setMyRecipesOpen(false)}
+          onSelectRecipe={async (recipe) => {
+            try {
+              // Fetch full recipe details
+              const recipeDetails = await apiFetch<any>(`/admin/recipes/${recipe.id}`);
+              
+              // Convert recipe to ModelFormValues
+              const formValues: Partial<ModelFormValues> = {
+                mode: recipeDetails.mode as 'online' | 'offline',
+                repoId: recipeDetails.repo_id || '',
+                localPath: recipeDetails.local_path || '',
+                name: `${recipeDetails.model_name} (from recipe)`,
+                servedModelName: recipeDetails.served_model_name,
+                task: recipeDetails.task as 'generate' | 'embed',
+                dtype: recipeDetails.dtype || 'auto',
+                tpSize: recipeDetails.tp_size ?? 1,
+                gpuMemoryUtilization: recipeDetails.gpu_memory_utilization ?? 0.9,
+                maxModelLen: recipeDetails.max_model_len ?? 8192,
+                maxNumBatchedTokens: recipeDetails.max_num_batched_tokens ?? (recipeDetails.max_model_len ?? 8192),
+                kvCacheDtype: recipeDetails.kv_cache_dtype || '',
+                quantization: recipeDetails.quantization || '',
+                blockSize: recipeDetails.block_size ?? undefined,
+                swapSpaceGb: recipeDetails.swap_space_gb ?? undefined,
+                enforceEager: recipeDetails.enforce_eager ?? true,
+                trustRemoteCode: false,
+                hfOffline: false,
+                tokenizer: recipeDetails.tokenizer || '',
+                hfConfigPath: recipeDetails.hf_config_path || '',
+                engineType: recipeDetails.engine_type as 'vllm' | 'llamacpp',
+                ngl: recipeDetails.ngl ?? 999,
+                tensorSplit: recipeDetails.tensor_split || '',
+                batchSize: recipeDetails.batch_size ?? 2048,
+                ubatchSize: recipeDetails.ubatch_size ?? 2048,
+                threads: recipeDetails.threads ?? 32,
+                contextSize: recipeDetails.context_size ?? 16384,
+                parallelSlots: recipeDetails.parallel_slots ?? 16,
+                ropeFreqBase: recipeDetails.rope_freq_base ?? undefined,
+                ropeFreqScale: recipeDetails.rope_freq_scale ?? undefined,
+                flashAttention: recipeDetails.flash_attention ?? true,
+                mlock: recipeDetails.mlock ?? true,
+                noMmap: recipeDetails.no_mmap ?? false,
+                numaPolicy: recipeDetails.numa_policy || 'isolate',
+                splitMode: recipeDetails.split_mode ?? undefined,
+                cacheTypeK: recipeDetails.cache_type_k ?? 'q8_0',
+                cacheTypeV: recipeDetails.cache_type_v ?? 'q8_0',
+                // Repetition control parameters
+                repetitionPenalty: recipeDetails.repetition_penalty ?? 1.2,
+                frequencyPenalty: recipeDetails.frequency_penalty ?? 0.5,
+                presencePenalty: recipeDetails.presence_penalty ?? 0.5,
+                temperature: recipeDetails.temperature ?? 0.8,
+                topK: recipeDetails.top_k ?? 40,
+                topP: recipeDetails.top_p ?? 0.9,
+              };
+              
+              // Set the prefilled values and open the model form
+              setPrefill(formValues);
+              setOpen(true);
+              
+              addToast({ 
+                title: `Recipe "${recipe.name}" loaded`, 
+                kind: 'success' 
+              });
+            } catch (error: any) {
+              addToast({ 
+                title: `Failed to load recipe: ${error?.message || 'Unknown error'}`, 
+                kind: 'error' 
+              });
+            }
+          }}
+        />
+      )}
     </section>
   );
 }

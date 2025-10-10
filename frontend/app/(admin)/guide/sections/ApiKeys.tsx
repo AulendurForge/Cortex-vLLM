@@ -6,10 +6,16 @@ import { useState, useEffect } from 'react';
 export default function ApiKeys() {
   const [hostIP, setHostIP] = useState<string>('YOUR-GATEWAY-LAN-IP');
 
-  // Detect host IP from browser location
+  // Detect host IP from environment variable or browser location
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      setHostIP(window.location.hostname);
+      // Use environment variable if available, otherwise fall back to browser hostname
+      const envHostIP = process.env.NEXT_PUBLIC_HOST_IP;
+      if (envHostIP && envHostIP !== 'localhost') {
+        setHostIP(envHostIP);
+      } else {
+        setHostIP(window.location.hostname);
+      }
     }
   }, []);
 

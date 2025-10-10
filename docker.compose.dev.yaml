@@ -28,6 +28,8 @@ services:
       INTERNAL_VLLM_API_KEY: dev-internal-token
       GATEWAY_DEV_ALLOW_ALL_KEYS: "true"
       CORS_ENABLED: "true"
+      # Pass detected host IP to container for CORS configuration
+      HOST_IP: ${HOST_IP:-localhost}
       # Dynamic CORS origins using detected host IP, plus localhost fallbacks
       CORS_ALLOW_ORIGINS: http://${HOST_IP:-localhost}:3001,http://localhost:3001,http://127.0.0.1:3001
       # Auto-bootstrap admin user on first startup (dev mode)
@@ -64,6 +66,8 @@ services:
       # Frontend automatically detects gateway URL from browser hostname
       # No NEXT_PUBLIC_GATEWAY_URL needed - uses dynamic detection
       NODE_ENV: development
+      # Override host IP detection for GUI display
+      NEXT_PUBLIC_HOST_IP: ${HOST_IP:-localhost}
     ports: ["${FRONTEND_PORT:-3001}:3001"]
     depends_on:
       - gateway

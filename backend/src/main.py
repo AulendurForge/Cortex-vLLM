@@ -12,6 +12,7 @@ from .routes.authn import router as authn_router
 from .routes.orgs import router as orgs_router
 from .routes.users import router as users_router
 from .routes.models import router as models_router
+from .routes.recipes import router as recipes_router
 from .middleware.ratelimit import check_rate_limit
 import httpx
 import asyncio
@@ -123,6 +124,7 @@ app.include_router(authn_router, prefix="/auth")
 app.include_router(orgs_router, prefix="/admin")
 app.include_router(users_router, prefix="/admin")
 app.include_router(models_router, prefix="/admin")
+app.include_router(recipes_router, prefix="/admin")
 
 
 # Shared resources: httpx client, redis

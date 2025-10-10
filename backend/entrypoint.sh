@@ -30,17 +30,23 @@ detect_container_host_ip() {
     echo "$best_ip"
 }
 
+# Check if HOST_IP is provided by Docker Compose, otherwise detect it
+if [[ -n "$HOST_IP" && "$HOST_IP" != "localhost" && "$HOST_IP" != "127.0.0.1" ]]; then
+    echo "[entrypoint] Using provided HOST_IP: $HOST_IP"
+    DETECTED_IP="$HOST_IP"
+else
+    echo "[entrypoint] HOST_IP not provided or is localhost, attempting to detect..."
+    DETECTED_IP=$(detect_container_host_ip)
+fi
+
 # Check if CORS_ALLOW_ORIGINS is set and contains actual IP or is just localhost
 CURRENT_CORS="${CORS_ALLOW_ORIGINS:-}"
 
 if [[ -z "$CURRENT_CORS" ]] || [[ "$CURRENT_CORS" == *"localhost"* && "$CURRENT_CORS" != *"192.168."* && "$CURRENT_CORS" != *"10."* ]]; then
     echo "[entrypoint] CORS appears to be localhost-only, attempting to enhance..."
     
-    # Try to detect a better IP
-    DETECTED_IP=$(detect_container_host_ip)
-    
     if [[ -n "$DETECTED_IP" && "$DETECTED_IP" != "localhost" && "$DETECTED_IP" != "127.0.0.1" ]]; then
-        echo "[entrypoint] Detected potential host IP: $DETECTED_IP"
+        echo "[entrypoint] Using detected host IP: $DETECTED_IP"
         
         # Enhance CORS to include detected IP
         if [[ -n "$CURRENT_CORS" ]]; then

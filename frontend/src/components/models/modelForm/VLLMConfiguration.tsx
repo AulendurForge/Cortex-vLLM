@@ -3,6 +3,9 @@
 import React from 'react';
 import { Tooltip } from '../../Tooltip';
 import { ModelFormValues } from '../ModelForm';
+import { GpuSelector } from './GpuSelector';
+import { useQuery } from '@tanstack/react-query';
+import apiFetch from '../../../lib/api-clients';
 
 interface VLLMConfigurationProps {
   values: ModelFormValues;
@@ -12,6 +15,25 @@ interface VLLMConfigurationProps {
 
 export function VLLMConfiguration({ values, gpuCount, onChange }: VLLMConfigurationProps) {
   if (values.engineType !== 'vllm') return null;
+
+  // Fetch GPU information
+  const { data: gpuInfo } = useQuery({
+    queryKey: ['gpu-info'],
+    queryFn: async () => {
+      try {
+        const gpus: any[] = await apiFetch('/admin/system/gpus');
+        return (Array.isArray(gpus) ? gpus : []).map((g: any) => ({ 
+          index: g.index, 
+          name: g.name, 
+          mem_total_mb: g.mem_total_mb, 
+          mem_used_mb: g.mem_used_mb 
+        }));
+      } catch {
+        return [];
+      }
+    },
+    staleTime: 30000, // Cache for 30 seconds
+  });
 
   return (
     <>
@@ -28,23 +50,17 @@ export function VLLMConfiguration({ values, gpuCount, onChange }: VLLMConfigurat
         </p>
       </label>
 
-      <label className="text-sm">TP Size
-        <input 
-          className="input mt-1" 
-          type="number" 
-          min={1} 
-          max={gpuCount || 8} 
-          value={values.tpSize ?? 1} 
-          onChange={(e) => onChange('tpSize', Number(e.target.value) || 1)} 
-        />
-        <p className="text-[11px] text-white/50 mt-1">
-          Tensor parallel size across GPUs. 
-          <Tooltip text="Also called '--tensor-parallel-size'. Must be <= number of visible GPUs. Example: 2 splits the model across 2 GPUs. Improves memory capacity and may lower per‑GPU memory pressure; throughput can improve up to a point but adds inter‑GPU communication overhead. Non‑power‑of‑two values (e.g., 3) work if you have that many GPUs." />
-        </p>
-        {(values.tpSize ?? 1) > (gpuCount || 0) && gpuCount > 0 && (
-          <div className="text-xs text-red-300 mt-1">⚠ TP size ({values.tpSize ?? 1}) exceeds available GPUs ({gpuCount})</div>
-        )}
-      </label>
+      <GpuSelector
+        selectedGpus={values.selectedGpus ?? [0]}
+        onGpuSelectionChange={(gpuIndices) => {
+          onChange('selectedGpus', gpuIndices);
+          // Update tpSize for backward compatibility
+          onChange('tpSize', gpuIndices.length);
+        }}
+        gpuInfo={gpuInfo}
+        engineType="vllm"
+        maxGpus={gpuInfo?.length || gpuCount || 8}
+      />
       
       <label className="text-sm">GPU Memory Util
         <input
@@ -98,6 +114,108 @@ export function VLLMConfiguration({ values, gpuCount, onChange }: VLLMConfigurat
           <Tooltip text="Hint to run without reaching Hugging Face. For offline installs ensure weights/tokenizer/config exist locally or in the HF cache." />
         </label>
       </div>
+
+      {/* Repetition Control */}
+      <details className="md:col-span-2 mt-2 border-l-2 border-purple-500 pl-4">
+        <summary className="cursor-pointer text-sm text-purple-400">Repetition Control</summary>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-2">
+          <label className="text-sm">Repetition Penalty
+            <input 
+              className="input mt-1" 
+              type="number" 
+              min={1.0} 
+              max={2.0} 
+              step={0.1} 
+              value={values.repetitionPenalty ?? 1.2} 
+              onChange={(e) => onChange('repetitionPenalty', Number(e.target.value) || 1.2)} 
+            />
+            <p className="text-[11px] text-white/50 mt-1">
+              Penalty for repeated tokens. 1.0 = no penalty, 1.2 = moderate penalty. 
+              <Tooltip text="Also called 'repetition_penalty'. Higher values reduce repetition but may make text less natural." />
+            </p>
+          </label>
+
+          <label className="text-sm">Frequency Penalty
+            <input 
+              className="input mt-1" 
+              type="number" 
+              min={-2.0} 
+              max={2.0} 
+              step={0.1} 
+              value={values.frequencyPenalty ?? 0.5} 
+              onChange={(e) => onChange('frequencyPenalty', Number(e.target.value) || 0.5)} 
+            />
+            <p className="text-[11px] text-white/50 mt-1">
+              Penalty based on token frequency. 0.0 = no penalty, 0.5 = moderate penalty. 
+              <Tooltip text="Also called 'frequency_penalty'. Reduces likelihood of frequently used tokens." />
+            </p>
+          </label>
+
+          <label className="text-sm">Presence Penalty
+            <input 
+              className="input mt-1" 
+              type="number" 
+              min={-2.0} 
+              max={2.0} 
+              step={0.1} 
+              value={values.presencePenalty ?? 0.5} 
+              onChange={(e) => onChange('presencePenalty', Number(e.target.value) || 0.5)} 
+            />
+            <p className="text-[11px] text-white/50 mt-1">
+              Penalty for tokens already present in context. 0.0 = no penalty, 0.5 = moderate penalty. 
+              <Tooltip text="Also called 'presence_penalty'. Encourages new topics and reduces repetition." />
+            </p>
+          </label>
+
+          <label className="text-sm">Temperature
+            <input 
+              className="input mt-1" 
+              type="number" 
+              min={0.0} 
+              max={2.0} 
+              step={0.1} 
+              value={values.temperature ?? 0.8} 
+              onChange={(e) => onChange('temperature', Number(e.target.value) || 0.8)} 
+            />
+            <p className="text-[11px] text-white/50 mt-1">
+              Sampling temperature. 0.0 = deterministic, 1.0 = balanced, 2.0 = very random. 
+              <Tooltip text="Also called 'temperature'. Controls randomness in token selection." />
+            </p>
+          </label>
+
+          <label className="text-sm">Top-K
+            <input 
+              className="input mt-1" 
+              type="number" 
+              min={1} 
+              max={100} 
+              step={1} 
+              value={values.topK ?? 40} 
+              onChange={(e) => onChange('topK', Number(e.target.value) || 40)} 
+            />
+            <p className="text-[11px] text-white/50 mt-1">
+              Limit sampling to top K tokens. 1 = greedy, 40 = balanced, 100 = diverse. 
+              <Tooltip text="Also called 'top_k'. Filters out low-probability tokens." />
+            </p>
+          </label>
+
+          <label className="text-sm">Top-P
+            <input 
+              className="input mt-1" 
+              type="number" 
+              min={0.0} 
+              max={1.0} 
+              step={0.05} 
+              value={values.topP ?? 0.9} 
+              onChange={(e) => onChange('topP', Number(e.target.value) || 0.9)} 
+            />
+            <p className="text-[11px] text-white/50 mt-1">
+              Nucleus sampling threshold. 0.1 = conservative, 0.9 = balanced, 1.0 = all tokens. 
+              <Tooltip text="Also called 'top_p'. Samples from tokens that make up this probability mass." />
+            </p>
+          </label>
+        </div>
+      </details>
 
       {/* Advanced vLLM Tuning */}
       <details className="md:col-span-2 mt-2">

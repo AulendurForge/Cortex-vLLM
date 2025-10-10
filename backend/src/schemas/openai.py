@@ -11,7 +11,7 @@ class ChatMessage(BaseModel):
     role: str
     content: Union[str, List[dict]]
     if ConfigDict:
-        model_config = ConfigDict(extra='forbid')
+        model_config = ConfigDict(extra='allow')
 
 
 class ChatCompletionRequest(BaseModel):
@@ -20,6 +20,12 @@ class ChatCompletionRequest(BaseModel):
     stream: Optional[bool] = False
     temperature: Optional[float] = None
     max_tokens: Optional[int] = Field(None, alias="max_tokens")
+    # Repetition control parameters
+    repetition_penalty: Optional[float] = None
+    frequency_penalty: Optional[float] = None
+    presence_penalty: Optional[float] = None
+    top_k: Optional[int] = None
+    top_p: Optional[float] = None
 
     @validator("messages")
     def ensure_messages_nonempty(cls, v):
@@ -27,7 +33,7 @@ class ChatCompletionRequest(BaseModel):
             raise ValueError("messages must not be empty")
         return v
     if ConfigDict:
-        model_config = ConfigDict(extra='forbid')
+        model_config = ConfigDict(extra='allow')
 
 
 class CompletionRequest(BaseModel):
@@ -36,13 +42,19 @@ class CompletionRequest(BaseModel):
     stream: Optional[bool] = False
     temperature: Optional[float] = None
     max_tokens: Optional[int] = None
+    # Repetition control parameters
+    repetition_penalty: Optional[float] = None
+    frequency_penalty: Optional[float] = None
+    presence_penalty: Optional[float] = None
+    top_k: Optional[int] = None
+    top_p: Optional[float] = None
     if ConfigDict:
-        model_config = ConfigDict(extra='forbid')
+        model_config = ConfigDict(extra='allow')
 
 
 class EmbeddingsRequest(BaseModel):
     model: str
     input: Union[str, List[str]]
     if ConfigDict:
-        model_config = ConfigDict(extra='forbid')
+        model_config = ConfigDict(extra='allow')
 

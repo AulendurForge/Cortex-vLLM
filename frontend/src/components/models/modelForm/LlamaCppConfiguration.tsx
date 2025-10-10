@@ -3,6 +3,9 @@
 import React from 'react';
 import { Tooltip } from '../../Tooltip';
 import { ModelFormValues } from '../ModelForm';
+import { GpuSelector } from './GpuSelector';
+import { useQuery } from '@tanstack/react-query';
+import apiFetch from '../../../lib/api-clients';
 
 interface LlamaCppConfigurationProps {
   values: ModelFormValues;
@@ -11,6 +14,25 @@ interface LlamaCppConfigurationProps {
 
 export function LlamaCppConfiguration({ values, onChange }: LlamaCppConfigurationProps) {
   if (values.engineType !== 'llamacpp') return null;
+
+  // Fetch GPU information
+  const { data: gpuInfo } = useQuery({
+    queryKey: ['gpu-info'],
+    queryFn: async () => {
+      try {
+        const gpus: any[] = await apiFetch('/admin/system/gpus');
+        return (Array.isArray(gpus) ? gpus : []).map((g: any) => ({ 
+          index: g.index, 
+          name: g.name, 
+          mem_total_mb: g.mem_total_mb, 
+          mem_used_mb: g.mem_used_mb 
+        }));
+      } catch {
+        return [];
+      }
+    },
+    staleTime: 30000, // Cache for 30 seconds
+  });
 
   return (
     <>
@@ -96,6 +118,108 @@ export function LlamaCppConfiguration({ values, onChange }: LlamaCppConfiguratio
         </p>
       </label>
 
+      {/* Repetition Control */}
+      <details className="md:col-span-2 mt-2 border-l-2 border-purple-500 pl-4">
+        <summary className="cursor-pointer text-sm text-purple-400">Repetition Control</summary>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-2">
+          <label className="text-sm">Repetition Penalty
+            <input 
+              className="input mt-1" 
+              type="number" 
+              min={1.0} 
+              max={2.0} 
+              step={0.1} 
+              value={values.repetitionPenalty ?? 1.2} 
+              onChange={(e) => onChange('repetitionPenalty', Number(e.target.value) || 1.2)} 
+            />
+            <p className="text-[11px] text-white/50 mt-1">
+              Penalty for repeated tokens. 1.0 = no penalty, 1.2 = moderate penalty. 
+              <Tooltip text="Also called '--repeat-penalty'. Higher values reduce repetition but may make text less natural." />
+            </p>
+          </label>
+
+          <label className="text-sm">Frequency Penalty
+            <input 
+              className="input mt-1" 
+              type="number" 
+              min={-2.0} 
+              max={2.0} 
+              step={0.1} 
+              value={values.frequencyPenalty ?? 0.5} 
+              onChange={(e) => onChange('frequencyPenalty', Number(e.target.value) || 0.5)} 
+            />
+            <p className="text-[11px] text-white/50 mt-1">
+              Penalty based on token frequency. 0.0 = no penalty, 0.5 = moderate penalty. 
+              <Tooltip text="Also called '--frequency-penalty'. Reduces likelihood of frequently used tokens." />
+            </p>
+          </label>
+
+          <label className="text-sm">Presence Penalty
+            <input 
+              className="input mt-1" 
+              type="number" 
+              min={-2.0} 
+              max={2.0} 
+              step={0.1} 
+              value={values.presencePenalty ?? 0.5} 
+              onChange={(e) => onChange('presencePenalty', Number(e.target.value) || 0.5)} 
+            />
+            <p className="text-[11px] text-white/50 mt-1">
+              Penalty for tokens already present in context. 0.0 = no penalty, 0.5 = moderate penalty. 
+              <Tooltip text="Also called '--presence-penalty'. Encourages new topics and reduces repetition." />
+            </p>
+          </label>
+
+          <label className="text-sm">Temperature
+            <input 
+              className="input mt-1" 
+              type="number" 
+              min={0.0} 
+              max={2.0} 
+              step={0.1} 
+              value={values.temperature ?? 0.8} 
+              onChange={(e) => onChange('temperature', Number(e.target.value) || 0.8)} 
+            />
+            <p className="text-[11px] text-white/50 mt-1">
+              Sampling temperature. 0.0 = deterministic, 1.0 = balanced, 2.0 = very random. 
+              <Tooltip text="Also called '--temp'. Controls randomness in token selection." />
+            </p>
+          </label>
+
+          <label className="text-sm">Top-K
+            <input 
+              className="input mt-1" 
+              type="number" 
+              min={1} 
+              max={100} 
+              step={1} 
+              value={values.topK ?? 40} 
+              onChange={(e) => onChange('topK', Number(e.target.value) || 40)} 
+            />
+            <p className="text-[11px] text-white/50 mt-1">
+              Limit sampling to top K tokens. 1 = greedy, 40 = balanced, 100 = diverse. 
+              <Tooltip text="Also called '--top-k'. Filters out low-probability tokens." />
+            </p>
+          </label>
+
+          <label className="text-sm">Top-P
+            <input 
+              className="input mt-1" 
+              type="number" 
+              min={0.0} 
+              max={1.0} 
+              step={0.05} 
+              value={values.topP ?? 0.9} 
+              onChange={(e) => onChange('topP', Number(e.target.value) || 0.9)} 
+            />
+            <p className="text-[11px] text-white/50 mt-1">
+              Nucleus sampling threshold. 0.1 = conservative, 0.9 = balanced, 1.0 = all tokens. 
+              <Tooltip text="Also called '--top-p'. Samples from tokens that make up this probability mass." />
+            </p>
+          </label>
+        </div>
+      </details>
+
       {/* Advanced llama.cpp configuration */}
       <details className="md:col-span-2 mt-2 border-l-2 border-green-500 pl-4">
         <summary className="cursor-pointer text-sm text-green-400">Advanced llama.cpp Configuration</summary>
@@ -115,18 +239,23 @@ export function LlamaCppConfiguration({ values, onChange }: LlamaCppConfiguratio
             </p>
           </label>
           
-          <label className="text-sm">Tensor Split
-            <input 
-              className="input mt-1" 
-              placeholder="0.25,0.25,0.25,0.25" 
-              value={values.tensorSplit || ''} 
-              onChange={(e) => onChange('tensorSplit', e.target.value)} 
-            />
-            <p className="text-[11px] text-white/50 mt-1">
-              GPU memory distribution (comma-separated ratios). Leave empty for auto. 
-              <Tooltip text="Example for 4 GPUs: 0.25,0.25,0.25,0.25 (equal split)" />
-            </p>
-          </label>
+          <GpuSelector
+            selectedGpus={values.selectedGpus ?? [0]}
+            onGpuSelectionChange={(gpuIndices) => {
+              onChange('selectedGpus', gpuIndices);
+              // Generate tensor_split string for backward compatibility
+              if (gpuIndices.length > 0) {
+                const ratio = (1.0 / gpuIndices.length).toFixed(2);
+                const tensorSplit = gpuIndices.map(() => ratio).join(',');
+                onChange('tensorSplit', tensorSplit);
+              } else {
+                onChange('tensorSplit', '');
+              }
+            }}
+            gpuInfo={gpuInfo}
+            engineType="llamacpp"
+            maxGpus={gpuInfo?.length || 4}
+          />
           
           <label className="text-sm">Batch Size
             <input 

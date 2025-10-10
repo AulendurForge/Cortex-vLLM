@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from typing import Optional, List, Any
+import json
 from ..auth import require_admin
 from ..config import get_settings
 from ..models import Model, ConfigKV
@@ -46,7 +47,9 @@ async def list_models(_: dict = Depends(require_admin)):
                 repo_id=getattr(r, 'repo_id', None),
                 local_path=getattr(r, 'local_path', None),
                 dtype=r.dtype,
-                tp_size=r.tp_size,
+                tp_size=r.tp_size if r.engine_type != 'llamacpp' else (
+                    len(r.tensor_split.split(',')) if r.tensor_split else None
+                ),
                 gpu_memory_utilization=r.gpu_memory_utilization,
                 max_model_len=r.max_model_len,
                 kv_cache_dtype=r.kv_cache_dtype,
@@ -67,6 +70,7 @@ async def list_models(_: dict = Depends(require_admin)):
                 tokenizer=getattr(r, 'tokenizer', None),
                 hf_config_path=getattr(r, 'hf_config_path', None),
                 engine_type=getattr(r, 'engine_type', 'vllm'),
+                selected_gpus=json.loads(getattr(r, 'selected_gpus', None) or '[]') if getattr(r, 'selected_gpus', None) else None,
                 ngl=getattr(r, 'ngl', None),
                 tensor_split=getattr(r, 'tensor_split', None),
                 batch_size=getattr(r, 'batch_size', None),
@@ -169,6 +173,7 @@ async def create_model(body: CreateModelRequest, _: dict = Depends(require_admin
             hf_config_path=body.hf_config_path,
             hf_token=body.hf_token,
             engine_type=body.engine_type,
+            selected_gpus=json.dumps(body.selected_gpus) if body.selected_gpus else None,
             ngl=body.ngl,
             tensor_split=body.tensor_split,
             batch_size=body.batch_size,
@@ -215,10 +220,15 @@ async def update_model(model_id: int, body: UpdateModelRequest, _: dict = Depend
         except Exception:
             pass
         # apply changes if provided (including optional hf_token)
-        for field, value in body.dict(exclude_unset=True).items():
+        update_data = body.dict(exclude_unset=True)
+        # Handle selected_gpus serialization
+        if 'selected_gpus' in update_data and update_data['selected_gpus'] is not None:
+            update_data['selected_gpus'] = json.dumps(update_data['selected_gpus'])
+        
+        for field, value in update_data.items():
             setattr(m, field, value)
         from sqlalchemy import update as _update
-        await session.execute(_update(Model).where(Model.id == model_id).values(**body.dict(exclude_unset=True)))
+        await session.execute(_update(Model).where(Model.id == model_id).values(**update_data))
         await session.commit()
         return {"status": "ok"}
 

@@ -20,7 +20,13 @@ export function HostIpDisplay({
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      setHostIP(window.location.hostname);
+      // Use environment variable if available, otherwise fall back to browser hostname
+      const envHostIP = process.env.NEXT_PUBLIC_HOST_IP;
+      if (envHostIP && envHostIP !== 'localhost') {
+        setHostIP(envHostIP);
+      } else {
+        setHostIP(window.location.hostname);
+      }
     }
   }, []);
 
@@ -174,7 +180,13 @@ export function useHostIP(): string {
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      setHostIP(window.location.hostname);
+      // Use environment variable if available, otherwise fall back to browser hostname
+      const envHostIP = process.env.NEXT_PUBLIC_HOST_IP;
+      if (envHostIP && envHostIP !== 'localhost') {
+        setHostIP(envHostIP);
+      } else {
+        setHostIP(window.location.hostname);
+      }
     }
   }, []);
 
