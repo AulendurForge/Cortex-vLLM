@@ -178,20 +178,21 @@ def _build_command(m: Model) -> list[str]:
     except Exception:
         pass
     
-    # Repetition control parameters (with optimal defaults)
-    repetition_penalty = getattr(m, 'repetition_penalty', None) or 1.2
-    frequency_penalty = getattr(m, 'frequency_penalty', None) or 0.5
-    presence_penalty = getattr(m, 'presence_penalty', None) or 0.5
-    temperature = getattr(m, 'temperature', None) or 0.8
-    top_k = getattr(m, 'top_k', None) or 40
-    top_p = getattr(m, 'top_p', None) or 0.9
-    
-    cmd += ["--repetition-penalty", str(repetition_penalty)]
-    cmd += ["--frequency-penalty", str(frequency_penalty)]
-    cmd += ["--presence-penalty", str(presence_penalty)]
-    cmd += ["--temperature", str(temperature)]
-    cmd += ["--top-k", str(top_k)]
-    cmd += ["--top-p", str(top_p)]
+    # Repetition control parameters (only for generation models, not embeddings)
+    if not ((getattr(m, "task", "") or "").lower().startswith("embed")):
+        repetition_penalty = getattr(m, 'repetition_penalty', None) or 1.2
+        frequency_penalty = getattr(m, 'frequency_penalty', None) or 0.5
+        presence_penalty = getattr(m, 'presence_penalty', None) or 0.5
+        temperature = getattr(m, 'temperature', None) or 0.8
+        top_k = getattr(m, 'top_k', None) or 40
+        top_p = getattr(m, 'top_p', None) or 0.9
+        
+        cmd += ["--repetition-penalty", str(repetition_penalty)]
+        cmd += ["--frequency-penalty", str(frequency_penalty)]
+        cmd += ["--presence-penalty", str(presence_penalty)]
+        cmd += ["--temperature", str(temperature)]
+        cmd += ["--top-k", str(top_k)]
+        cmd += ["--top-p", str(top_p)]
     
     return cmd
 
@@ -258,20 +259,21 @@ def _build_llamacpp_command(m: Model) -> list[str]:
     cmd += ["--cache-type-k", cache_type_k]
     cmd += ["--cache-type-v", cache_type_v]
     
-    # Repetition control parameters (with optimal defaults)
-    repetition_penalty = getattr(m, 'repetition_penalty', None) or 1.2
-    frequency_penalty = getattr(m, 'frequency_penalty', None) or 0.5
-    presence_penalty = getattr(m, 'presence_penalty', None) or 0.5
-    temperature = getattr(m, 'temperature', None) or 0.8
-    top_k = getattr(m, 'top_k', None) or 40
-    top_p = getattr(m, 'top_p', None) or 0.9
-    
-    cmd += ["--repeat-penalty", str(repetition_penalty)]
-    cmd += ["--frequency-penalty", str(frequency_penalty)]
-    cmd += ["--presence-penalty", str(presence_penalty)]
-    cmd += ["--temp", str(temperature)]  # llama.cpp uses --temp, not --temperature
-    cmd += ["--top-k", str(top_k)]
-    cmd += ["--top-p", str(top_p)]
+    # Repetition control parameters (only for generation models, not embeddings)
+    if not ((getattr(m, "task", "") or "").lower().startswith("embed")):
+        repetition_penalty = getattr(m, 'repetition_penalty', None) or 1.2
+        frequency_penalty = getattr(m, 'frequency_penalty', None) or 0.5
+        presence_penalty = getattr(m, 'presence_penalty', None) or 0.5
+        temperature = getattr(m, 'temperature', None) or 0.8
+        top_k = getattr(m, 'top_k', None) or 40
+        top_p = getattr(m, 'top_p', None) or 0.9
+        
+        cmd += ["--repeat-penalty", str(repetition_penalty)]
+        cmd += ["--frequency-penalty", str(frequency_penalty)]
+        cmd += ["--presence-penalty", str(presence_penalty)]
+        cmd += ["--temp", str(temperature)]  # llama.cpp uses --temp, not --temperature
+        cmd += ["--top-k", str(top_k)]
+        cmd += ["--top-p", str(top_p)]
     
     return cmd
 
