@@ -162,6 +162,20 @@ git clone <your-repo-url>
 cd Cortex-vLLM
 ```
 
+### Step 2.5: Prepare Models (Optional)
+
+If you want to use specific HuggingFace models, prepare them now:
+
+```bash
+# Install HuggingFace tools
+sudo apt-get install -y git-lfs
+git lfs install
+pip install huggingface_hub
+
+# Download models (see detailed guide)
+# 📖 Complete instructions: docs/models/huggingface-model-download.md
+```
+
 ### Step 3: Verify System Can Detect IP
 
 ```bash
@@ -791,6 +805,7 @@ If issues persist:
 - `docs/architecture/ip-detection.md` - Technical details on IP detection
 - `docs/architecture/configuration-flow.md` - How automatic configuration works
 - `docs/getting-started/configuration-checklist.md` - Validation checklist
+- `docs/models/huggingface-model-download.md` - Complete HuggingFace model download guide
 
 **Online Docs:**
 - Full documentation: https://aulendurforge.github.io/Cortex-vLLM/

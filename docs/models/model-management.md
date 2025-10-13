@@ -38,6 +38,11 @@ rm -rf /var/cortex/models/old-model-folder
 - `GET/PUT /admin/models/base-dir` to set host-visible models directory
 - `GET /admin/models/local-folders` and `GET /admin/models/inspect-folder` to assist offline model selection
 
+## Model Preparation
+- **📖 HuggingFace Models**: See `docs/models/huggingface-model-download.md` for complete guide on downloading HF models
+- **📖 GGUF Models**: See `docs/models/llamaCPP.md` for llama.cpp model preparation
+- **📖 vLLM Models**: See `docs/models/vllm.md` for vLLM-specific configuration
+
 ## Logs
 - `GET /admin/models/{id}/logs` returns recent container logs (for debugging)
 

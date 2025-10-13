@@ -19,6 +19,7 @@ Get started in minutes:
 - API → OpenAI-compatible
 - Operations → Deployments
 - Contributing → How to Contribute
+- Models → HuggingFace Model Download Guide
 
 ## Screenshots
 

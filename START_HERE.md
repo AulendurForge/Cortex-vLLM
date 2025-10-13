@@ -213,6 +213,7 @@ API Gateway: http://192.168.1.181:8084
 3. **Deploy your first model**
    - Login → Models → Create Model
    - Configure & Start
+   - 📖 **Need models?** See `docs/models/huggingface-model-download.md` for complete HF download guide
 
 4. **Set up backups**
    ```bash
@@ -242,6 +243,7 @@ make ip
 **Need Help?** 
 - Quick commands: `make help`
 - Complete guide: `docs/getting-started/admin-setup.md`
+- HuggingFace models: `docs/models/huggingface-model-download.md`
 - Validate config: `make validate`
 - Browse docs: `docs/` directory
 
