@@ -201,6 +201,9 @@ def _build_llamacpp_command(m: Model) -> list[str]:
     """Build llama-server command arguments for llama.cpp containers.
     Note: The official image has ENTRYPOINT ["/app/llama-server"], so we only pass arguments.
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"[docker_manager] DEBUG: Building command for model {m.id}")
     model_path = _resolve_llamacpp_model_path(m)
     
     # Don't include 'llama-server' - it's already in the ENTRYPOINT
@@ -274,6 +277,17 @@ def _build_llamacpp_command(m: Model) -> list[str]:
         cmd += ["--temp", str(temperature)]  # llama.cpp uses --temp, not --temperature
         cmd += ["--top-k", str(top_k)]
         cmd += ["--top-p", str(top_p)]
+    
+    # Special handling for GPT-OSS models to disable reasoning format
+    local_path = getattr(m, 'local_path', None) or ""
+    print(f"[docker_manager] DEBUG: Model {m.id} local_path: '{local_path}'", flush=True)
+    print(f"[docker_manager] DEBUG: Model {m.id} served_model_name: '{getattr(m, 'served_model_name', None)}'", flush=True)
+    print(f"[docker_manager] DEBUG: Model {m.id} name: '{getattr(m, 'name', None)}'", flush=True)
+    if "gpt-oss" in local_path.lower() or "huihui-ai" in local_path.lower():
+        print(f"[docker_manager] DEBUG: Adding --reasoning-format none for GPT-OSS model", flush=True)
+        cmd += ["--reasoning-format", "none"]
+    else:
+        print(f"[docker_manager] DEBUG: NOT adding --reasoning-format none (no match)", flush=True)
     
     return cmd
 

@@ -40,7 +40,10 @@ async def test_chat_model(base_url: str, model_name: str, internal_key: str = ""
     
     request_data = {
         "model": model_name,
-        "messages": [{"role": "user", "content": "Hello"}],
+        "messages": [
+            {"role": "system", "content": "You are a helpful assistant. Respond naturally to user messages."},
+            {"role": "user", "content": "Hello"}
+        ],
         "max_tokens": 50,
         "temperature": 0.7
     }

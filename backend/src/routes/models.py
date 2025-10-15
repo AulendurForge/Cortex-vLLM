@@ -475,6 +475,9 @@ async def model_dry_run(model_id: int, _: dict = Depends(require_admin)):
         
         try:
             if engine_type == 'llamacpp':
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.info(f"[models] DEBUG: Dry-run calling _build_llamacpp_command for model {m.id}")
                 from ..docker_manager import _build_llamacpp_command  # type: ignore
                 cmd = _build_llamacpp_command(m)
             else:

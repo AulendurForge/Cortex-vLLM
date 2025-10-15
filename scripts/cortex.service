@@ -1,0 +1,38 @@
+[Unit]
+Description=Cortex-vLLM Gateway and Admin UI
+Documentation=https://github.com/aulendurforge/Cortex-vLLM
+After=network.target docker.service
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=cortex
+Group=cortex
+WorkingDirectory=/opt/cortex-vllm
+ExecStart=/opt/cortex-vllm/scripts/cortex-startup.sh
+ExecStop=/opt/cortex-vllm/scripts/cortex-stop.sh
+ExecReload=/bin/kill -HUP $MAINPID
+TimeoutStartSec=300
+TimeoutStopSec=60
+Restart=on-failure
+RestartSec=10
+
+# Environment variables
+Environment=COMPOSE_FILE=/opt/cortex-vllm/docker.compose.dev.yaml
+Environment=LOG_FILE=/var/log/cortex-startup.log
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/cortex-vllm /var/log /var/lib/docker
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=32768
+
+[Install]
+WantedBy=multi-user.target

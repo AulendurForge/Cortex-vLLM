@@ -36,9 +36,37 @@ sudo apt-get install -y git curl wget
 sudo apt-get install -y git-lfs
 git lfs install
 
-# Python packages
+# Python packages (choose one method below)
+```
+
+**Option A: Virtual Environment (Recommended)**
+```bash
+# Create virtual environment
+python3 -m venv hf-env
+source hf-env/bin/activate
+
+# Install packages
 pip install --upgrade pip
 pip install huggingface_hub transformers torch
+
+# Verify installation
+pip list | grep huggingface
+```
+
+**Option B: System Packages (Ubuntu/Debian)**
+```bash
+# Install via apt (may be older versions)
+sudo apt-get install -y python3-huggingface-hub python3-transformers python3-torch
+```
+
+**Option C: pipx (For CLI tools)**
+```bash
+# Install pipx if not available
+sudo apt-get install -y pipx
+pipx ensurepath
+
+# Install huggingface_hub CLI
+pipx install huggingface_hub
 ```
 
 **Verify installation:**
@@ -46,7 +74,13 @@ pip install huggingface_hub transformers torch
 git --version          # Should show Git 2.0+
 git lfs version        # Should show Git LFS version
 python3 --version      # Should show Python 3.8+
-pip list | grep huggingface  # Should show huggingface_hub
+
+# For virtual environment:
+source hf-env/bin/activate
+pip list | grep huggingface
+
+# For pipx:
+huggingface-cli --help
 ```
 
 ---
@@ -109,8 +143,21 @@ chmod -R 755 /var/cortex/models/Llama-3-8B-Instruct
 
 ### Step 1: Install huggingface_hub
 
+**If using virtual environment:**
 ```bash
+source hf-env/bin/activate
 pip install huggingface_hub
+```
+
+**If using system packages:**
+```bash
+# Already installed via apt
+python3 -c "import huggingface_hub; print('huggingface_hub available')"
+```
+
+**If using pipx:**
+```bash
+pipx install huggingface_hub
 ```
 
 ### Step 2: Download Complete Model
@@ -170,11 +217,22 @@ if __name__ == "__main__":
 
 ### Step 3: Run the Download Script
 
+**If using virtual environment:**
 ```bash
 # Make script executable
 chmod +x download_model.py
 
-# Run the download
+# Activate environment and run
+source hf-env/bin/activate
+python3 download_model.py
+```
+
+**If using system packages:**
+```bash
+# Make script executable
+chmod +x download_model.py
+
+# Run directly
 python3 download_model.py
 ```
 
@@ -259,6 +317,11 @@ if __name__ == "__main__":
 
 ### Step 1: Download and Test Model
 
+**If using virtual environment:**
+```bash
+source hf-env/bin/activate
+```
+
 ```python
 #!/usr/bin/env python3
 """
@@ -339,17 +402,31 @@ export HUGGINGFACE_HUB_TOKEN="hf_your_token_here"
 
 **Option B: Login Command**
 ```bash
+# If using virtual environment:
+source hf-env/bin/activate
 huggingface-cli login
+
+# If using pipx:
+huggingface-cli login
+
 # Enter your token when prompted
 ```
 
 **Option C: Python Script**
 ```python
+# If using virtual environment:
+source hf-env/bin/activate
+
 from huggingface_hub import login
 login("hf_your_token_here")
 ```
 
 ### Step 3: Verify Access
+
+**If using virtual environment:**
+```bash
+source hf-env/bin/activate
+```
 
 ```python
 from huggingface_hub import list_models
@@ -377,6 +454,9 @@ export HUGGINGFACE_HUB_TOKEN="hf_your_token_here"
 mkdir -p ./offline_models
 
 # Download models you need
+# If using virtual environment:
+source hf-env/bin/activate
+
 python3 -c "
 from huggingface_hub import snapshot_download
 import os
@@ -586,7 +666,30 @@ sudo chown -R $USER:$USER /var/cortex/models/
 chmod -R 755 /var/cortex/models/
 ```
 
-#### Issue 5: "CUDA out of memory" when testing
+#### Issue 5: "externally-managed-environment" error (Ubuntu 24.04+)
+
+**Cause**: Ubuntu 24.04+ blocks system-wide pip installs (PEP 668)
+
+**Solution**:
+```bash
+# Option 1: Use virtual environment (recommended)
+python3 -m venv hf-env
+source hf-env/bin/activate
+pip install --upgrade pip
+pip install huggingface_hub transformers
+
+# Option 2: Use system packages
+sudo apt-get install -y python3-huggingface-hub python3-transformers
+
+# Option 3: Use pipx for CLI tools
+sudo apt-get install -y pipx
+pipx install huggingface_hub
+
+# Option 4: Override (not recommended)
+pip install --break-system-packages huggingface_hub
+```
+
+#### Issue 6: "CUDA out of memory" when testing
 
 **Cause**: Model too large for available GPU memory
 
@@ -652,12 +755,18 @@ du -sh /var/cortex/models/*
 # Install dependencies
 sudo apt-get install -y git-lfs
 git lfs install
+
+# Create virtual environment
+python3 -m venv hf-env
+source hf-env/bin/activate
+pip install --upgrade pip
 pip install huggingface_hub transformers
 
 # Set up authentication (get token from https://huggingface.co/settings/tokens)
 export HUGGINGFACE_HUB_TOKEN="hf_your_token_here"
 
 # Download model
+source hf-env/bin/activate
 python3 -c "
 from huggingface_hub import snapshot_download
 snapshot_download(
@@ -697,6 +806,12 @@ MODELS=(
 )
 
 mkdir -p /var/cortex/models
+
+# Create virtual environment
+python3 -m venv hf-env
+source hf-env/bin/activate
+pip install --upgrade pip
+pip install huggingface_hub
 
 for model in "${MODELS[@]}"; do
     echo "Downloading $model..."
