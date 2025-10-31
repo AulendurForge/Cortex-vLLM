@@ -256,6 +256,7 @@ async def delete_model(model_id: int, _: dict = Depends(require_admin)):
     
     To remove a model configuration:
     - The database record is deleted
+    - Associated recipes are also deleted (cascade)
     - The container is stopped (if running)
     - Model files remain on disk untouched
     
@@ -279,11 +280,23 @@ async def delete_model(model_id: int, _: dict = Depends(require_admin)):
                 unregister_model_endpoint(m.served_model_name)
         except Exception:
             pass
+        # Delete associated recipes first to avoid foreign key constraint violations
+        recipes_deleted = 0
+        try:
+            from ..models import Recipe
+            result = await session.execute(delete(Recipe).where(Recipe.model_id == model_id))
+            recipes_deleted = result.rowcount if hasattr(result, 'rowcount') else 0
+        except Exception:
+            # Best effort - continue with model deletion even if recipe deletion fails
+            pass
         # Delete database record only - NEVER delete model files from disk
         # This protects manually-placed offline models from accidental deletion
         await session.execute(delete(Model).where(Model.id == model_id))
         await session.commit()
-        return {"status": "deleted", "files_preserved": True, "note": "Model files remain on disk - delete manually if needed"}
+        msg = "Model files remain on disk - delete manually if needed"
+        if recipes_deleted > 0:
+            msg = f"{recipes_deleted} associated recipe(s) also deleted. " + msg
+        return {"status": "deleted", "files_preserved": True, "recipes_deleted": recipes_deleted, "note": msg}
 
 def _handle_multipart_gguf_merge(m: Model) -> None:
     """

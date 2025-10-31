@@ -35,6 +35,12 @@ stress_test_env/
 *stress_test*.log
 cortex_stress_test_results/
 
+# Offline deployment packages
+cortex-offline-images/
+offline-images/
+*.tar
+!docs/**/*.tar
+
 # Internal planning docs
 plans/*
 *Plan.md
@@ -45,4 +51,5 @@ cortexUpgrade*.md
 *_FIX.md
 *_SUMMARY.md
 *_ENHANCEMENTS.md
-security_review/*
+
+# Note: security_review/ is now tracked in version control for compliance

@@ -678,3 +678,111 @@ async def system_host_trends(minutes: int = 15, step_s: int = 15, settings = Dep
 async def system_capabilities(settings = Depends(get_settings), _: dict = Depends(require_admin)):
     """Detect system capabilities and monitoring provider status."""
     return await get_system_capabilities(settings)
+
+
+@router.get("/system/docker-images")
+async def list_docker_images(_: dict = Depends(require_admin)):
+    """List Docker image cache status for offline deployment readiness.
+    
+    Returns status of required base images (vLLM, llama.cpp, infrastructure).
+    Useful for verifying offline deployment preparation.
+    """
+    from ..docker_manager import check_image_availability
+    import docker
+    
+    settings = get_settings()
+    
+    # Check core engine images
+    vllm_available, vllm_msg, vllm_details = check_image_availability('vllm')
+    llamacpp_available, llamacpp_msg, llamacpp_details = check_image_availability('llamacpp')
+    
+    # Check infrastructure images (best-effort)
+    cli = docker.from_env()
+    infrastructure = []
+    
+    infra_images = [
+        ("python:3.11-slim", "Backend runtime"),
+        ("node:18-alpine", "Frontend runtime"),
+        ("postgres:16", "Database"),
+        ("redis:7", "Cache/rate limiting"),
+        ("prom/prometheus:v2.47.0", "Metrics collection"),
+    ]
+    
+    for img_name, purpose in infra_images:
+        try:
+            img = cli.images.get(img_name)
+            size_mb = round(img.attrs.get("Size", 0) / (1024 * 1024), 2)
+            infrastructure.append({
+                "name": img_name,
+                "cached": True,
+                "size_mb": size_mb,
+                "purpose": purpose,
+            })
+        except docker.errors.ImageNotFound:
+            infrastructure.append({
+                "name": img_name,
+                "cached": False,
+                "purpose": purpose,
+                "warning": "Not cached - may require download"
+            })
+    
+    # Overall status
+    all_critical_cached = vllm_available and llamacpp_available
+    offline_ready = all_critical_cached and all(i["cached"] for i in infrastructure)
+    
+    return {
+        "offline_mode": settings.OFFLINE_MODE,
+        "offline_ready": offline_ready,
+        "engines": {
+            "vllm": vllm_details,
+            "llamacpp": llamacpp_details,
+        },
+        "infrastructure": infrastructure,
+        "summary": {
+            "critical_images_cached": all_critical_cached,
+            "total_images_checked": 2 + len(infrastructure),
+            "cached_count": sum([
+                1 if vllm_details.get("cached") else 0,
+                1 if llamacpp_details.get("cached") else 0,
+                sum(1 for i in infrastructure if i.get("cached"))
+            ]),
+        },
+        "recommendations": _get_offline_recommendations(
+            vllm_details.get("cached", False),
+            llamacpp_details.get("cached", False),
+            infrastructure,
+            settings.OFFLINE_MODE
+        )
+    }
+
+
+def _get_offline_recommendations(vllm_cached: bool, llamacpp_cached: bool, infra: list, offline_mode: bool) -> list[str]:
+    """Generate recommendations for offline deployment preparation."""
+    recs = []
+    
+    if not vllm_cached or not llamacpp_cached:
+        recs.append(
+            "Critical engine images missing. Run 'make prepare-offline' on an internet-connected "
+            "machine, then transfer and load the package."
+        )
+    
+    missing_infra = [i for i in infra if not i.get("cached")]
+    if missing_infra:
+        recs.append(
+            f"{len(missing_infra)} infrastructure image(s) not cached. "
+            f"Use 'make prepare-offline' to download all required images."
+        )
+    
+    if not offline_mode and (not vllm_cached or not llamacpp_cached):
+        recs.append(
+            "System is in online mode. Images will be pulled automatically when needed, "
+            "but this requires internet access and may take 5-15 minutes per image."
+        )
+    
+    if vllm_cached and llamacpp_cached and not missing_infra:
+        recs.append(
+            "✓ All critical images cached. System is ready for offline operation. "
+            "Set OFFLINE_MODE=True to prevent internet access."
+        )
+    
+    return recs

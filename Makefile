@@ -492,3 +492,29 @@ version: ## Show version information
 	@docker --version
 	@docker compose version
 
+# ============================================================================
+# Offline/Air-Gapped Deployment
+# ============================================================================
+
+prepare-offline: ## Download and package all Docker images for offline deployment
+	@echo "$(COLOR_BOLD)Preparing offline deployment package...$(COLOR_RESET)"
+	@bash scripts/prepare-offline-deployment.sh
+	@echo ""
+	@echo "$(COLOR_GREEN)✓ Offline package ready$(COLOR_RESET)"
+	@echo ""
+	@echo "Transfer cortex-offline-images/ to your offline machine"
+
+load-offline: ## Load Docker images from offline package
+	@echo "$(COLOR_BOLD)Loading offline Docker images...$(COLOR_RESET)"
+	@bash scripts/load-offline-deployment.sh
+
+verify-offline: ## Verify all required images are cached for offline operation
+	@echo "$(COLOR_BOLD)Verifying offline readiness...$(COLOR_RESET)"
+	@bash scripts/verify-offline-images.sh
+
+export-images: prepare-offline ## Alias for prepare-offline
+
+import-images: load-offline ## Alias for load-offline
+
+offline-status: verify-offline ## Alias for verify-offline
+

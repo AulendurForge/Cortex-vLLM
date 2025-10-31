@@ -58,11 +58,19 @@ class Settings(BaseSettings):
     # Host paths (used when creating vLLM containers via Docker SDK)
     CORTEX_MODELS_DIR_HOST: str | None = None
     HF_CACHE_DIR_HOST: str | None = None
-    VLLM_IMAGE: str = "vllm/vllm-openai:latest"
+    # Docker image versions (pinned for reproducibility and offline compatibility)
+    # Update these versions periodically, then run 'make prepare-offline' to cache
+    VLLM_IMAGE: str = "vllm/vllm-openai:latest"  # TODO: Pin to specific version (e.g., v0.6.3)
     # llama.cpp settings
     # Use official llama.cpp server with CUDA support
     # The 'server-cuda' tag includes CUDA-compiled llama-server binary
-    LLAMACPP_IMAGE: str = "ghcr.io/ggml-org/llama.cpp:server-cuda"
+    LLAMACPP_IMAGE: str = "ghcr.io/ggml-org/llama.cpp:server-cuda"  # TODO: Pin specific build
+    
+    # Offline/Air-gapped deployment settings
+    OFFLINE_MODE: bool = False  # Set True to prevent internet access for image pulls
+    OFFLINE_MODE_AUTO_DETECT: bool = True  # Auto-detect network availability
+    REQUIRE_IMAGE_PRECACHE: bool = False  # Strict mode: fail if image not locally cached
+    IMAGE_PULL_TIMEOUT: int = 600  # Seconds to wait for image pull (10 minutes)
     LLAMACPP_GEN_URLS: str = ""
     LLAMACPP_DEFAULT_NGL: int = 999
     LLAMACPP_DEFAULT_BATCH_SIZE: int = 2048  # Increased from 512 for better throughput

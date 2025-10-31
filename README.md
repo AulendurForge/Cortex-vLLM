@@ -25,6 +25,28 @@ OpenAI-compatible gateway and admin UI for running vLLM and llama.cpp inference 
 
 **Just run `make quick-start` and you're done!**
 
+## 🔒 Offline/Air-Gapped Deployment
+
+**Cortex fully supports offline operation** for air-gapped, classified, or restricted networks!
+
+**On internet-connected machine**:
+```bash
+make prepare-offline  # Download all Docker images (~15-20 GB)
+```
+
+**Transfer to offline machine, then**:
+```bash
+make load-offline     # Load images from package
+make verify-offline   # Verify readiness
+make quick-start      # Deploy completely offline
+```
+
+✅ No internet required after initial package preparation  
+✅ Fully compliant with air-gap requirements (DoD, ITAR, etc.)  
+✅ Fast deployment (no download wait times)  
+
+**See**: `OFFLINE_DEPLOYMENT_QUICKSTART.md` for step-by-step guide or `docs/operations/offline-deployment.md` for full documentation.
+
 ## Documentation
 
 **📚 Quick Start**:

@@ -3,23 +3,185 @@ from __future__ import annotations
 import docker
 import os
 import re
+import logging
 from docker.models.containers import Container
 from docker.types import DeviceRequest
 from typing import Optional, Tuple
 from .config import get_settings
 from .models import Model
 
+logger = logging.getLogger(__name__)
+
+
+class OfflineImageUnavailableError(Exception):
+    """Raised when Docker image is not available locally and system is in offline mode."""
+    pass
+
 
 def _client() -> docker.DockerClient:
     return docker.from_env()
 
 
+def _is_network_available() -> bool:
+    """Check if internet connectivity is available.
+    
+    Returns:
+        bool: True if network is available, False otherwise
+    """
+    import socket
+    try:
+        # Try to resolve Docker Hub registry
+        socket.create_connection(("registry-1.docker.io", 443), timeout=3)
+        return True
+    except OSError:
+        return False
+
+
 def _ensure_image(image: str) -> None:
+    """Ensure Docker image is available locally.
+    
+    Behavior depends on offline mode configuration:
+    - OFFLINE_MODE=True: Only check local cache, never pull
+    - OFFLINE_MODE=False + Auto-detect: Pull if needed and network available
+    - REQUIRE_IMAGE_PRECACHE=True: Always fail if not cached (strict offline)
+    
+    Args:
+        image: Full image name with tag (e.g., "vllm/vllm-openai:v0.6.3")
+        
+    Raises:
+        OfflineImageUnavailableError: When image unavailable in offline mode
+        docker.errors.DockerException: When pull fails
+    """
+    settings = get_settings()
     cli = _client()
+    
+    # First, check if image exists locally
     try:
         cli.images.get(image)
+        logger.info(f"Using cached Docker image: {image}")
+        return
     except docker.errors.ImageNotFound:
+        logger.debug(f"Image {image} not found in local cache")
+    
+    # Image not cached - determine if we can/should pull
+    offline_mode_active = settings.OFFLINE_MODE
+    
+    # Auto-detect offline mode if enabled
+    if not offline_mode_active and settings.OFFLINE_MODE_AUTO_DETECT:
+        if not _is_network_available():
+            logger.warning("Network unavailable - auto-enabling offline mode for this operation")
+            offline_mode_active = True
+    
+    # Check strict precache requirement
+    if settings.REQUIRE_IMAGE_PRECACHE or offline_mode_active:
+        # Cannot pull - fail with helpful message
+        error_msg = (
+            f"Docker image '{image}' is not available locally.\n\n"
+        )
+        
+        if offline_mode_active:
+            error_msg += "System is in OFFLINE MODE - cannot download from internet.\n\n"
+        else:
+            error_msg += "REQUIRE_IMAGE_PRECACHE is enabled - only cached images allowed.\n\n"
+        
+        error_msg += (
+            "To resolve this issue:\n"
+            "─────────────────────────────────────────────────────────────\n"
+            "Option 1: Load image from offline package\n"
+            "  1. On an internet-connected machine, run:\n"
+            f"     make prepare-offline\n"
+            "  2. Transfer cortex-offline-images/ directory to this machine\n"
+            "  3. Load images:\n"
+            "     make load-offline\n\n"
+            "Option 2: Load individual image\n"
+            "  1. On an internet-connected machine:\n"
+            f"     docker pull {image}\n"
+            f"     docker save -o cortex-image.tar {image}\n"
+            "  2. Transfer cortex-image.tar to this machine\n"
+            "  3. Load:\n"
+            "     docker load -i cortex-image.tar\n\n"
+            "Option 3: Disable offline mode (if network available)\n"
+            "  - Set OFFLINE_MODE=False in backend/.env\n"
+            "  - Restart: make restart\n"
+            "─────────────────────────────────────────────────────────────"
+        )
+        
+        raise OfflineImageUnavailableError(error_msg)
+    
+    # Online mode - attempt pull
+    logger.warning(
+        f"Image {image} not found locally. Pulling from registry "
+        f"(this may take 5-15 minutes and requires internet access)..."
+    )
+    
+    try:
+        # Pull image (Docker SDK handles authentication from daemon config)
         cli.images.pull(image)
+        logger.info(f"Successfully pulled {image}")
+    except docker.errors.APIError as e:
+        error_str = str(e).lower()
+        if "connection" in error_str or "network" in error_str or "timeout" in error_str:
+            raise OfflineImageUnavailableError(
+                f"Cannot pull image {image} - network error.\n\n"
+                f"The system may be offline or the registry is unreachable.\n\n"
+                f"To resolve:\n"
+                f"1. Check internet connectivity\n"
+                f"2. Verify Docker can reach registry\n"
+                f"3. Or pre-load image: docker load -i <image.tar>\n"
+                f"4. Or enable offline mode: OFFLINE_MODE=True"
+            ) from e
+        raise
+
+
+def check_image_availability(engine_type: str) -> tuple[bool, str, dict]:
+    """Check if required Docker image is available locally.
+    
+    Args:
+        engine_type: 'vllm' or 'llamacpp'
+        
+    Returns:
+        Tuple of (is_available: bool, status_message: str, details: dict)
+    """
+    settings = get_settings()
+    image = settings.LLAMACPP_IMAGE if engine_type == 'llamacpp' else settings.VLLM_IMAGE
+    cli = _client()
+    
+    try:
+        img = cli.images.get(image)
+        size_mb = round(img.attrs.get("Size", 0) / (1024 * 1024), 2)
+        created = img.attrs.get("Created", "unknown")
+        
+        details = {
+            "image": image,
+            "cached": True,
+            "size_mb": size_mb,
+            "created": created,
+            "tags": img.tags,
+        }
+        
+        message = f"Image {image} is cached locally ({size_mb} MB)"
+        return True, message, details
+        
+    except docker.errors.ImageNotFound:
+        details = {
+            "image": image,
+            "cached": False,
+            "offline_mode": settings.OFFLINE_MODE,
+        }
+        
+        if settings.OFFLINE_MODE:
+            message = (
+                f"Image {image} not available locally. "
+                f"System is in OFFLINE_MODE. Please pre-load image."
+            )
+            return False, message, details
+        else:
+            message = (
+                f"Image {image} not cached. Will pull from registry when starting model "
+                f"(requires internet, 5-15 min download)."
+            )
+            # Available but requires download
+            return True, message, details
 
 
 def _build_command(m: Model) -> list[str]:
