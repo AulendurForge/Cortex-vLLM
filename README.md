@@ -59,7 +59,7 @@ make quick-start      # Deploy completely offline
 - Local docs: Browse the `docs/` directory for comprehensive guides
   - Getting Started: Setup, configuration, admin guides
   - Architecture: System design, IP detection, configuration flow
-  - Models: vLLM, llama.cpp, engine comparison
+  - Models: HuggingFace download guide, vLLM, llama.cpp, engine comparison
   - Operations: Makefile guide, deployment, scaling
   - API: OpenAI-compatible and admin endpoints
   - Security: Security posture and threat model
@@ -276,6 +276,8 @@ docker compose -f docker.compose.dev.yaml up -d --build gateway
 ```
 
 For local dev and advanced deployment, see the Docs → Getting Started.
+
+**📖 Need to download HuggingFace models?** See `docs/models/huggingface-model-download.md` for complete instructions.
 
 ## Contributing
 Please see the docs (Contributing) for local setup, coding standards, and PR guidelines.

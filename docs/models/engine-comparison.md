@@ -836,4 +836,5 @@ llama.cpp (GPT-OSS 120B):
 - llama.cpp: See `llamaCPP.md` (in this directory)
 - Model Management: See `model-management.md` (in this directory)
 - Engine Research: See `engine-research.md` (in this directory)
+- HuggingFace Models: See `huggingface-model-download.md` (in this directory)
 

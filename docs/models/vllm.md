@@ -413,6 +413,9 @@ Cortex does:
 - Sufficient disk space for model downloads
 - HF token for gated models (Llama 3, etc.)
 
+**📖 For detailed HuggingFace download instructions, see:**
+- `docs/models/huggingface-model-download.md` - Complete guide for downloading HF models
+
 ### Offline Mode (Local Files)
 
 **Use case**: Air-gapped, pre-downloaded models
@@ -441,6 +444,9 @@ Cortex does:
 ├─ tokenizer_config.json
 └─ special_tokens_map.json
 ```
+
+**📖 For detailed offline model preparation instructions, see:**
+- `docs/models/huggingface-model-download.md` - Complete guide for downloading and preparing HF models for offline use
 
 ---
 
