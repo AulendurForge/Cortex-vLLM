@@ -12,6 +12,7 @@ def _get_session() -> Optional[object]:
 from ..models import APIKey, User
 from ..crypto import generate_api_key, hash_key
 from ..auth import require_user_session, require_admin
+from ..utils.ip_utils import ensure_host_ip_in_allowlist
 
 router = APIRouter()
 
@@ -161,11 +162,13 @@ async def create_my_key(body: CreateMyKeyRequest, user = Depends(require_user_se
         raise HTTPException(status_code=503, detail="Database not ready")
     token, prefix = generate_api_key()
     hashed = hash_key(token)
+    # Automatically include host IP in allowlist if allowlist is provided
+    final_allowlist = ensure_host_ip_in_allowlist(body.ip_allowlist)
     async with SessionLocal() as session:
         u = (await session.execute(select(User).where(User.username == user["username"])) ).scalar_one_or_none()
         if not u:
             raise HTTPException(status_code=401, detail="unauthenticated")
-        rec = APIKey(prefix=prefix, hash=hashed, scopes=body.scopes, expires_at=body.expires_at, ip_allowlist=body.ip_allowlist, user_id=u.id, org_id=u.org_id)
+        rec = APIKey(prefix=prefix, hash=hashed, scopes=body.scopes, expires_at=body.expires_at, ip_allowlist=final_allowlist, user_id=u.id, org_id=u.org_id)
         session.add(rec)
         await session.commit()
         await session.refresh(rec)
@@ -179,8 +182,10 @@ async def create_key(body: CreateKeyRequest):
         raise HTTPException(status_code=503, detail="Database not ready")
     token, prefix = generate_api_key()
     hashed = hash_key(token)
+    # Automatically include host IP in allowlist if allowlist is provided
+    final_allowlist = ensure_host_ip_in_allowlist(body.ip_allowlist)
     async with SessionLocal() as session:
-        rec = APIKey(prefix=prefix, hash=hashed, scopes=body.scopes, expires_at=body.expires_at, ip_allowlist=body.ip_allowlist)
+        rec = APIKey(prefix=prefix, hash=hashed, scopes=body.scopes, expires_at=body.expires_at, ip_allowlist=final_allowlist)
         # attribution (optional)
         try:
             if body.user_id is not None:

@@ -198,9 +198,15 @@ export default function KeysPage() {
           Expires At (ISO)
           <input name="expires_at" placeholder="YYYY-MM-DDTHH:mm:ssZ" className="input mt-1" />
         </label>
-        <label className="text-sm">
+        <label className="text-sm md:col-span-3">
           IP Allowlist (comma-separated)
           <input name="ip_allowlist" placeholder="1.2.3.4,5.6.7.8" className="input mt-1" />
+          <div className="text-xs text-white/60 mt-1 space-y-1">
+            <p>• <strong>Leave empty</strong> to allow requests from any IP address</p>
+            <p>• <strong>Add IPs</strong> to restrict access to specific addresses only</p>
+            <p>• <strong>Host machine IP</strong> is automatically included when you add any IPs</p>
+            <p>• Format: comma-separated IPv4 addresses (e.g., "1.2.3.4,5.6.7.8")</p>
+          </div>
         </label>
         <label className="text-sm">
           Attribute to User (optional)

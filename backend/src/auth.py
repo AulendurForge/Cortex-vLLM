@@ -5,6 +5,7 @@ from .models import APIKey
 from datetime import datetime
 from .crypto import verify_key
 from .metrics import KEY_AUTH_ALLOWED, KEY_AUTH_BLOCKED
+from .utils.ip_utils import get_client_ip
 
 def _parse_ip_allowlist(raw: str) -> list[str]:
     if not raw:
@@ -45,11 +46,15 @@ async def require_api_key(request: Request, authorization: str = Header(None), s
             KEY_AUTH_BLOCKED.labels(reason="not_found" if not row else ("expired" if (row and row.expires_at and row.expires_at < datetime.utcnow()) else "hash_mismatch")).inc()
             raise HTTPException(status_code=401, detail="Invalid API key")
         # Enforce IP allowlist when present
-        client_ip = request.client.host if request.client else None
+        # Use get_client_ip() to handle both direct connections and reverse proxies
+        client_ip = get_client_ip(request)
         allowlist = _parse_ip_allowlist(row.ip_allowlist)
-        if allowlist and client_ip not in allowlist:
+        if allowlist and client_ip and client_ip not in allowlist:
             KEY_AUTH_BLOCKED.labels(reason="ip").inc()
-            raise HTTPException(status_code=403, detail="IP not allowed")
+            raise HTTPException(
+                status_code=403, 
+                detail=f"IP {client_ip} not allowed. Allowed IPs: {', '.join(allowlist)}"
+            )
         # Update last_used_at (non-blocking best-effort)
         try:
             row.last_used_at = datetime.utcnow()
