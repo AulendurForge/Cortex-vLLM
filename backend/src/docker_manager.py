@@ -221,8 +221,10 @@ def _build_command(m: Model) -> list[str]:
     # Served name allows routing stability via our registry
     if getattr(m, "served_model_name", None):
         cmd += ["--served-model-name", str(m.served_model_name)]
+    # vLLM 0.11+: `--task` is deprecated; embeddings/pooling models should use the pooling runner.
+    # This also enables vLLM's "Chat Embeddings" extension that accepts `messages` at /v1/embeddings.
     if m.task and m.task.lower().startswith("embed"):
-        cmd += ["--task", "embed"]
+        cmd += ["--runner", "pooling"]
     if m.dtype:
         cmd += ["--dtype", m.dtype]
     if m.tp_size and m.tp_size > 1:
@@ -236,10 +238,12 @@ def _build_command(m: Model) -> list[str]:
     if m.gpu_memory_utilization:
         cmd += ["--gpu-memory-utilization", str(m.gpu_memory_utilization)]
     # Max context length:
-    # For embeddings models, let vLLM derive the correct limit from the model config
-    # (e.g., max_position_embeddings) to remain model‑agnostic. Do not pass the flag.
-    # For generation models, pass through when provided.
-    if m.max_model_len and not ((getattr(m, "task", "") or "").lower().startswith("embed")):
+    # For embedding models, vLLM auto-detects from model config (max_position_embeddings).
+    # However, some models (like BGE-Large) have incorrect config values, so allow override.
+    # For generation models, always pass through when provided.
+    if m.max_model_len:
+        # Allow override for embedding models (some have incorrect max_position_embeddings in config)
+        # For generation models, always pass through
         try:
             cmd += ["--max-model-len", str(int(m.max_model_len))]
         except Exception:

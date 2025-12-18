@@ -54,7 +54,18 @@ class CompletionRequest(BaseModel):
 
 class EmbeddingsRequest(BaseModel):
     model: str
-    input: Union[str, List[str]]
+    # OpenAI standard: `input`
+    # vLLM extension for multimodal + pooling runner: `messages` (chat-style parts including image_url)
+    input: Union[str, List[str], None] = None
+    messages: Optional[List[ChatMessage]] = None
+    encoding_format: Optional[str] = None
+
+    @validator("messages", always=True)
+    def ensure_input_or_messages(cls, v, values):
+        inp = values.get("input", None)
+        if (inp is None or (isinstance(inp, str) and not inp) or (isinstance(inp, list) and len(inp) == 0)) and not v:
+            raise ValueError("Either 'input' or 'messages' must be provided")
+        return v
     if ConfigDict:
         model_config = ConfigDict(extra='allow')
 

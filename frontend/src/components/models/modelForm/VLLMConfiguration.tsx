@@ -83,19 +83,18 @@ export function VLLMConfiguration({ values, gpuCount, onChange }: VLLMConfigurat
         <input
           className="input mt-1"
           type="range"
-          min={2048}
+          min={512}
           max={131072}
-          step={1024}
-          value={values.maxModelLen ?? 8192}
+          step={512}
+          value={values.maxModelLen ?? (values.task === 'embed' ? 8192 : 8192)}
           onChange={(e) => onChange('maxModelLen', Number(e.target.value))}
-          disabled={values.task === 'embed'}
         />
         <div className="text-[11px] text-white/60">
-          {values.task === 'embed' ? 'auto (model derived)' : (values.maxModelLen ?? 8192) + ' tokens'}
+          {(values.maxModelLen ?? (values.task === 'embed' ? 8192 : 8192)) + ' tokens'}
         </div>
         <p className="text-[11px] text-white/50 mt-1">
           {values.task === 'embed' ? (
-            <>Embedding models usually define the maximum sequence length in their config (e.g., max_position_embeddings). The engine will use that automatically.</>
+            <>Maximum input sequence length. Some models (e.g., BGE-Large) support 8192 tokens despite config saying 512. Override if needed. <Tooltip text="vLLM auto-detects from model config, but some models have incorrect max_position_embeddings. Set this to override (e.g., 8192 for BGE-Large)." /></>
           ) : (
             <>Upper bound of tokens per request. Larger values need more KV cache VRAM. <Tooltip text="Also called '--max-model-len'. Start with 8192–32768 on small GPUs; 131072 requires significant VRAM." /></>
           )}
