@@ -21,12 +21,12 @@ export function RequestDefaultsSection({ values, onChange }: RequestDefaultsSect
   if (!values.engineType) return null;
 
   return (
-    <details className="md:col-span-2 mt-4 border-l-4 border-purple-500 pl-4 bg-purple-500/5 p-3 rounded">
-      <summary className="cursor-pointer text-sm font-medium text-purple-300 mb-2">
+    <div className="md:col-span-2 space-y-4">
+      <div className="text-sm font-medium text-purple-300 flex items-center gap-2 mb-2">
         📊 Request Defaults (Sampling Parameters)
-      </summary>
+      </div>
       
-      <div className="mt-3 p-3 bg-blue-500/10 border border-blue-500/30 rounded text-xs mb-3">
+      <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded text-xs">
         <div className="font-medium text-blue-200 mb-1">ℹ️ What are Request Defaults?</div>
         <div className="text-white/80">
           These parameters are applied <strong>per-request</strong> by the gateway, NOT at container startup.
@@ -189,7 +189,7 @@ export function RequestDefaultsSection({ values, onChange }: RequestDefaultsSect
           </ul>
         </div>
       </details>
-    </details>
+    </div>
   );
 }
 

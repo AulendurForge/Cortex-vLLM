@@ -166,12 +166,12 @@ export function CustomArgsEditor({ args, envVars, onArgsChange, onEnvVarsChange,
   };
 
   return (
-    <details className="md:col-span-2 mt-4 border-l-4 border-cyan-500 pl-4 bg-cyan-500/5 p-3 rounded">
-      <summary className="cursor-pointer text-sm font-medium text-cyan-300 mb-2">
+    <div className="md:col-span-2 space-y-4">
+      <div className="text-sm font-medium text-cyan-300 flex items-center gap-2 mb-2">
         ⚙️ Custom Startup Configuration (Advanced)
-      </summary>
+      </div>
 
-      <div className="mt-3 p-3 bg-blue-500/10 border border-blue-500/30 rounded text-xs mb-3">
+      <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded text-xs">
         <div className="font-medium text-blue-200 mb-1">ℹ️ What is Custom Startup Config?</div>
         <div className="text-white/80">
           Add engine-specific <strong>arguments</strong> (e.g., <code>--async-scheduling</code>) and 
@@ -415,7 +415,7 @@ export function CustomArgsEditor({ args, envVars, onArgsChange, onEnvVarsChange,
           </div>
         </>
       )}
-    </details>
+    </div>
   );
 }
 
