@@ -10,6 +10,8 @@ import { OfflineModeFields } from './modelForm/OfflineModeFields';
 import { BasicModelInfo } from './modelForm/BasicModelInfo';
 import { VLLMConfiguration } from './modelForm/VLLMConfiguration';
 import { LlamaCppConfiguration } from './modelForm/LlamaCppConfiguration';
+import { RequestDefaultsSection } from './modelForm/RequestDefaultsSection';
+import { CustomArgsEditor, type CustomArg } from './modelForm/CustomArgsEditor';
 import { MergeInstructionsModal } from './modelForm/MergeInstructionsModal';
 
 export type ModelFormValues = {
@@ -44,6 +46,10 @@ export type ModelFormValues = {
   tokenizer?: string;
   hfConfigPath?: string;
   engineType?: 'vllm' | 'llamacpp';
+  // Engine metadata for reproducibility (Plane D)
+  engineImage?: string;
+  engineVersion?: string;
+  engineDigest?: string;
   ngl?: number;
   tensorSplit?: string;
   batchSize?: number;
@@ -67,6 +73,11 @@ export type ModelFormValues = {
   temperature?: number;
   topK?: number;
   topP?: number;
+  // Custom request extensions (Plane C - advanced)
+  customRequestJson?: string;
+  // Custom startup args (Plane B - Phase 2)
+  customArgs?: CustomArg[];
+  customEnv?: Array<{key: string; value: string}>;
 };
 
 export function ModelForm({ onSubmit, onCancel, defaults, fetchBaseDir, saveBaseDir, listLocalFolders, submitLabel, modeLocked = false, onValuesChange }: {
@@ -135,6 +146,11 @@ export function ModelForm({ onSubmit, onCancel, defaults, fetchBaseDir, saveBase
     temperature: (defaults as any)?.temperature ?? 0.8,
     topK: (defaults as any)?.topK ?? 40,
     topP: (defaults as any)?.topP ?? 0.9,
+    // Custom request extensions (Plane C - advanced)
+    customRequestJson: (defaults as any)?.customRequestJson ?? '',
+    // Custom startup args (Plane B - Phase 2)
+    customArgs: (defaults as any)?.customArgs ?? [],
+    customEnv: (defaults as any)?.customEnv ?? [],
   });
 
   const set = (k: keyof ModelFormValues, v: any) => setValues(prev => { 
@@ -349,6 +365,43 @@ export function ModelForm({ onSubmit, onCancel, defaults, fetchBaseDir, saveBase
           modeLocked={modeLocked}
         />
 
+        {/* Engine Metadata (Advanced) */}
+        {values.engineType && (
+          <details className="md:col-span-2">
+            <summary className="cursor-pointer text-sm text-white/70 hover:text-white">
+              ⚙️ Advanced: Engine Image/Version (for reproducibility)
+            </summary>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2 p-3 bg-white/5 rounded border border-white/10">
+              <label className="text-sm">
+                Engine Image
+                <input
+                  className="input mt-1"
+                  type="text"
+                  placeholder={values.engineType === 'vllm' ? 'e.g., vllm/vllm-openai:v0.6.3' : 'e.g., ghcr.io/ggerganov/llama.cpp:server'}
+                  value={values.engineImage || ''}
+                  onChange={(e) => set('engineImage', e.target.value)}
+                />
+                <p className="text-[11px] text-white/50 mt-1">
+                  Leave blank to use system default. Pin specific version for reproducibility.
+                </p>
+              </label>
+              <label className="text-sm">
+                Engine Version
+                <input
+                  className="input mt-1"
+                  type="text"
+                  placeholder="e.g., v0.6.3"
+                  value={values.engineVersion || ''}
+                  onChange={(e) => set('engineVersion', e.target.value)}
+                />
+                <p className="text-[11px] text-white/50 mt-1">
+                  Optional: For tracking/reference only.
+                </p>
+              </label>
+            </div>
+          </details>
+        )}
+
         {/* Disable rest of form until engine selected */}
         {!values.engineType && !modeLocked && (
           <div className="md:col-span-2 p-6 text-center text-white/60 bg-white/5 rounded border border-white/10">
@@ -415,6 +468,7 @@ export function ModelForm({ onSubmit, onCancel, defaults, fetchBaseDir, saveBase
           onNameChange={(v) => set('name', v)}
           onServedModelNameChange={(v) => set('servedModelName', v)}
           onTaskChange={(v) => set('task', v)}
+          modeLocked={modeLocked}
         />
 
         {/* Engine-specific configuration */}
@@ -428,6 +482,23 @@ export function ModelForm({ onSubmit, onCancel, defaults, fetchBaseDir, saveBase
           values={values}
           onChange={set}
         />
+
+        {/* Request Defaults (Plane C) - Applied by gateway at request time */}
+        <RequestDefaultsSection
+          values={values}
+          onChange={set}
+        />
+
+        {/* Custom Startup Config (Plane B) - Applied at container startup */}
+        {values.engineType && (
+          <CustomArgsEditor
+            args={values.customArgs || []}
+            envVars={values.customEnv || []}
+            onArgsChange={(args) => set('customArgs', args)}
+            onEnvVarsChange={(env) => set('customEnv', env)}
+            engineType={values.engineType}
+          />
+        )}
 
         {/* Submit buttons */}
         <div className="md:col-span-2 flex items-center justify-end gap-2 mt-2">

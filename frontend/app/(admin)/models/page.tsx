@@ -8,6 +8,7 @@ import { Card, Table, Button, PrimaryButton, PageHeader, Badge } from '../../../
 import { Modal } from '../../../src/components/Modal';
 import { ModelForm, ModelFormValues } from '../../../src/components/models/ModelForm';
 import { LogsViewer } from '../../../src/components/models/LogsViewer';
+import { DiagnosticBanner } from '../../../src/components/models/DiagnosticBanner';
 import { ConfirmDialog } from '../../../src/components/Confirm';
 import { ResourceCalculatorModal } from '../../../src/components/models/ResourceCalculatorModal';
 import { TestResultsModal } from '../../../src/components/models/TestResultsModal';
@@ -101,6 +102,9 @@ export default function ModelsPage() {
             device: payload.device,
             // Engine and llama.cpp fields
             engine_type: payload.engineType,
+            engine_image: payload.engineImage,
+            engine_version: payload.engineVersion,
+            engine_digest: payload.engineDigest,
             ngl: payload.ngl,
             tensor_split: payload.tensorSplit,
             batch_size: payload.batchSize,
@@ -124,6 +128,15 @@ export default function ModelsPage() {
             temperature: payload.temperature,
             top_k: payload.topK,
             top_p: payload.topP,
+            // Custom request extensions (Plane C - advanced)
+            custom_request_json: payload.customRequestJson || null,
+            // Custom startup args (Plane B - Phase 2)
+            engine_startup_args_json: payload.customArgs && payload.customArgs.length > 0 
+              ? JSON.stringify(payload.customArgs) 
+              : null,
+            engine_startup_env_json: payload.customEnv && payload.customEnv.length > 0 
+              ? JSON.stringify(payload.customEnv) 
+              : null,
       };
       return await apiFetch('/admin/models', { method: 'POST', body: JSON.stringify(body) });
     },
@@ -170,14 +183,21 @@ export default function ModelsPage() {
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['models'] }); setConfigId(null); setDryCmd(""); },
   });
+  const [dryRunResult, setDryRunResult] = React.useState<any>(null);
   const dryRun = useMutation({
-    mutationFn: async (id: number) => apiFetch<{ command: string | string[]; engine?: string }>(`/admin/models/${id}/dry-run`, { method: 'POST' }),
+    mutationFn: async (id: number) => apiFetch<any>(`/admin/models/${id}/dry-run`, { method: 'POST' }),
     onSuccess: (r) => { 
-      const cmd = Array.isArray((r as any).command) ? (r as any).command.join(' ') : (r as any).command || '';
-      const engine = (r as any).engine || 'vllm';
-      setDryCmd(`# ${engine} command:\n${cmd}`); 
+      setDryRunResult(r);
+      const cmd = r.command_str || (Array.isArray(r.command) ? r.command.join(' ') : '');
+      setDryCmd(cmd ? `# Startup command:\n${cmd}` : ''); 
     },
   });
+
+  // Clear dry-run results when switching between models
+  React.useEffect(() => {
+    setDryCmd("");
+    setDryRunResult(null);
+  }, [configId]);
 
   const testModel = useMutation({
     mutationFn: async (id: number) => {
@@ -461,6 +481,9 @@ export default function ModelsPage() {
             tokenizer: (m as any).tokenizer || '',
             hfConfigPath: (m as any).hf_config_path || '',
             engineType: (m as any).engine_type || 'vllm',
+            engineImage: (m as any).engine_image || '',
+            engineVersion: (m as any).engine_version || '',
+            engineDigest: (m as any).engine_digest || '',
             ngl: (m as any).ngl ?? 999,
             tensorSplit: (m as any).tensor_split || '',
             batchSize: (m as any).batch_size ?? 2048,
@@ -484,6 +507,52 @@ export default function ModelsPage() {
             temperature: (m as any).temperature ?? 0.8,
             topK: (m as any).top_k ?? 40,
             topP: (m as any).top_p ?? 0.9,
+            // Custom request extensions (Plane C - advanced)
+            customRequestJson: (() => {
+              try {
+                const json = (m as any).request_defaults_json;
+                if (!json) return '';
+                const defaults = JSON.parse(json);
+                // Extract non-standard fields (everything except standard sampling params)
+                const standardFields = ['temperature', 'top_p', 'top_k', 'repetition_penalty', 'frequency_penalty', 'presence_penalty'];
+                const custom: any = {};
+                for (const key in defaults) {
+                  if (!standardFields.includes(key)) {
+                    custom[key] = defaults[key];
+                  }
+                }
+                return Object.keys(custom).length > 0 ? JSON.stringify(custom, null, 2) : '';
+              } catch {
+                return '';
+              }
+            })(),
+            // Custom startup args (Plane B - Phase 2)
+            customArgs: (() => {
+              try {
+                const json = (m as any).engine_startup_args_json;
+                console.log('[DEBUG] engine_startup_args_json:', json, 'type:', typeof json);
+                if (!json) return [];
+                // If already parsed (array), return as-is
+                if (Array.isArray(json)) return json;
+                // If string, parse it
+                if (typeof json === 'string') return JSON.parse(json);
+                return [];
+              } catch (e) {
+                console.error('[DEBUG] Failed to parse customArgs:', e);
+                return [];
+              }
+            })(),
+            customEnv: (() => {
+              try {
+                const json = (m as any).engine_startup_env_json;
+                if (!json) return [];
+                if (Array.isArray(json)) return json;
+                if (typeof json === 'string') return JSON.parse(json);
+                return [];
+              } catch {
+                return [];
+              }
+            })(),
           } as any;
           let draft: ModelFormValues | null = null;
           return (
@@ -528,6 +597,10 @@ export default function ModelsPage() {
                     cuda_graph_sizes: values.cudaGraphSizes,
                     pipeline_parallel_size: values.pipelineParallelSize,
                     device: values.device,
+                    // Engine metadata
+                    engine_image: values.engineImage,
+                    engine_version: values.engineVersion,
+                    engine_digest: values.engineDigest,
                     // llama.cpp-specific fields
                     ngl: values.ngl,
                     tensor_split: values.tensorSplit,
@@ -552,6 +625,15 @@ export default function ModelsPage() {
             temperature: values.temperature,
             top_k: values.topK,
             top_p: values.topP,
+            // Custom request extensions (Plane C - advanced)
+            custom_request_json: values.customRequestJson || null,
+            // Custom startup args (Plane B - Phase 2)
+            engine_startup_args_json: values.customArgs && values.customArgs.length > 0 
+              ? JSON.stringify(values.customArgs) 
+              : null,
+            engine_startup_env_json: values.customEnv && values.customEnv.length > 0 
+              ? JSON.stringify(values.customEnv) 
+              : null,
                   };
                   apply.mutate({ id: configId, body });
                 }}
@@ -591,6 +673,10 @@ export default function ModelsPage() {
                       cuda_graph_sizes: draft.cudaGraphSizes,
                       pipeline_parallel_size: draft.pipelineParallelSize,
                       device: draft.device,
+                      // Engine metadata
+                      engine_image: draft.engineImage,
+                      engine_version: draft.engineVersion,
+                      engine_digest: draft.engineDigest,
                       // llama.cpp-specific fields
                       ngl: draft.ngl,
                       tensor_split: draft.tensorSplit,
@@ -615,12 +701,93 @@ export default function ModelsPage() {
                       temperature: draft.temperature,
                       top_k: draft.topK,
                       top_p: draft.topP,
+                      // Custom request extensions (Plane C - advanced)
+                      custom_request_json: draft.customRequestJson || null,
+                      // Custom startup args (Plane B - Phase 2)
+                      engine_startup_args_json: draft.customArgs && draft.customArgs.length > 0 
+                        ? JSON.stringify(draft.customArgs) 
+                        : null,
+                      engine_startup_env_json: draft.customEnv && draft.customEnv.length > 0 
+                        ? JSON.stringify(draft.customEnv) 
+                        : null,
                     }});
                     else if (m) apply.mutate({ id: configId!, body: {} });
                   }} disabled={apply.isPending}>Apply (restart)</PrimaryButton>
                 </div>
               </div>
-              {dryCmd && (<pre className="text-xs text-white/70 bg-black/30 rounded p-2 overflow-x-auto" title="Effective vLLM command">{dryCmd}</pre>)}
+              {/* Phase 3: Dry-Run Validation Results */}
+              {dryRunResult && (
+                <div className="space-y-3">
+                  {/* Validation Warnings */}
+                  {dryRunResult.warnings && dryRunResult.warnings.length > 0 && (
+                    <div className="space-y-2">
+                      {dryRunResult.warnings.map((w: any, idx: number) => (
+                        <div 
+                          key={idx}
+                          className={`p-3 rounded border ${
+                            w.severity === 'error' ? 'bg-red-500/10 border-red-500/30' :
+                            w.severity === 'warning' ? 'bg-amber-500/10 border-amber-500/30' :
+                            'bg-blue-500/10 border-blue-500/30'
+                          }`}
+                        >
+                          <div className={`font-medium text-sm mb-1 ${
+                            w.severity === 'error' ? 'text-red-200' :
+                            w.severity === 'warning' ? 'text-amber-200' :
+                            'text-blue-200'
+                          }`}>
+                            {w.severity === 'error' ? '❌' : w.severity === 'warning' ? '⚠️' : 'ℹ️'} {w.title}
+                          </div>
+                          <div className="text-xs text-white/80 mb-2">{w.message}</div>
+                          {w.fix && (
+                            <div className="text-xs text-white/70">
+                              💡 Fix: {w.fix}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  
+                  {/* VRAM Estimate */}
+                  {dryRunResult.vram_estimate && (
+                    <div className="p-3 bg-purple-500/10 border border-purple-500/30 rounded">
+                      <div className="font-medium text-sm text-purple-200 mb-2">📊 VRAM Estimate</div>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                        <div>
+                          <div className="text-white/60">Model Weights</div>
+                          <div className="font-medium text-white">{dryRunResult.vram_estimate.model_weights_gb} GB</div>
+                        </div>
+                        <div>
+                          <div className="text-white/60">KV Cache</div>
+                          <div className="font-medium text-white">{dryRunResult.vram_estimate.kv_cache_gb} GB</div>
+                        </div>
+                        <div>
+                          <div className="text-white/60">Total per GPU</div>
+                          <div className="font-medium text-white">{dryRunResult.vram_estimate.total_per_gpu_gb} GB</div>
+                        </div>
+                        <div>
+                          <div className="text-white/60">Required VRAM</div>
+                          <div className="font-medium text-emerald-300">{dryRunResult.vram_estimate.required_vram_gb} GB</div>
+                        </div>
+                      </div>
+                      <div className="text-[10px] text-white/50 mt-2">{dryRunResult.vram_estimate.note}</div>
+                    </div>
+                  )}
+                  
+                  {/* Overall Status */}
+                  {dryRunResult.valid !== undefined && (
+                    <div className={`p-2 rounded text-sm font-medium ${
+                      dryRunResult.valid 
+                        ? 'bg-emerald-500/10 text-emerald-200' 
+                        : 'bg-red-500/10 text-red-200'
+                    }`}>
+                      {dryRunResult.valid ? '✓ Config looks good - safe to start' : '✗ Config has errors - fix before starting'}
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              {dryCmd && (<pre className="text-xs text-white/70 bg-black/30 rounded p-2 overflow-x-auto mt-3" title="Effective startup command">{dryCmd}</pre>)}
             </div>
           );
         })()}
@@ -634,9 +801,15 @@ export default function ModelsPage() {
         title={logsFor != null ? `Model Logs - ${list.data?.find((m: any) => m.id === logsFor)?.name || 'Model'} (${list.data?.find((m: any) => m.id === logsFor)?.engine_type || 'vllm'})` : 'Model Logs'}
       >
         {logsFor != null && (
-          <LogsViewer fetcher={async ()=> {
-            try { return await apiFetch(`/admin/models/${logsFor}/logs`); } catch { return 'Logs not available yet.'; }
-          }} />
+          <>
+            <DiagnosticBanner 
+              modelId={logsFor} 
+              modelState={list.data?.find((m: any) => m.id === logsFor)?.state || 'unknown'}
+            />
+            <LogsViewer fetcher={async ()=> {
+              try { return await apiFetch(`/admin/models/${logsFor}/logs`); } catch { return 'Logs not available yet.'; }
+            }} />
+          </>
         )}
       </Modal>
       )}

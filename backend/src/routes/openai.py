@@ -57,6 +57,94 @@ def _messages_to_prompt(messages: list[dict]) -> str:
     except Exception:
         return ""
 
+
+# ============================================================================
+# Plane C: Request Defaults & Engine Translation (Phase 1)
+# ============================================================================
+
+# Engine-specific parameter name translation map
+# Maps OpenAI-standard keys to engine-specific keys
+ENGINE_TRANSLATION_MAP = {
+    "vllm": {
+        # OpenAI standard → vLLM request key (mostly 1:1, but explicit for clarity)
+        "temperature": "temperature",
+        "top_p": "top_p",
+        "top_k": "top_k",
+        "repetition_penalty": "repetition_penalty",
+        "frequency_penalty": "frequency_penalty",
+        "presence_penalty": "presence_penalty",
+        "max_tokens": "max_tokens",
+        "stop": "stop",
+        "stream": "stream",
+        "n": "n",
+        "logprobs": "logprobs",
+        "echo": "echo",
+        "best_of": "best_of",
+        "logit_bias": "logit_bias",
+        "user": "user",
+    },
+    "llamacpp": {
+        # OpenAI standard → llama.cpp request key (has differences!)
+        "temperature": "temp",  # Different!
+        "top_p": "top_p",
+        "top_k": "top_k",
+        "repetition_penalty": "repeat_penalty",  # Different!
+        "frequency_penalty": "frequency_penalty",
+        "presence_penalty": "presence_penalty",
+        "max_tokens": "n_predict",  # Different!
+        "stop": "stop",
+        "stream": "stream",
+        # llama.cpp doesn't support: n, logprobs, echo, best_of, logit_bias
+    },
+}
+
+
+def merge_request_defaults(request_payload: dict, model_defaults: dict) -> dict:
+    """Merge model defaults into request, only for missing keys.
+    
+    Client-specified values always take precedence over model defaults.
+    This implements Plane C merge strategy.
+    
+    Args:
+        request_payload: Original client request
+        model_defaults: Model's configured defaults (from request_defaults_json)
+        
+    Returns:
+        Merged request payload
+    """
+    merged = request_payload.copy()
+    for key, default_value in (model_defaults or {}).items():
+        # Only apply default if client didn't specify the key
+        if key not in merged or merged[key] is None:
+            merged[key] = default_value
+    return merged
+
+
+def translate_request_for_engine(request: dict, engine_type: str) -> dict:
+    """Translate OpenAI-standard keys to engine-specific keys.
+    
+    Different engines use different parameter names for the same concept.
+    For example, llama.cpp uses 'temp' instead of 'temperature'.
+    
+    This implements engine-aware translation (Plane C).
+    
+    Args:
+        request: Request payload with OpenAI-standard keys
+        engine_type: Target engine ('vllm' or 'llamacpp')
+        
+    Returns:
+        Translated request payload with engine-specific keys
+    """
+    translation = ENGINE_TRANSLATION_MAP.get(engine_type, ENGINE_TRANSLATION_MAP["vllm"])
+    translated = {}
+    
+    for openai_key, value in request.items():
+        # Translate if mapping exists, otherwise pass through unchanged
+        engine_key = translation.get(openai_key, openai_key)
+        translated[engine_key] = value
+    
+    return translated
+
 def _cb_is_available(url: str) -> bool:
     settings = get_settings()
     if not settings.CB_ENABLED:
@@ -130,20 +218,46 @@ def choose_url(urls):
     return chosen
 
 def get_timeout_for_request(model_name: str, max_tokens: int, is_streaming: bool) -> httpx.Timeout:
-    """Calculate appropriate timeout based on model size and request complexity."""
-    # Base timeouts by model size
-    if "120b" in model_name.lower():
-        base_timeout = 180 if is_streaming else 120
-    elif "70b" in model_name.lower():
-        base_timeout = 120 if is_streaming else 90
-    elif "13b" in model_name.lower():
-        base_timeout = 90 if is_streaming else 60
-    else:
-        base_timeout = 60 if is_streaming else 45
+    """Calculate appropriate timeout with intelligent fallback.
     
-    # Scale by max_tokens (cap at 3x multiplier)
-    token_factor = min(max_tokens / 1000, 3.0)
-    read_timeout = base_timeout * token_factor
+    Phase 1/3 improvement: Removed model name heuristics (Issue 3 fix).
+    
+    Priority:
+    1. Use explicit timeout from model registry (if configured)
+    2. Estimate based on max_tokens (typical throughput: ~20 tokens/sec)
+    
+    Args:
+        model_name: Model being called (for registry lookup)
+        max_tokens: Maximum tokens requested
+        is_streaming: Whether request is streaming
+        
+    Returns:
+        httpx.Timeout object
+    """
+    # Try to get explicit timeout from model registry
+    if model_name and model_name in _MODEL_REGISTRY:
+        entry = _MODEL_REGISTRY.get(model_name) or {}
+        # Note: request_timeout_sec and stream_timeout_sec will be added to registry
+        # in future when we persist them from Model table (currently just defaults)
+        try:
+            import json
+            if entry.get("request_defaults_json"):
+                defaults = json.loads(entry["request_defaults_json"])
+                timeout_sec = defaults.get("stream_timeout_sec" if is_streaming else "request_timeout_sec")
+                if timeout_sec and isinstance(timeout_sec, (int, float)):
+                    return httpx.Timeout(connect=5.0, read=float(timeout_sec), write=10.0, pool=5.0)
+        except Exception:
+            pass
+    
+    # Fallback: Estimate based on max_tokens
+    # Assumption: typical inference throughput ~20 tokens/sec for 70B-class models
+    # Add base overhead for model processing (15s) + token generation time
+    base_overhead = 20 if is_streaming else 15
+    token_time = max_tokens / 20.0  # ~20 tokens/sec average
+    estimated_sec = base_overhead + token_time
+    
+    # Cap at reasonable limits
+    read_timeout = max(30, min(300, estimated_sec))  # 30s min, 5min max
     
     return httpx.Timeout(connect=5.0, read=read_timeout, write=10.0, pool=5.0)
 
@@ -183,6 +297,27 @@ async def forward_json(request: Request, base_url: str, path: str, internal_key:
         payload = await request.json()
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON")
+
+    # ============================================================================
+    # Phase 1: Apply request defaults and engine translation (Plane C)
+    # ============================================================================
+    model_name = payload.get("model", "")
+    if model_name and model_name in _MODEL_REGISTRY:
+        entry = _MODEL_REGISTRY.get(model_name) or {}
+        
+        # 1. Merge request defaults (only for keys client didn't specify)
+        if entry.get("request_defaults_json"):
+            try:
+                import json
+                model_defaults = json.loads(entry["request_defaults_json"])
+                payload = merge_request_defaults(payload, model_defaults)
+            except Exception:
+                pass  # Best-effort; don't fail request if defaults are malformed
+        
+        # 2. Translate to engine-specific keys
+        engine_type = entry.get("engine_type", "vllm")
+        payload = translate_request_for_engine(payload, engine_type)
+    # ============================================================================
 
     headers = {"Content-Type": "application/json"}
     if internal_key:

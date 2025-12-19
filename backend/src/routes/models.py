@@ -70,6 +70,9 @@ async def list_models(_: dict = Depends(require_admin)):
                 tokenizer=getattr(r, 'tokenizer', None),
                 hf_config_path=getattr(r, 'hf_config_path', None),
                 engine_type=getattr(r, 'engine_type', 'vllm'),
+                engine_image=getattr(r, 'engine_image', None),
+                engine_version=getattr(r, 'engine_version', None),
+                engine_digest=getattr(r, 'engine_digest', None),
                 selected_gpus=json.loads(getattr(r, 'selected_gpus', None) or '[]') if getattr(r, 'selected_gpus', None) else None,
                 ngl=getattr(r, 'ngl', None),
                 tensor_split=getattr(r, 'tensor_split', None),
@@ -87,6 +90,13 @@ async def list_models(_: dict = Depends(require_admin)):
                 split_mode=getattr(r, 'split_mode', None),
                 cache_type_k=getattr(r, 'cache_type_k', None),
                 cache_type_v=getattr(r, 'cache_type_v', None),
+                # Request defaults (Plane C - Phase 1)
+                request_defaults_json=getattr(r, 'request_defaults_json', None),
+                request_timeout_sec=getattr(r, 'request_timeout_sec', None),
+                stream_timeout_sec=getattr(r, 'stream_timeout_sec', None),
+                # Custom startup args (Plane B - Phase 2)
+                engine_startup_args_json=getattr(r, 'engine_startup_args_json', None),
+                engine_startup_env_json=getattr(r, 'engine_startup_env_json', None),
                 state=r.state,
                 archived=bool(getattr(r, 'archived', False)),
                 port=r.port,
@@ -140,6 +150,36 @@ async def create_model(body: CreateModelRequest, _: dict = Depends(require_admin
         body.numa_policy = None
         body.split_mode = None
     
+    # Build request_defaults_json from sampling parameters + custom JSON (Phase 1 & 3)
+    # These are request-time defaults, not container startup parameters
+    request_defaults = {}
+    
+    # Start with standard sampling params
+    if body.temperature is not None:
+        request_defaults["temperature"] = body.temperature
+    if body.top_p is not None:
+        request_defaults["top_p"] = body.top_p
+    if body.top_k is not None:
+        request_defaults["top_k"] = body.top_k
+    if body.repetition_penalty is not None:
+        request_defaults["repetition_penalty"] = body.repetition_penalty
+    if body.frequency_penalty is not None:
+        request_defaults["frequency_penalty"] = body.frequency_penalty
+    if body.presence_penalty is not None:
+        request_defaults["presence_penalty"] = body.presence_penalty
+    
+    # Merge custom request extensions (vllm_xargs, custom fields, etc.)
+    if body.custom_request_json:
+        try:
+            custom_fields = json.loads(body.custom_request_json)
+            if isinstance(custom_fields, dict):
+                request_defaults.update(custom_fields)
+        except json.JSONDecodeError:
+            # Invalid JSON - log warning but don't fail model creation
+            logger.warning(f"Invalid custom_request_json for model {body.name}: {body.custom_request_json}")
+    
+    request_defaults_json = json.dumps(request_defaults) if request_defaults else None
+    
     SessionLocal = _get_session()
     if SessionLocal is None:
         raise HTTPException(status_code=503, detail="database_unavailable")
@@ -173,6 +213,9 @@ async def create_model(body: CreateModelRequest, _: dict = Depends(require_admin
             hf_config_path=body.hf_config_path,
             hf_token=body.hf_token,
             engine_type=body.engine_type,
+            engine_image=getattr(body, 'engine_image', None),
+            engine_version=getattr(body, 'engine_version', None),
+            engine_digest=getattr(body, 'engine_digest', None),
             selected_gpus=json.dumps(body.selected_gpus) if body.selected_gpus else None,
             ngl=body.ngl,
             tensor_split=body.tensor_split,
@@ -190,6 +233,18 @@ async def create_model(body: CreateModelRequest, _: dict = Depends(require_admin
             split_mode=body.split_mode,
             cache_type_k=body.cache_type_k,
             cache_type_v=body.cache_type_v,
+            # Keep old columns for backward compat (Phase 1)
+            repetition_penalty=body.repetition_penalty,
+            frequency_penalty=body.frequency_penalty,
+            presence_penalty=body.presence_penalty,
+            temperature=body.temperature,
+            top_k=body.top_k,
+            top_p=body.top_p,
+            # New: request_defaults_json (Plane C)
+            request_defaults_json=request_defaults_json,
+            # Custom startup args (Plane B - Phase 2)
+            engine_startup_args_json=getattr(body, 'engine_startup_args_json', None),
+            engine_startup_env_json=getattr(body, 'engine_startup_env_json', None),
             state="stopped",
         )
         session.add(m)
@@ -221,15 +276,45 @@ async def update_model(model_id: int, body: UpdateModelRequest, _: dict = Depend
             pass
         # apply changes if provided (including optional hf_token)
         update_data = body.dict(exclude_unset=True)
+        
+        # Build request_defaults_json from sampling parameters + custom JSON (Phase 1 & 3)
+        sampling_fields = ['temperature', 'top_p', 'top_k', 'repetition_penalty', 'frequency_penalty', 'presence_penalty']
+        if any(field in update_data for field in sampling_fields) or 'custom_request_json' in update_data:
+            # Rebuild request_defaults_json with new values
+            request_defaults = {}
+            for field in sampling_fields:
+                value = update_data.get(field) if field in update_data else getattr(m, field, None)
+                if value is not None:
+                    request_defaults[field] = value
+            
+            # Merge custom request extensions
+            custom_json = update_data.get('custom_request_json') if 'custom_request_json' in update_data else None
+            if custom_json:
+                try:
+                    custom_fields = json.loads(custom_json)
+                    if isinstance(custom_fields, dict):
+                        request_defaults.update(custom_fields)
+                except json.JSONDecodeError:
+                    logger.warning(f"Invalid custom_request_json for model {model_id}")
+            
+            # Remove custom_request_json from update_data (it's not a real column, just a helper)
+            update_data.pop('custom_request_json', None)
+            
+            # Set the merged result
+            update_data['request_defaults_json'] = json.dumps(request_defaults) if request_defaults else None
+        
         # Handle selected_gpus serialization
         if 'selected_gpus' in update_data and update_data['selected_gpus'] is not None:
             update_data['selected_gpus'] = json.dumps(update_data['selected_gpus'])
         
-        for field, value in update_data.items():
-            setattr(m, field, value)
-        from sqlalchemy import update as _update
-        await session.execute(_update(Model).where(Model.id == model_id).values(**update_data))
-        await session.commit()
+        # Apply updates if any fields to update
+        if update_data:
+            for field, value in update_data.items():
+                setattr(m, field, value)
+            from sqlalchemy import update as _update
+            await session.execute(_update(Model).where(Model.id == model_id).values(**update_data))
+            await session.commit()
+        
         return {"status": "ok"}
 
 @router.post("/models/{model_id}/archive")
@@ -393,11 +478,40 @@ async def start_model(model_id: int, _: dict = Depends(require_admin)):
             name, host_port = start_container_for_model(m, hf_token=getattr(m, 'hf_token', None))
             await session.execute(update(Model).where(Model.id == model_id).values(state="running", container_name=name, port=host_port))
             await session.commit()
+            
+            # Phase 3: Verify container is actually running (not immediately exited)
+            # Wait a moment for container to initialize, then check status
+            import asyncio
+            await asyncio.sleep(2)
+            
+            try:
+                import docker
+                client = docker.from_env()
+                container = client.containers.get(name)
+                container.reload()
+                
+                # Check if container exited
+                if container.status not in ('running', 'created'):
+                    # Container failed - update state
+                    await session.execute(update(Model).where(Model.id == model_id).values(state="failed"))
+                    await session.commit()
+                    logger.warning(f"Model {model_id} container {name} exited with status: {container.status}")
+                    return {"status": "failed", "container": name, "port": host_port, "error": f"Container exited: {container.status}"}
+            except Exception as verify_error:
+                logger.warning(f"Could not verify container status for model {model_id}: {verify_error}")
+            
             # Register served name → URL so gateway can route by model
+            # Include request defaults and engine type for Plane C (Phase 1)
             try:
                 if m.served_model_name and host_port:
                     # Prefer direct container address on the compose network for reliability
-                    register_model_endpoint(m.served_model_name, f"http://{name}:8000", m.task or "generate")
+                    register_model_endpoint(
+                        m.served_model_name, 
+                        f"http://{name}:8000", 
+                        m.task or "generate",
+                        engine_type=getattr(m, 'engine_type', 'vllm'),
+                        request_defaults_json=getattr(m, 'request_defaults_json', None)
+                    )
                     # Persist registry after register
                     await persist_model_registry()
             except Exception:
@@ -434,16 +548,53 @@ async def stop_model(model_id: int, _: dict = Depends(require_admin)):
     return {"status": "stopped"}
 
 @router.get("/models/{model_id}/logs")
-async def model_logs(model_id: int, _: dict = Depends(require_admin)):
+async def model_logs(model_id: int, diagnose: bool = False, _: dict = Depends(require_admin)):
+    """Get container logs with optional startup failure diagnosis.
+    
+    Args:
+        model_id: Model ID
+        diagnose: If true, include startup failure diagnosis
+        
+    Returns:
+        If diagnose=false: Plain text logs (backward compat)
+        If diagnose=true: JSON with logs, diagnosis, and summary
+    """
     SessionLocal = _get_session()
     if SessionLocal is None:
-        return ""
+        return "" if not diagnose else {"logs": "", "diagnosis": None}
+    
     async with SessionLocal() as session:
         res = await session.execute(select(Model).where(Model.id == model_id))
         m = res.scalar_one_or_none()
         if not m:
             raise HTTPException(status_code=404, detail="not_found")
-        return tail_logs_for_model(m)
+        
+        logs = tail_logs_for_model(m)
+        
+        # Backward compat: return plain text if not diagnosing
+        if not diagnose:
+            return logs
+        
+        # Phase 3: Return enhanced response with diagnosis
+        from ..services.startup_diagnostics import diagnose_startup_failure, extract_startup_summary
+        
+        diagnosis = None
+        summary = None
+        
+        # Only diagnose if model is in failed state or logs suggest error
+        if m.state == "failed" or "ERROR" in logs.upper() or "failed" in logs.lower():
+            diagnosis = diagnose_startup_failure(logs)
+        
+        # Always extract summary stats if model loaded
+        if "Model loading took" in logs:
+            summary = extract_startup_summary(logs)
+        
+        return {
+            "logs": logs,
+            "diagnosis": diagnosis.dict() if diagnosis else None,
+            "summary": summary,
+            "state": m.state,
+        }
 
 @router.post("/models/{model_id}/apply")
 async def apply_model_changes(model_id: int, _: dict = Depends(require_admin)):
@@ -465,7 +616,13 @@ async def apply_model_changes(model_id: int, _: dict = Depends(require_admin)):
         await session.commit()
         try:
             if m.served_model_name and host_port:
-                register_model_endpoint(m.served_model_name, f"http://{name}:8000", m.task or "generate")
+                register_model_endpoint(
+                    m.served_model_name, 
+                    f"http://{name}:8000", 
+                    m.task or "generate",
+                    engine_type=getattr(m, 'engine_type', 'vllm'),
+                    request_defaults_json=getattr(m, 'request_defaults_json', None)
+                )
                 # Persist registry after register
                 await persist_model_registry()
         except Exception:
@@ -474,29 +631,29 @@ async def apply_model_changes(model_id: int, _: dict = Depends(require_admin)):
 
 @router.post("/models/{model_id}/dry-run")
 async def model_dry_run(model_id: int, _: dict = Depends(require_admin)):
-    """Return effective command that would be used (vLLM or llama.cpp); do not start container."""
-    SessionLocal = _get_session()
-    if SessionLocal is None:
-        raise HTTPException(status_code=503, detail="database_unavailable")
-    async with SessionLocal() as session:
-        res = await session.execute(select(Model).where(Model.id == model_id))
-        m = res.scalar_one_or_none()
-        if not m:
-            raise HTTPException(status_code=404, detail="not_found")
-        
-        engine_type = getattr(m, 'engine_type', 'vllm')
-        
-        try:
-            if engine_type == 'llamacpp':
-                from ..docker_manager import _build_llamacpp_command  # type: ignore
-                cmd = _build_llamacpp_command(m)
-            else:
-                from ..docker_manager import _build_command  # type: ignore
-                cmd = _build_command(m)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=str(e))
-        
-        return {"command": cmd, "engine": engine_type}
+    """Validate config and return effective command (Phase 3 enhanced).
+    
+    Now includes:
+    - VRAM estimation
+    - Custom args validation
+    - Configuration warnings
+    """
+    from ..services.config_validator import dry_run_validation
+    
+    result = await dry_run_validation(model_id)
+    
+    # Format command for display
+    cmd_str = ""
+    if result.command_preview:
+        cmd_str = " ".join(result.command_preview)
+    
+    return {
+        "command": result.command_preview or [],
+        "command_str": cmd_str,
+        "valid": result.valid,
+        "warnings": [w.dict() for w in result.warnings],
+        "vram_estimate": result.vram_estimate,
+    }
 
 # Base directory config endpoints (persist temporarily in memory env)
 _BASE_DIR: Optional[str] = None

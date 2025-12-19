@@ -36,6 +36,10 @@ class ModelItem(BaseModel):
     hf_config_path: Optional[str] = None
     # Engine type and llama.cpp specific fields
     engine_type: str = "vllm"
+    # Engine metadata for reproducibility (Plane D)
+    engine_image: Optional[str] = None
+    engine_version: Optional[str] = None
+    engine_digest: Optional[str] = None
     selected_gpus: Optional[List[int]] = None
     ngl: Optional[int] = None
     tensor_split: Optional[str] = None
@@ -53,6 +57,13 @@ class ModelItem(BaseModel):
     split_mode: Optional[str] = None
     cache_type_k: Optional[str] = None
     cache_type_v: Optional[str] = None
+    # Request defaults (Plane C - Phase 1)
+    request_defaults_json: Optional[str] = None
+    request_timeout_sec: Optional[int] = None
+    stream_timeout_sec: Optional[int] = None
+    # Custom startup configuration (Plane B - Phase 2)
+    engine_startup_args_json: Optional[str] = None
+    engine_startup_env_json: Optional[str] = None
     # Runtime state
     state: str
     archived: bool
@@ -93,6 +104,10 @@ class CreateModelRequest(BaseModel):
     hf_token: Optional[str] = None
     # Engine type selection
     engine_type: str = "vllm"
+    # Engine metadata for reproducibility
+    engine_image: Optional[str] = None
+    engine_version: Optional[str] = None
+    engine_digest: Optional[str] = None
     # GPU selection for both vLLM and llama.cpp
     selected_gpus: Optional[List[int]] = None
     # llama.cpp specific configuration
@@ -112,13 +127,22 @@ class CreateModelRequest(BaseModel):
     split_mode: Optional[str] = None
     cache_type_k: Optional[str] = None
     cache_type_v: Optional[str] = None
-    # Repetition control parameters
+    # Repetition control parameters (stored in both old columns and request_defaults_json)
     repetition_penalty: Optional[float] = None
     frequency_penalty: Optional[float] = None
     presence_penalty: Optional[float] = None
     temperature: Optional[float] = None
     top_k: Optional[int] = None
     top_p: Optional[float] = None
+    # Custom request extensions (Plane C - advanced)
+    custom_request_json: Optional[str] = None
+    # Request defaults (Plane C - Phase 1)
+    request_defaults_json: Optional[str] = None
+    request_timeout_sec: Optional[int] = None
+    stream_timeout_sec: Optional[int] = None
+    # Custom startup configuration (Plane B - Phase 2)
+    engine_startup_args_json: Optional[str] = None
+    engine_startup_env_json: Optional[str] = None
 
 
 class UpdateModelRequest(BaseModel):
@@ -148,6 +172,10 @@ class UpdateModelRequest(BaseModel):
     tokenizer: Optional[str] = None
     hf_config_path: Optional[str] = None
     hf_token: Optional[str] = None
+    # Engine metadata for reproducibility
+    engine_image: Optional[str] = None
+    engine_version: Optional[str] = None
+    engine_digest: Optional[str] = None
     # llama.cpp specific fields for updates
     selected_gpus: Optional[List[int]] = None
     ngl: Optional[int] = None
@@ -166,13 +194,22 @@ class UpdateModelRequest(BaseModel):
     split_mode: Optional[str] = None
     cache_type_k: Optional[str] = None
     cache_type_v: Optional[str] = None
-    # Repetition control parameters
+    # Repetition control parameters (stored in both old columns and request_defaults_json)
     repetition_penalty: Optional[float] = None
     frequency_penalty: Optional[float] = None
     presence_penalty: Optional[float] = None
     temperature: Optional[float] = None
     top_k: Optional[int] = None
     top_p: Optional[float] = None
+    # Custom request extensions (Plane C - advanced)
+    custom_request_json: Optional[str] = None
+    # Request defaults (Plane C - Phase 1)
+    request_defaults_json: Optional[str] = None
+    request_timeout_sec: Optional[int] = None
+    stream_timeout_sec: Optional[int] = None
+    # Custom startup configuration (Plane B - Phase 2)
+    engine_startup_args_json: Optional[str] = None
+    engine_startup_env_json: Optional[str] = None
 
 
 class BaseDirCfg(BaseModel):

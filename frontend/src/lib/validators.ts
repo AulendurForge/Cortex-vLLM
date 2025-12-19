@@ -183,6 +183,17 @@ export const ModelItemSchema = z.object({
   device: z.string().nullable().optional(),
   tokenizer: z.string().nullable().optional(),
   hf_config_path: z.string().nullable().optional(),
+  // Engine metadata (Plane D - Phase 0)
+  engine_image: z.string().nullable().optional(),
+  engine_version: z.string().nullable().optional(),
+  engine_digest: z.string().nullable().optional(),
+  // Request defaults (Plane C - Phase 1)
+  request_defaults_json: z.string().nullable().optional(),
+  request_timeout_sec: z.number().nullable().optional(),
+  stream_timeout_sec: z.number().nullable().optional(),
+  // Custom startup configuration (Plane B - Phase 2)
+  engine_startup_args_json: z.string().nullable().optional(),
+  engine_startup_env_json: z.string().nullable().optional(),
 });
 export const ModelListSchema = z.array(ModelItemSchema);
 

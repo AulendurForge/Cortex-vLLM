@@ -98,6 +98,10 @@ class Model(Base):
     hf_token: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Engine type selection (vllm or llamacpp)
     engine_type: Mapped[str] = mapped_column(String(16), default="vllm")
+    # Engine image/version for reproducibility (Plane D metadata)
+    engine_image: Mapped[str | None] = mapped_column(String(256), nullable=True)  # e.g., "vllm/vllm-openai:v0.6.3"
+    engine_version: Mapped[str | None] = mapped_column(String(32), nullable=True)  # e.g., "v0.6.3"
+    engine_digest: Mapped[str | None] = mapped_column(String(128), nullable=True)  # Docker image digest (SHA256)
     # GPU selection for both vLLM and llama.cpp
     selected_gpus: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array of GPU indices
     # llama.cpp specific configuration fields
@@ -118,12 +122,20 @@ class Model(Base):
     cache_type_k: Mapped[str | None] = mapped_column(String(16), nullable=True)  # KV cache type for K
     cache_type_v: Mapped[str | None] = mapped_column(String(16), nullable=True)  # KV cache type for V
     # Repetition control parameters (common to both vLLM and llama.cpp)
+    # NOTE: These are stored for backward compatibility but will be moved to request_defaults_json
     repetition_penalty: Mapped[float | None] = mapped_column(Float, nullable=True)  # Penalty for repeated tokens
     frequency_penalty: Mapped[float | None] = mapped_column(Float, nullable=True)  # Penalty for frequent tokens
     presence_penalty: Mapped[float | None] = mapped_column(Float, nullable=True)  # Penalty for present tokens
     temperature: Mapped[float | None] = mapped_column(Float, nullable=True)  # Sampling temperature
     top_k: Mapped[int | None] = mapped_column(Integer, nullable=True)  # Top-k sampling
     top_p: Mapped[float | None] = mapped_column(Float, nullable=True)  # Top-p (nucleus) sampling
+    # Request defaults and timeout policy (Plane C)
+    request_defaults_json: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON: sampling params, extensions
+    request_timeout_sec: Mapped[int | None] = mapped_column(Integer, nullable=True)  # Non-streaming timeout
+    stream_timeout_sec: Mapped[int | None] = mapped_column(Integer, nullable=True)  # Streaming timeout
+    # Custom startup configuration (Plane B - Phase 2)
+    engine_startup_args_json: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON: custom flags
+    engine_startup_env_json: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON: custom env vars
     state: Mapped[str] = mapped_column(String(16), default="stopped")
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
     port: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -144,6 +156,10 @@ class Recipe(Base):
     served_model_name: Mapped[str] = mapped_column(String(255))
     task: Mapped[str] = mapped_column(String(32), default="generate")
     engine_type: Mapped[str] = mapped_column(String(16), default="vllm")
+    # Engine image/version for reproducibility
+    engine_image: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    engine_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    engine_digest: Mapped[str | None] = mapped_column(String(128), nullable=True)
     # GPU selection for both vLLM and llama.cpp
     selected_gpus: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array of GPU indices
     # All configuration parameters (copied from Model)
@@ -189,13 +205,20 @@ class Recipe(Base):
     split_mode: Mapped[str | None] = mapped_column(String(32), nullable=True)
     cache_type_k: Mapped[str | None] = mapped_column(String(16), nullable=True)
     cache_type_v: Mapped[str | None] = mapped_column(String(16), nullable=True)
-    # Repetition control parameters
+    # Repetition control parameters (backward compat, being moved to request_defaults_json)
     repetition_penalty: Mapped[float | None] = mapped_column(Float, nullable=True)
     frequency_penalty: Mapped[float | None] = mapped_column(Float, nullable=True)
     presence_penalty: Mapped[float | None] = mapped_column(Float, nullable=True)
     temperature: Mapped[float | None] = mapped_column(Float, nullable=True)
     top_k: Mapped[int | None] = mapped_column(Integer, nullable=True)
     top_p: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Request defaults and timeout policy (Plane C)
+    request_defaults_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    request_timeout_sec: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    stream_timeout_sec: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Custom startup configuration (Plane B - Phase 2)
+    engine_startup_args_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    engine_startup_env_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Metadata
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
