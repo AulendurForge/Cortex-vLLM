@@ -13,6 +13,9 @@ class RecipeItem(BaseModel):
     served_model_name: str
     task: str
     engine_type: str
+    engine_image: Optional[str] = None
+    engine_version: Optional[str] = None
+    engine_digest: Optional[str] = None
     created_at: datetime
 
 
@@ -26,6 +29,12 @@ class CreateRecipeRequest(BaseModel):
     served_model_name: str
     task: str = "generate"
     engine_type: str = "vllm"
+    engine_image: Optional[str] = None
+    engine_version: Optional[str] = None
+    engine_digest: Optional[str] = None
+    # Custom startup configuration (Plane B - Phase 2)
+    engine_startup_args_json: Optional[str] = None
+    engine_startup_env_json: Optional[str] = None
     # All configuration parameters
     mode: str = "offline"  # 'online' or 'offline'
     repo_id: Optional[str] = None
@@ -97,6 +106,12 @@ class RecipeDetail(BaseModel):
     served_model_name: str
     task: str
     engine_type: str
+    engine_image: Optional[str] = None
+    engine_version: Optional[str] = None
+    engine_digest: Optional[str] = None
+    # Custom startup configuration (Plane B - Phase 2)
+    engine_startup_args_json: Optional[str] = None
+    engine_startup_env_json: Optional[str] = None
     # All configuration parameters
     mode: str
     repo_id: Optional[str] = None

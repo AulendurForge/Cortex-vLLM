@@ -344,21 +344,22 @@ def _build_command(m: Model) -> list[str]:
     except Exception:
         pass
     
-    # Repetition control parameters (only for generation models, not embeddings)
-    if not ((getattr(m, "task", "") or "").lower().startswith("embed")):
-        repetition_penalty = getattr(m, 'repetition_penalty', None) or 1.2
-        frequency_penalty = getattr(m, 'frequency_penalty', None) or 0.5
-        presence_penalty = getattr(m, 'presence_penalty', None) or 0.5
-        temperature = getattr(m, 'temperature', None) or 0.8
-        top_k = getattr(m, 'top_k', None) or 40
-        top_p = getattr(m, 'top_p', None) or 0.9
-        
-        cmd += ["--repetition-penalty", str(repetition_penalty)]
-        cmd += ["--frequency-penalty", str(frequency_penalty)]
-        cmd += ["--presence-penalty", str(presence_penalty)]
-        cmd += ["--temperature", str(temperature)]
-        cmd += ["--top-k", str(top_k)]
-        cmd += ["--top-p", str(top_p)]
+    # NOTE: Sampling parameters (temperature, top_p, repetition_penalty, etc.)
+    # are request-time parameters, NOT container startup args.
+    # They will be applied by the gateway when forwarding requests (Plane C).
+    # See cortexSustainmentPlan.md for details.
+    
+    # Phase 2: Append custom startup args (Plane B)
+    try:
+        from .utils import parse_custom_args_to_cli
+        custom_args_json = getattr(m, 'engine_startup_args_json', None)
+        if custom_args_json:
+            custom_cli_args = parse_custom_args_to_cli(custom_args_json)
+            if custom_cli_args:
+                cmd.extend(custom_cli_args)
+                logger.info(f"Added {len(custom_cli_args)} custom startup args for model {m.id}")
+    except Exception as e:
+        logger.warning(f"Failed to parse custom startup args for model {m.id}: {e}")
     
     return cmd
 
@@ -425,21 +426,24 @@ def _build_llamacpp_command(m: Model) -> list[str]:
     cmd += ["--cache-type-k", cache_type_k]
     cmd += ["--cache-type-v", cache_type_v]
     
-    # Repetition control parameters (only for generation models, not embeddings)
-    if not ((getattr(m, "task", "") or "").lower().startswith("embed")):
-        repetition_penalty = getattr(m, 'repetition_penalty', None) or 1.2
-        frequency_penalty = getattr(m, 'frequency_penalty', None) or 0.5
-        presence_penalty = getattr(m, 'presence_penalty', None) or 0.5
-        temperature = getattr(m, 'temperature', None) or 0.8
-        top_k = getattr(m, 'top_k', None) or 40
-        top_p = getattr(m, 'top_p', None) or 0.9
-        
-        cmd += ["--repeat-penalty", str(repetition_penalty)]
-        cmd += ["--frequency-penalty", str(frequency_penalty)]
-        cmd += ["--presence-penalty", str(presence_penalty)]
-        cmd += ["--temp", str(temperature)]  # llama.cpp uses --temp, not --temperature
-        cmd += ["--top-k", str(top_k)]
-        cmd += ["--top-p", str(top_p)]
+    # NOTE: Sampling parameters (temperature, top_p, repetition_penalty, etc.)
+    # are request-time parameters, NOT container startup args.
+    # They will be applied by the gateway when forwarding requests (Plane C).
+    # Note: llama.cpp uses different names: --temp (not --temperature),
+    # --repeat-penalty (not --repetition-penalty).
+    # Gateway will handle translation. See cortexSustainmentPlan.md for details.
+    
+    # Phase 2: Append custom startup args (Plane B)
+    try:
+        from .utils import parse_custom_args_to_cli
+        custom_args_json = getattr(m, 'engine_startup_args_json', None)
+        if custom_args_json:
+            custom_cli_args = parse_custom_args_to_cli(custom_args_json)
+            if custom_cli_args:
+                cmd.extend(custom_cli_args)
+                logger.info(f"Added {len(custom_cli_args)} custom startup args for llama.cpp model {m.id}")
+    except Exception as e:
+        logger.warning(f"Failed to parse custom startup args for llama.cpp model {m.id}: {e}")
     
     return cmd
 
@@ -488,15 +492,9 @@ def _resolve_llamacpp_model_path(m: Model) -> str:
             pass
         return container_path
     
-    # Case 2: Special handling for GPT-OSS (known location)
-    if "huihui-ai/Huihui-gpt-oss-120b-BF16-abliterated" in m.local_path:
-        special_path = "/models/huihui-ai/Huihui-gpt-oss-120b-BF16-abliterated/Q8_0-GGUF/gpt-oss-120b.Q8_0.gguf"
-        host_special = os.path.join(host_base, "huihui-ai/Huihui-gpt-oss-120b-BF16-abliterated/Q8_0-GGUF/gpt-oss-120b.Q8_0.gguf")
-        if os.path.isfile(host_special):
-            return special_path
-        # Fall through to directory scan if special file not found
-    
-    # Case 3: Directory - scan for .gguf files
+    # Case 2: Directory - scan for .gguf files
+    # NOTE: Removed GPT-OSS special-case logic (Phase 3, Issue 2 fix)
+    # All models now use explicit path selection in UI
     if os.path.isdir(host_path):
         try:
             files = os.listdir(host_path)
@@ -521,7 +519,8 @@ def _resolve_llamacpp_model_path(m: Model) -> str:
 def start_llamacpp_container_for_model(m: Model) -> Tuple[str, int]:
     """Create llama.cpp container for the model."""
     settings = get_settings()
-    image = settings.LLAMACPP_IMAGE
+    # Use model-specific engine_image if set, otherwise fall back to system default
+    image = getattr(m, 'engine_image', None) or settings.LLAMACPP_IMAGE
     _ensure_image(image)
     
     name = f"llamacpp-model-{m.id}"
@@ -556,6 +555,18 @@ def start_llamacpp_container_for_model(m: Model) -> Tuple[str, int]:
         "NVIDIA_VISIBLE_DEVICES": "all",
         "NVIDIA_DRIVER_CAPABILITIES": "compute,utility",
     }
+    
+    # Phase 2: Merge custom environment variables (Plane B)
+    try:
+        from .utils import parse_custom_env_to_dict
+        custom_env_json = getattr(m, 'engine_startup_env_json', None)
+        if custom_env_json:
+            custom_env = parse_custom_env_to_dict(custom_env_json)
+            if custom_env:
+                environment.update(custom_env)
+                logger.info(f"Added {len(custom_env)} custom env vars for llama.cpp model {m.id}")
+    except Exception as e:
+        logger.warning(f"Failed to parse custom env vars for llama.cpp model {m.id}: {e}")
     
     # GPU configuration for Docker API (used with nvidia runtime)
     device_requests = None
@@ -651,7 +662,8 @@ def start_vllm_container_for_model(m: Model, hf_token: Optional[str] | None = No
     Returns (container_name, host_port).
     """
     settings = get_settings()
-    image = settings.VLLM_IMAGE
+    # Use model-specific engine_image if set, otherwise fall back to system default
+    image = getattr(m, 'engine_image', None) or settings.VLLM_IMAGE
     _ensure_image(image)
 
     name = f"vllm-model-{m.id}"
@@ -731,6 +743,18 @@ def start_vllm_container_for_model(m: Model, hf_token: Optional[str] | None = No
         environment.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
     except Exception:
         pass
+    
+    # Phase 2: Merge custom environment variables (Plane B)
+    try:
+        from .utils import parse_custom_env_to_dict
+        custom_env_json = getattr(m, 'engine_startup_env_json', None)
+        if custom_env_json:
+            custom_env = parse_custom_env_to_dict(custom_env_json)
+            if custom_env:
+                environment.update(custom_env)
+                logger.info(f"Added {len(custom_env)} custom env vars for model {m.id}")
+    except Exception as e:
+        logger.warning(f"Failed to parse custom env vars for model {m.id}: {e}")
 
     # Healthcheck: hit local /health
     healthcheck = {

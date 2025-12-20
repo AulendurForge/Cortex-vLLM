@@ -53,10 +53,68 @@ async def test_chat_model(base_url: str, model_name: str, internal_key: str = ""
         f"{base_url}/v1/chat/completions",
         json=request_data,
         headers=headers,
-        timeout=httpx.Timeout(connect=5.0, read=30.0, write=10.0, pool=5.0)
+        timeout=httpx.Timeout(connect=5.0, read=120.0, write=10.0, pool=5.0)  # Increased to 2 minutes for large models
     )
     
+    # Fallback: if chat fails due to missing chat template, retry via completions
+    # (transformers v4.44+ requires chat templates; some models don't have them)
     if response.status_code >= 400:
+        try:
+            err = response.json()
+            msg = str(err.get("message") or err.get("error") or "").lower()
+            
+            if "chat template" in msg:
+                # Convert messages to prompt and try /v1/completions
+                messages = request_data.get("messages", [])
+                prompt = "\n\n".join([
+                    f"{m.get('role', 'user').title()}: {m.get('content', '')}" 
+                    for m in messages
+                ]) + "\n\nAssistant:"
+                
+                comp_request = {
+                    "model": model_name,
+                    "prompt": prompt,
+                    "max_tokens": request_data.get("max_tokens", 50),
+                    "temperature": request_data.get("temperature", 0.7),
+                }
+                
+                comp_response = await http_client.post(
+                    f"{base_url}/v1/completions",
+                    json=comp_request,
+                    headers=headers,
+                    timeout=httpx.Timeout(connect=5.0, read=120.0, write=10.0, pool=5.0)  # Increased to 2 minutes
+                )
+                
+                if comp_response.status_code >= 400:
+                    raise Exception(f"Model returned HTTP {comp_response.status_code}: {comp_response.text[:200]}")
+                
+                comp_data = comp_response.json()
+                
+                # Convert completions response to chat format for consistency
+                response_data = {
+                    "id": comp_data.get("id"),
+                    "object": "chat.completion",
+                    "created": comp_data.get("created"),
+                    "model": comp_data.get("model", model_name),
+                    "choices": [{
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": comp_data.get("choices", [{}])[0].get("text", "")
+                        },
+                        "finish_reason": comp_data.get("choices", [{}])[0].get("finish_reason")
+                    }],
+                    "usage": comp_data.get("usage")
+                }
+                
+                return {
+                    "request": request_data,
+                    "response": response_data
+                }
+        except Exception:
+            pass
+        
+        # No fallback worked, raise original error
         raise Exception(f"Model returned HTTP {response.status_code}: {response.text[:200]}")
     
     response_data = response.json()

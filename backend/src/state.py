@@ -11,11 +11,25 @@ HEALTH_STATE: Dict[str, Dict[str, float | bool]] = {}
 HEALTH_META: Dict[str, Dict[str, Any]] = {}
 LB_INDEX: Dict[str, int] = {}
 
-# Dynamic model registry: served name -> { url, task }
-MODEL_REGISTRY: Dict[str, Dict[str, str]] = {}
+# Dynamic model registry: served name -> { url, task, engine_type, request_defaults_json }
+MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {}
 
-def register_model_endpoint(served_name: str, url: str, task: str) -> None:
-    MODEL_REGISTRY[served_name] = {"url": url, "task": task}
+def register_model_endpoint(served_name: str, url: str, task: str, engine_type: str = "vllm", request_defaults_json: str | None = None) -> None:
+    """Register a model endpoint in the runtime registry.
+    
+    Args:
+        served_name: Model name used in API requests
+        url: Base URL for model endpoint
+        task: Model task (generate/embed)
+        engine_type: Engine type (vllm/llamacpp) for request translation
+        request_defaults_json: JSON string of request defaults (Plane C)
+    """
+    MODEL_REGISTRY[served_name] = {
+        "url": url, 
+        "task": task,
+        "engine_type": engine_type,
+        "request_defaults_json": request_defaults_json,
+    }
 
 def unregister_model_endpoint(served_name: str) -> None:
     try:
@@ -23,18 +37,25 @@ def unregister_model_endpoint(served_name: str) -> None:
     except Exception:
         pass
 
-def get_model_registry() -> Dict[str, Dict[str, str]]:
+def get_model_registry() -> Dict[str, Dict[str, Any]]:
     return MODEL_REGISTRY.copy()
 
-def set_model_registry(entries: Dict[str, Dict[str, str]]) -> None:
+def set_model_registry(entries: Dict[str, Dict[str, Any]]) -> None:
     """Replace in-memory registry with provided entries (used on startup load)."""
     try:
         MODEL_REGISTRY.clear()
         for k, v in (entries or {}).items():
             url = str(v.get("url", "")) if isinstance(v, dict) else ""
             task = str(v.get("task", "generate")) if isinstance(v, dict) else "generate"
+            engine_type = str(v.get("engine_type", "vllm")) if isinstance(v, dict) else "vllm"
+            request_defaults_json = v.get("request_defaults_json") if isinstance(v, dict) else None
             if url:
-                MODEL_REGISTRY[str(k)] = {"url": url, "task": task}
+                MODEL_REGISTRY[str(k)] = {
+                    "url": url, 
+                    "task": task,
+                    "engine_type": engine_type,
+                    "request_defaults_json": request_defaults_json,
+                }
     except Exception:
         # Best-effort load; ignore malformed entries
         pass

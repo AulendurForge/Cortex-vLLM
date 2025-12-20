@@ -11,6 +11,7 @@ interface BasicModelInfoProps {
   onNameChange: (value: string) => void;
   onServedModelNameChange: (value: string) => void;
   onTaskChange: (value: 'generate' | 'embed') => void;
+  modeLocked?: boolean;
 }
 
 export function BasicModelInfo({
@@ -21,6 +22,7 @@ export function BasicModelInfo({
   onNameChange,
   onServedModelNameChange,
   onTaskChange,
+  modeLocked = false,
 }: BasicModelInfoProps) {
   if (!engineType) return null;
 
@@ -56,14 +58,22 @@ export function BasicModelInfo({
         </p>
       </label>
 
-      <label className="text-sm">Task
-        <select className="input mt-1" value={task} onChange={(e) => onTaskChange(e.target.value as 'generate' | 'embed')}>
+      <label className="text-sm">
+        Task {modeLocked && <span className="text-amber-400 text-xs">(immutable after creation)</span>}
+        <select 
+          className={`input mt-1 ${modeLocked ? 'opacity-60 cursor-not-allowed' : ''}`}
+          value={task} 
+          onChange={(e) => onTaskChange(e.target.value as 'generate' | 'embed')}
+          disabled={modeLocked}
+        >
           <option value="generate">generate</option>
           <option value="embed">embed</option>
         </select>
         <p className="text-[11px] text-white/50 mt-1">
-          {engineType === 'vllm' ? (
-            <>Determines vLLM initialization (--task embed flag) and gateway routing.</>
+          {modeLocked ? (
+            <>Task field is immutable after creation. To change, delete and recreate model.</>
+          ) : engineType === 'vllm' ? (
+            <>Determines vLLM initialization (--runner pooling for embeddings) and gateway routing.</>
           ) : (
             <>Gateway routing hint. llama.cpp auto-detects model type from GGUF metadata.</>
           )}

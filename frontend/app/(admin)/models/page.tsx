@@ -6,8 +6,10 @@ import apiFetch from '../../../src/lib/api-clients';
 import { ModelListSchema } from '../../../src/lib/validators';
 import { Card, Table, Button, PrimaryButton, PageHeader, Badge } from '../../../src/components/UI';
 import { Modal } from '../../../src/components/Modal';
-import { ModelForm, ModelFormValues } from '../../../src/components/models/ModelForm';
+import { ModelWorkflowForm } from '../../../src/components/models/ModelWorkflowForm';
+import { ModelFormValues } from '../../../src/components/models/ModelForm';
 import { LogsViewer } from '../../../src/components/models/LogsViewer';
+import { DiagnosticBanner } from '../../../src/components/models/DiagnosticBanner';
 import { ConfirmDialog } from '../../../src/components/Confirm';
 import { ResourceCalculatorModal } from '../../../src/components/models/ResourceCalculatorModal';
 import { TestResultsModal } from '../../../src/components/models/TestResultsModal';
@@ -101,6 +103,9 @@ export default function ModelsPage() {
             device: payload.device,
             // Engine and llama.cpp fields
             engine_type: payload.engineType,
+            engine_image: payload.engineImage,
+            engine_version: payload.engineVersion,
+            engine_digest: payload.engineDigest,
             ngl: payload.ngl,
             tensor_split: payload.tensorSplit,
             batch_size: payload.batchSize,
@@ -119,11 +124,20 @@ export default function ModelsPage() {
             cache_type_v: payload.cacheTypeV,
             // Repetition control parameters
             repetition_penalty: payload.repetitionPenalty,
-            frequency_penalty: payload.frequencyPenalty,
+            frequency_penalty: payload.frequency_penalty,
             presence_penalty: payload.presencePenalty,
             temperature: payload.temperature,
             top_k: payload.topK,
             top_p: payload.topP,
+            // Custom request extensions (Plane C - advanced)
+            custom_request_json: payload.customRequestJson || null,
+            // Custom startup args (Plane B - Phase 2)
+            engine_startup_args_json: payload.customArgs && payload.customArgs.length > 0 
+              ? JSON.stringify(payload.customArgs) 
+              : null,
+            engine_startup_env_json: payload.customEnv && payload.customEnv.length > 0 
+              ? JSON.stringify(payload.customEnv) 
+              : null,
       };
       return await apiFetch('/admin/models', { method: 'POST', body: JSON.stringify(body) });
     },
@@ -170,14 +184,21 @@ export default function ModelsPage() {
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['models'] }); setConfigId(null); setDryCmd(""); },
   });
+  const [dryRunResult, setDryRunResult] = React.useState<any>(null);
   const dryRun = useMutation({
-    mutationFn: async (id: number) => apiFetch<{ command: string | string[]; engine?: string }>(`/admin/models/${id}/dry-run`, { method: 'POST' }),
+    mutationFn: async (id: number) => apiFetch<any>(`/admin/models/${id}/dry-run`, { method: 'POST' }),
     onSuccess: (r) => { 
-      const cmd = Array.isArray((r as any).command) ? (r as any).command.join(' ') : (r as any).command || '';
-      const engine = (r as any).engine || 'vllm';
-      setDryCmd(`# ${engine} command:\n${cmd}`); 
+      setDryRunResult(r);
+      const cmd = r.command_str || (Array.isArray(r.command) ? r.command.join(' ') : '');
+      setDryCmd(cmd ? `# Startup command:\n${cmd}` : ''); 
     },
   });
+
+  // Clear dry-run results when switching between models
+  React.useEffect(() => {
+    setDryCmd("");
+    setDryRunResult(null);
+  }, [configId]);
 
   const testModel = useMutation({
     mutationFn: async (id: number) => {
@@ -390,12 +411,10 @@ export default function ModelsPage() {
       )}
 
       {isAdmin && (
-      <Modal open={open} onClose={()=>setOpen(false)} title="Add Model">
-        <ModelForm
+      <Modal open={open} onClose={()=>setOpen(false)} title="Add Model" variant="workflow">
+        <ModelWorkflowForm
           onCancel={()=>setOpen(false)}
           onSubmit={(v)=>{
-            // If user chose GGUF via UI inspect, they will have set localPath to folder.
-            // We convert to file path when GGUF was selected (detected by presence of '.gguf' in localPath or tokenizer filled and selectedGguf handled in form before submit).
             create.mutate(v);
           }}
           submitLabel={create.isPending ? 'Creating…' : 'Create'}
@@ -435,7 +454,7 @@ export default function ModelsPage() {
       )}
 
       {isAdmin && (
-      <Modal open={configId != null} onClose={()=>{ setConfigId(null); setDryCmd(""); }} title="Configure Model">
+      <Modal open={configId != null} onClose={()=>{ setConfigId(null); setDryCmd(""); }} title="Configure Model" variant="workflow">
         {configId != null && (()=>{
           const m = (list.data || []).find((x:any)=>x.id===configId) || {};
           const defaults: ModelFormValues = {
@@ -461,6 +480,9 @@ export default function ModelsPage() {
             tokenizer: (m as any).tokenizer || '',
             hfConfigPath: (m as any).hf_config_path || '',
             engineType: (m as any).engine_type || 'vllm',
+            engineImage: (m as any).engine_image || '',
+            engineVersion: (m as any).engine_version || '',
+            engineDigest: (m as any).engine_digest || '',
             ngl: (m as any).ngl ?? 999,
             tensorSplit: (m as any).tensor_split || '',
             batchSize: (m as any).batch_size ?? 2048,
@@ -484,144 +506,121 @@ export default function ModelsPage() {
             temperature: (m as any).temperature ?? 0.8,
             topK: (m as any).top_k ?? 40,
             topP: (m as any).top_p ?? 0.9,
+            // Custom request extensions
+            customRequestJson: (() => {
+              try {
+                const json = (m as any).request_defaults_json;
+                if (!json) return '';
+                const defaults = JSON.parse(json);
+                const standardFields = ['temperature', 'top_p', 'top_k', 'repetition_penalty', 'frequency_penalty', 'presence_penalty'];
+                const custom: any = {};
+                for (const key in defaults) {
+                  if (!standardFields.includes(key)) {
+                    custom[key] = defaults[key];
+                  }
+                }
+                return Object.keys(custom).length > 0 ? JSON.stringify(custom, null, 2) : '';
+              } catch {
+                return '';
+              }
+            })(),
+            // Custom startup args
+            customArgs: (() => {
+              try {
+                const json = (m as any).engine_startup_args_json;
+                if (!json) return [];
+                if (Array.isArray(json)) return json;
+                if (typeof json === 'string') return JSON.parse(json);
+                return [];
+              } catch {
+                return [];
+              }
+            })(),
+            customEnv: (() => {
+              try {
+                const json = (m as any).engine_startup_env_json;
+                if (!json) return [];
+                if (Array.isArray(json)) return json;
+                if (typeof json === 'string') return JSON.parse(json);
+                return [];
+              } catch {
+                return [];
+              }
+            })(),
           } as any;
-          let draft: ModelFormValues | null = null;
           return (
-            <div className="space-y-3">
-              <div className="text-[12px] text-white/60">Source: {m.repo_id ? (<span>online • {m.repo_id}</span>) : (<span>offline • /models/{(m as any).local_path || ''}</span>)}</div>
-              <div className="text-xs text-white/70">
-                Changes to engine flags require a restart. "Save" stores changes only; "Apply" will stop and restart the container to pick up new flags.
-              </div>
-              <ModelForm
-                defaults={defaults}
-                modeLocked
-                onValuesChange={(v)=>{ draft = v; }}
-                onCancel={()=>{ setConfigId(null); setDryCmd(""); }}
-                fetchBaseDir={async ()=> { try { const r:any = await apiFetch('/admin/models/base-dir'); return r?.base_dir || ''; } catch { return ''; } }}
-                saveBaseDir={async (dir)=> { try { await apiFetch('/admin/models/base-dir', { method: 'PUT', body: JSON.stringify({ base_dir: dir }) }); } catch {} }}
-                listLocalFolders={async (base)=> { try { const r:any = await apiFetch(`/admin/models/local-folders?base=${encodeURIComponent(base)}`); return Array.isArray(r) ? r : []; } catch { return []; } }}
-                onSubmit={(v)=>{
-                  const values = draft || v;
-                  const body:any = {
-                    name: values.name,
-                    served_model_name: values.servedModelName,
-                    task: values.task,
-                    dtype: values.dtype,
-                    tp_size: values.tpSize,
-                    selected_gpus: values.selectedGpus,
-                    gpu_memory_utilization: values.gpuMemoryUtilization,
-                    max_model_len: values.maxModelLen,
-                    max_num_batched_tokens: values.maxNumBatchedTokens,
-                    kv_cache_dtype: values.kvCacheDtype,
-                    quantization: values.quantization,
-                    block_size: values.blockSize,
-                    swap_space_gb: values.swapSpaceGb,
-                    enforce_eager: values.enforceEager,
-                    tokenizer: values.tokenizer,
-                    hf_config_path: values.hfConfigPath,
-                    hf_token: values.hfToken,
-                    cpu_offload_gb: values.cpuOffloadGb,
-                    enable_prefix_caching: values.enablePrefixCaching,
-                    prefix_caching_hash_algo: values.prefixCachingHashAlgo,
-                    enable_chunked_prefill: values.enableChunkedPrefill,
-                    max_num_seqs: values.maxNumSeqs,
-                    cuda_graph_sizes: values.cudaGraphSizes,
-                    pipeline_parallel_size: values.pipelineParallelSize,
-                    device: values.device,
-                    // llama.cpp-specific fields
-                    ngl: values.ngl,
-                    tensor_split: values.tensorSplit,
-                    batch_size: values.batchSize,
-                    ubatch_size: values.ubatchSize,
-                    threads: values.threads,
-                    context_size: values.contextSize,
-                    parallel_slots: values.parallelSlots,
-                    rope_freq_base: values.ropeFreqBase,
-                    rope_freq_scale: values.ropeFreqScale,
-                    flash_attention: values.flashAttention,
-                    mlock: values.mlock,
-                    no_mmap: values.noMmap,
-                    numa_policy: values.numaPolicy,
-            split_mode: values.splitMode,
-            cache_type_k: values.cacheTypeK,
-            cache_type_v: values.cacheTypeV,
-            // Repetition control parameters
-            repetition_penalty: values.repetitionPenalty,
-            frequency_penalty: values.frequencyPenalty,
-            presence_penalty: values.presencePenalty,
-            temperature: values.temperature,
-            top_k: values.topK,
-            top_p: values.topP,
-                  };
-                  apply.mutate({ id: configId, body });
-                }}
-                submitLabel={undefined}
-              />
-              <div className="flex items-center justify-between">
-                <div className="text-xs text-white/60">
-                  Immutable fields (mode, repo/local folder) are fixed after creation. Use Delete and re‑add to change them.
-                </div>
-                <div className="flex gap-2">
-                  <Button onClick={()=>dryRun.mutate(configId)} disabled={dryRun.isPending}>Dry run</Button>
-                  <PrimaryButton onClick={()=>{
-                    // Fire with last draft values; ModelForm onSubmit also covers Enter key
-                    if (draft) apply.mutate({ id: configId!, body: {
-                      name: draft.name,
-                      served_model_name: draft.servedModelName,
-                      task: draft.task,
-                      dtype: draft.dtype,
-                      tp_size: draft.tpSize,
-                      selected_gpus: draft.selectedGpus,
-                      gpu_memory_utilization: draft.gpuMemoryUtilization,
-                      max_model_len: draft.maxModelLen,
-                      max_num_batched_tokens: draft.maxNumBatchedTokens,
-                      kv_cache_dtype: draft.kvCacheDtype,
-                      quantization: draft.quantization,
-                      block_size: draft.blockSize,
-                      swap_space_gb: draft.swapSpaceGb,
-                      enforce_eager: draft.enforceEager,
-                      tokenizer: draft.tokenizer,
-                      hf_config_path: draft.hfConfigPath,
-                      hf_token: draft.hfToken,
-                      cpu_offload_gb: draft.cpuOffloadGb,
-                      enable_prefix_caching: draft.enablePrefixCaching,
-                      prefix_caching_hash_algo: draft.prefixCachingHashAlgo,
-                      enable_chunked_prefill: draft.enableChunkedPrefill,
-                      max_num_seqs: draft.maxNumSeqs,
-                      cuda_graph_sizes: draft.cudaGraphSizes,
-                      pipeline_parallel_size: draft.pipelineParallelSize,
-                      device: draft.device,
-                      // llama.cpp-specific fields
-                      ngl: draft.ngl,
-                      tensor_split: draft.tensorSplit,
-                      batch_size: draft.batchSize,
-                      ubatch_size: draft.ubatchSize,
-                      threads: draft.threads,
-                      context_size: draft.contextSize,
-                      parallel_slots: draft.parallelSlots,
-                      rope_freq_base: draft.ropeFreqBase,
-                      rope_freq_scale: draft.ropeFreqScale,
-                      flash_attention: draft.flashAttention,
-                      mlock: draft.mlock,
-                      no_mmap: draft.noMmap,
-                      numa_policy: draft.numaPolicy,
-                      split_mode: draft.splitMode,
-                      cache_type_k: draft.cacheTypeK,
-                      cache_type_v: draft.cacheTypeV,
-                      // Repetition control parameters
-                      repetition_penalty: draft.repetitionPenalty,
-                      frequency_penalty: draft.frequencyPenalty,
-                      presence_penalty: draft.presencePenalty,
-                      temperature: draft.temperature,
-                      top_k: draft.topK,
-                      top_p: draft.topP,
-                    }});
-                    else if (m) apply.mutate({ id: configId!, body: {} });
-                  }} disabled={apply.isPending}>Apply (restart)</PrimaryButton>
-                </div>
-              </div>
-              {dryCmd && (<pre className="text-xs text-white/70 bg-black/30 rounded p-2 overflow-x-auto" title="Effective vLLM command">{dryCmd}</pre>)}
-            </div>
+            <ModelWorkflowForm
+              modelId={configId}
+              defaults={defaults}
+              modeLocked
+              onCancel={()=>{ setConfigId(null); setDryCmd(""); }}
+              fetchBaseDir={async ()=> { try { const r:any = await apiFetch('/admin/models/base-dir'); return r?.base_dir || ''; } catch { return ''; } }}
+              saveBaseDir={async (dir)=> { try { await apiFetch('/admin/models/base-dir', { method: 'PUT', body: JSON.stringify({ base_dir: dir }) }); } catch {} }}
+              listLocalFolders={async (base)=> { try { const r:any = await apiFetch(`/admin/models/local-folders?base=${encodeURIComponent(base)}`); return Array.isArray(r) ? r : []; } catch { return []; } }}
+              onSubmit={(values)=>{
+                const body:any = {
+                  name: values.name,
+                  served_model_name: values.servedModelName,
+                  task: values.task,
+                  dtype: values.dtype,
+                  tp_size: values.tpSize,
+                  selected_gpus: values.selectedGpus,
+                  gpu_memory_utilization: values.gpuMemoryUtilization,
+                  max_model_len: values.maxModelLen,
+                  max_num_batched_tokens: values.maxNumBatchedTokens,
+                  kv_cache_dtype: values.kvCacheDtype,
+                  quantization: values.quantization,
+                  block_size: values.blockSize,
+                  swap_space_gb: values.swapSpaceGb,
+                  enforce_eager: values.enforceEager,
+                  tokenizer: values.tokenizer,
+                  hf_config_path: values.hfConfigPath,
+                  hf_token: values.hfToken,
+                  cpu_offload_gb: values.cpuOffloadGb,
+                  enable_prefix_caching: values.enablePrefixCaching,
+                  prefix_caching_hash_algo: values.prefixCachingHashAlgo,
+                  enable_chunked_prefill: values.enableChunkedPrefill,
+                  max_num_seqs: values.maxNumSeqs,
+                  cuda_graph_sizes: values.cudaGraphSizes,
+                  pipeline_parallel_size: values.pipelineParallelSize,
+                  device: values.device,
+                  engine_image: values.engineImage,
+                  engine_version: values.engineVersion,
+                  engine_digest: values.engineDigest,
+                  ngl: values.ngl,
+                  tensor_split: values.tensorSplit,
+                  batch_size: values.batchSize,
+                  ubatch_size: values.ubatch_size,
+                  threads: values.threads,
+                  context_size: values.contextSize,
+                  parallel_slots: values.parallelSlots,
+                  rope_freq_base: values.ropeFreqBase,
+                  rope_freq_scale: values.ropeFreqScale,
+                  flash_attention: values.flashAttention,
+                  mlock: values.mlock,
+                  no_mmap: values.noMmap,
+                  numa_policy: values.numaPolicy,
+                  split_mode: values.splitMode,
+                  cache_type_k: values.cacheTypeK,
+                  cache_type_v: values.cacheTypeV,
+                  repetition_penalty: values.repetitionPenalty,
+                  frequency_penalty: values.frequencyPenalty,
+                  presence_penalty: values.presencePenalty,
+                  temperature: values.temperature,
+                  top_k: values.topK,
+                  top_p: values.topP,
+                  custom_request_json: values.customRequestJson || null,
+                  engine_startup_args_json: values.customArgs && values.customArgs.length > 0 
+                    ? JSON.stringify(values.customArgs) 
+                    : null,
+                  engine_startup_env_json: values.customEnv && values.customEnv.length > 0 
+                    ? JSON.stringify(values.customEnv) 
+                    : null,
+                };
+                apply.mutate({ id: configId, body });
+              }}
+              submitLabel={apply.isPending ? 'Applying...' : 'Apply & Restart'}
+            />
           );
         })()}
       </Modal>
@@ -634,9 +633,15 @@ export default function ModelsPage() {
         title={logsFor != null ? `Model Logs - ${list.data?.find((m: any) => m.id === logsFor)?.name || 'Model'} (${list.data?.find((m: any) => m.id === logsFor)?.engine_type || 'vllm'})` : 'Model Logs'}
       >
         {logsFor != null && (
-          <LogsViewer fetcher={async ()=> {
-            try { return await apiFetch(`/admin/models/${logsFor}/logs`); } catch { return 'Logs not available yet.'; }
-          }} />
+          <>
+            <DiagnosticBanner 
+              modelId={logsFor} 
+              modelState={list.data?.find((m: any) => m.id === logsFor)?.state || 'unknown'}
+            />
+            <LogsViewer fetcher={async ()=> {
+              try { return await apiFetch(`/admin/models/${logsFor}/logs`); } catch { return 'Logs not available yet.'; }
+            }} />
+          </>
         )}
       </Modal>
       )}
@@ -699,7 +704,7 @@ export default function ModelsPage() {
       )}
 
       {isAdmin && (
-        <MyRecipesModal
+        < MyRecipesModal
           open={myRecipesOpen}
           onClose={() => setMyRecipesOpen(false)}
           onSelectRecipe={async (recipe) => {
@@ -776,5 +781,3 @@ export default function ModelsPage() {
     </section>
   );
 }
-
-
