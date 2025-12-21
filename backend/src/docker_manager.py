@@ -688,6 +688,13 @@ def start_vllm_container_for_model(m: Model, hf_token: Optional[str] | None = No
     if m.local_path:
         # bind host models dir at /models (RO)
         binds[settings.CORTEX_MODELS_DIR_HOST or settings.CORTEX_MODELS_DIR] = {"bind": "/models", "mode": "ro"}
+        # Also mount HF cache so offline models can use pre-cached tokenizers/configs when
+        # users provide a HuggingFace tokenizer id for GGUF (no downloads in offline mode).
+        try:
+            if settings.HF_CACHE_DIR_HOST or settings.HF_CACHE_DIR:
+                binds[settings.HF_CACHE_DIR_HOST or settings.HF_CACHE_DIR] = {"bind": "/root/.cache/huggingface", "mode": "rw"}
+        except Exception:
+            pass
         # offline mode optional; we always allow offline
         environment["HF_HUB_OFFLINE"] = "1"
     else:
@@ -756,13 +763,17 @@ def start_vllm_container_for_model(m: Model, hf_token: Optional[str] | None = No
     except Exception as e:
         logger.warning(f"Failed to parse custom env vars for model {m.id}: {e}")
 
-    # Healthcheck: hit local /health
+    # Healthcheck: hit local /health.
+    # Use python instead of wget/curl to avoid depending on extra packages inside the vLLM image.
     healthcheck = {
-        "Test": ["CMD-SHELL", "wget -qO- http://localhost:8000/health || exit 1"],
+        "Test": [
+            "CMD-SHELL",
+            "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3).read(); print('ok')\" >/dev/null 2>&1 || exit 1",
+        ],
         "Interval": 10_000_000_000,  # 10s ns
         "Timeout": 5_000_000_000,    # 5s ns
         "Retries": 3,
-        "StartPeriod": 15_000_000_000,
+        "StartPeriod": 30_000_000_000,
     }
 
     # publish container port 8000 to an ephemeral host port (still useful for logs/debug),
@@ -778,7 +789,10 @@ def start_vllm_container_for_model(m: Model, hf_token: Optional[str] | None = No
     except Exception:
         pass
 
-    # Build final command and log for troubleshooting
+    # Build final command and log for troubleshooting.
+    # IMPORTANT: Newer vLLM Docker images use a `vllm` CLI entrypoint, while older ones used
+    # python api_server entrypoints. To make Cortex compatible across versions, we explicitly
+    # set the container ENTRYPOINT to the OpenAI API server module and pass only flags as CMD.
     preview_cmd = _build_command(m)
     try:
         print("[docker_manager] starting model", m.id, "cmd:", preview_cmd, flush=True)
@@ -787,6 +801,7 @@ def start_vllm_container_for_model(m: Model, hf_token: Optional[str] | None = No
     container: Container = cli.containers.run(
         image=image,
         name=name,
+        entrypoint=["python3", "-m", "vllm.entrypoints.openai.api_server"],
         command=preview_cmd,
         detach=True,
         environment=environment,

@@ -5,6 +5,8 @@ import { useToast } from '../../src/providers/ToastProvider';
 import apiFetch from '../../src/lib/api-clients';
 import { useRouter } from 'next/navigation';
 import { useUser } from '../../src/providers/UserProvider';
+import { Card, Button, Input, Label, SectionTitle } from '../../src/components/UI';
+import { cn } from '../../src/lib/cn';
 
 export default function LoginPage() {
   const { addToast } = useToast();
@@ -26,39 +28,82 @@ export default function LoginPage() {
         localStorage.setItem('cortex_user_role', role);
       } catch {}
       setUser({ name: username, role: role as any });
-      addToast({ title: 'Signed in', kind: 'success' });
+      addToast({ title: 'Welcome back!', kind: 'success' });
       router.push('/guide');
     } catch (e: any) {
-      addToast({ title: 'Invalid credentials', kind: 'error' });
+      addToast({ title: 'Authentication failed', kind: 'error' });
     }
   };
 
   return (
-    <main className="min-h-screen flex items-center justify-center p-6">
-      <div className="glass rounded-2xl w-full max-w-md p-6 text-center">
-        <div className="flex items-center justify-center">
-          <Image src={require('../../src/assets/cortex logo and text white.png')} alt="CORTEX" width={160} height={160} />
+    <main className="min-h-screen flex items-center justify-center p-6 bg-cortex-gradient overflow-hidden relative">
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-indigo-500/10 rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-0 right-0 w-[600px] h-[600px] bg-cyan-500/10 rounded-full blur-[100px] pointer-events-none" />
+
+      <Card className="w-full max-w-[440px] p-8 glass border-white/10 shadow-2xl relative z-10 animate-in fade-in zoom-in-95 duration-700">
+        <div className="flex flex-col items-center mb-8">
+          <div className="relative mb-6">
+            <Image 
+              src={require('../../src/assets/cortex logo white.PNG')} 
+              alt="CORTEX" 
+              width={80} 
+              height={80} 
+              className="relative"
+            />
+          </div>
+          <h1 className="text-3xl font-black tracking-tighter text-white mb-2 uppercase italic">Cortex</h1>
+          <p className="text-white/40 text-xs font-bold uppercase tracking-[0.2em] text-center max-w-[280px]">
+            Inference Control Gateway
+          </p>
         </div>
-        <p className="mt-3 text-white/80 text-sm">
-          Secure admin-managed access to your local LLM inference gateway.
-        </p>
 
-        <form onSubmit={onSubmit} className="mt-6 space-y-3 text-left">
-          <label className="text-sm block">
-            Username
-            <input name="username" type="text" className="input mt-1" placeholder="username" required />
-          </label>
-          <label className="text-sm block">
-            Password
-            <input name="password" type="password" className="input mt-1" placeholder="••••••••" required />
-          </label>
-          <button className="btn btn-primary w-full mt-2" type="submit">Sign in</button>
-        </form>
+        <div className="bg-white/[0.03] border border-white/5 rounded-2xl p-6 mb-6 shadow-inner">
+          <form onSubmit={onSubmit} className="space-y-5">
+            <div className="space-y-1.5">
+              <Label className="text-[10px] uppercase font-bold tracking-widest text-white/40">System Username</Label>
+              <Input 
+                name="username" 
+                type="text" 
+                placeholder="administrator" 
+                className="bg-black/20 h-11 px-4 border-white/10 focus:border-indigo-500/50" 
+                required 
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-[10px] uppercase font-bold tracking-widest text-white/40">Access Password</Label>
+              <Input 
+                name="password" 
+                type="password" 
+                placeholder="••••••••••••" 
+                className="bg-black/20 h-11 px-4 border-white/10 focus:border-indigo-500/50" 
+                required 
+              />
+            </div>
+            <Button 
+              variant="cyan" 
+              className="w-full h-11 text-sm font-bold uppercase tracking-widest mt-4 shadow-lg shadow-cyan-500/10" 
+              type="submit"
+            >
+              Initialize Session
+            </Button>
+          </form>
+        </div>
 
-        <div className="mt-3 text-xs text-white/70">No self-service signup. Contact your administrator for credentials.</div>
+        <div className="space-y-6">
+          <div className="p-4 bg-amber-500/5 border border-amber-500/10 rounded-2xl">
+            <p className="text-[10px] text-amber-200/60 leading-relaxed text-center font-medium">
+              Access is restricted to authorized personnel. Contact your system administrator for credentials.
+            </p>
+          </div>
 
-        <div className="mt-6 text-xs text-white/60">Developed by Aulendur LLC</div>
-      </div>
+          <div className="flex flex-col items-center gap-2">
+            <div className="h-px w-12 bg-white/10" />
+            <div className="text-[9px] text-white/20 font-bold uppercase tracking-[0.3em]">
+              Developed by Aulendur LLC
+            </div>
+          </div>
+        </div>
+      </Card>
     </main>
   );
 }

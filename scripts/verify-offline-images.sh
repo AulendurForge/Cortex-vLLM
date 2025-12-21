@@ -51,23 +51,42 @@ MISSING_OPTIONAL=0
 echo -e "${BLUE}Checking required images...${NC}"
 echo ""
 
+# Protect against Docker daemon hangs.
+# This script is usually fast, but in failure modes docker can hang; time out those calls.
+INSPECT_TIMEOUT_SEC=${INSPECT_TIMEOUT_SEC:-15}
+
+run_with_timeout() {
+    local timeout_sec="$1"
+    shift
+    if [ "${timeout_sec}" = "0" ] || [ "${timeout_sec}" = "0s" ]; then
+        "$@"
+        return $?
+    fi
+    if command -v timeout >/dev/null 2>&1; then
+        timeout --preserve-status "${timeout_sec}" "$@"
+        return $?
+    fi
+    "$@"
+}
+
 for entry in "${REQUIRED_IMAGES[@]}"; do
     IFS='|' read -r image description <<< "$entry"
     
     printf "  %-60s " "$image"
     
-    if docker image inspect "$image" > /dev/null 2>&1; then
+    if run_with_timeout "${INSPECT_TIMEOUT_SEC}" docker image inspect "$image" > /dev/null 2>&1; then
         # Get image size
-        SIZE=$(docker image inspect "$image" --format='{{.Size}}' | awk '{printf "%.1f GB", $1/1024/1024/1024}')
+        SIZE=$(run_with_timeout "${INSPECT_TIMEOUT_SEC}" docker image inspect "$image" --format='{{.Size}}' | awk '{printf "%.1f GB", $1/1024/1024/1024}')
         echo -e "${GREEN}✓${NC} ($SIZE)"
-        ((CACHED++))
+        # NOTE: avoid `((var++))` under `set -e` (it returns exit code 1 when var was 0)
+        ((++CACHED))
     else
         if [[ "$description" == Critical* ]]; then
             echo -e "${RED}✗ MISSING (${description})${NC}"
-            ((MISSING_CRITICAL++))
+            ((++MISSING_CRITICAL))
         else
             echo -e "${YELLOW}⚠ Missing (${description})${NC}"
-            ((MISSING_OPTIONAL++))
+            ((++MISSING_OPTIONAL))
         fi
     fi
 done

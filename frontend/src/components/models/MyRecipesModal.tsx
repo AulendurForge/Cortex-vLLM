@@ -1,21 +1,18 @@
 'use client';
 
-import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Modal } from '../Modal';
-import { Button, PrimaryButton, Card, Table, Badge } from '../UI';
-import { ConfirmDialog } from '../Confirm';
-import { useToast } from '../../providers/ToastProvider';
 import apiFetch from '../../lib/api-clients';
+import { Card, Table, Button, PageHeader, Badge, InfoBox, SectionTitle } from '../UI';
+import { Modal } from '../Modal';
+import { ConfirmDialog } from '../Confirm';
+import { useState } from 'react';
+import { useToast } from '../../providers/ToastProvider';
+import { cn } from '../../lib/cn';
 
 interface Recipe {
   id: number;
   name: string;
-  description: string | null;
-  model_id: number | null;
   model_name: string;
-  served_model_name: string;
-  task: string;
   engine_type: string;
   created_at: string;
 }
@@ -23,7 +20,7 @@ interface Recipe {
 interface MyRecipesModalProps {
   open: boolean;
   onClose: () => void;
-  onSelectRecipe?: (recipe: Recipe) => void;
+  onSelectRecipe: (recipe: Recipe) => void;
 }
 
 export function MyRecipesModal({ 
@@ -31,202 +28,123 @@ export function MyRecipesModal({
   onClose, 
   onSelectRecipe 
 }: MyRecipesModalProps) {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [engineFilter, setEngineFilter] = useState<string>('');
-  const [deleteId, setDeleteId] = useState<number | null>(null);
+  const qc = useQueryClient();
   const { addToast } = useToast();
-  const queryClient = useQueryClient();
+  const [deleteId, setDeleteId] = useState<number | null>(null);
 
-  const { data: recipes = [], isLoading } = useQuery({
-    queryKey: ['recipes', searchQuery, engineFilter],
-    queryFn: async () => {
-      const params = new URLSearchParams();
-      if (searchQuery) params.append('q', searchQuery);
-      if (engineFilter) params.append('engine_type', engineFilter);
-      
-      const response = await apiFetch<Recipe[]>(`/admin/recipes?${params.toString()}`);
-      return response;
-    },
-    enabled: open,
+  const recipes = useQuery({
+    queryKey: ['recipes'],
+    queryFn: async () => await apiFetch<Recipe[]>('/admin/recipes'),
   });
 
-  const deleteRecipe = useMutation({
-    mutationFn: async (id: number) => {
-      await apiFetch(`/admin/recipes/${id}`, { method: 'DELETE' });
-    },
+  const remove = useMutation({
+    mutationFn: (id: number) => apiFetch(`/admin/recipes/${id}`, { method: 'DELETE' }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['recipes'] });
-      addToast({ title: 'Recipe deleted successfully', kind: 'success' });
+      qc.invalidateQueries({ queryKey: ['recipes'] });
+      addToast({ title: 'Recipe deleted', kind: 'success' });
       setDeleteId(null);
     },
-    onError: (error: any) => {
-      addToast({ 
-        title: `Failed to delete recipe: ${error?.message || 'Unknown error'}`, 
-        kind: 'error' 
-      });
+    onError: (e: any) => {
+      addToast({ title: `Delete failed: ${e?.message || 'Unknown error'}`, kind: 'error' });
     }
   });
-
-  const handleSelectRecipe = (recipe: Recipe) => {
-    if (onSelectRecipe) {
-      onSelectRecipe(recipe);
-    }
-    onClose();
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
 
   return (
     <>
-      <Modal open={open} onClose={onClose} title="My Recipes" variant="fullscreen">
-        <div className="space-y-4">
-          {/* Filters */}
-          <Card className="p-4">
-            <div className="flex gap-4 items-end">
-              <div className="flex-1">
-                <label className="block text-sm font-medium text-white/90 mb-2">
-                  Search Recipes
-                </label>
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="input w-full"
-                  placeholder="Search by name, description, or model..."
-                />
-              </div>
-              <div className="w-48">
-                <label className="block text-sm font-medium text-white/90 mb-2">
-                  Engine Type
-                </label>
-                <select
-                  value={engineFilter}
-                  onChange={(e) => setEngineFilter(e.target.value)}
-                  className="input w-full"
-                >
-                  <option value="">All Engines</option>
-                  <option value="vllm">vLLM</option>
-                  <option value="llamacpp">llama.cpp</option>
-                </select>
-              </div>
-            </div>
-          </Card>
+      <Modal open={open} onClose={onClose} title="Configuration Catalog" variant="fullscreen">
+        <div className="space-y-4 max-w-6xl mx-auto py-2">
+          <header className="flex flex-col gap-1">
+            <h1 className="text-2xl font-black tracking-tight text-white uppercase italic">My Recipes</h1>
+            <p className="text-white/50 text-xs leading-relaxed max-w-2xl">
+              Reusable model deployment blueprints. Load a recipe to pre-populate configuration fields with tested hardware and software parameters.
+            </p>
+          </header>
 
-          {/* Recipes Table */}
-          <Card className="p-2">
-            {isLoading ? (
-              <div className="text-center py-8 text-white/70">
-                Loading recipes...
-              </div>
-            ) : recipes.length === 0 ? (
-              <div className="text-center py-8 text-white/70">
-                {searchQuery || engineFilter ? 'No recipes match your filters.' : 'No recipes saved yet.'}
-              </div>
-            ) : (
-              <Table>
-                <thead className="text-left">
-                  <tr>
-                    <th>Name</th>
-                    <th>Model</th>
-                    <th>Engine</th>
-                    <th>Description</th>
-                    <th>Created</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recipes.map((recipe) => (
-                    <tr key={recipe.id} className="group">
-                      <td>
-                        <div className="font-medium text-white/90">
-                          {recipe.name}
+          <Card className="p-0 overflow-hidden shadow-2xl border-white/5 bg-white/[0.01]">
+            <Table>
+              <thead>
+                <tr>
+                  <th className="pl-6">Recipe Name</th>
+                  <th>Hardware Class</th>
+                  <th>Engine Strategy</th>
+                  <th>Created</th>
+                  <th className="text-right pr-6">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(recipes.data || []).map((r) => (
+                  <tr key={r.id} className="group hover:bg-white/[0.02] transition-colors">
+                    <td className="pl-6">
+                      <div className="flex items-center gap-3 py-1.5">
+                        <div className="w-8 h-8 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-xs font-bold text-purple-400 group-hover:scale-110 transition-transform duration-500">
+                          📜
                         </div>
-                      </td>
-                      <td>
-                        <div className="text-sm">
-                          <div className="font-mono text-xs text-white/70">
-                            {recipe.served_model_name}
-                          </div>
-                          <div className="text-white/60">
-                            {recipe.model_name}
-                          </div>
+                        <div className="flex flex-col">
+                          <span className="font-bold text-white text-xs">{r.name}</span>
+                          <span className="text-[9px] text-white/30 uppercase tracking-widest">{r.model_name}</span>
                         </div>
-                      </td>
-                      <td>
-                        <Badge className={
-                          recipe.engine_type === 'llamacpp' ? 
-                            'bg-green-500/20 text-green-200 border border-green-400/30' :
-                            'bg-blue-500/20 text-blue-200 border border-blue-400/30'
-                        }>
-                          {recipe.engine_type === 'llamacpp' ? 'llama.cpp' : 'vLLM'}
-                        </Badge>
-                      </td>
-                      <td>
-                        <div className="text-sm text-white/70 max-w-xs truncate">
-                          {recipe.description || 'No description'}
-                        </div>
-                      </td>
-                      <td>
-                        <div className="text-sm text-white/70">
-                          {formatDate(recipe.created_at)}
-                        </div>
-                      </td>
-                      <td className="text-right space-x-2">
-                        {onSelectRecipe && (
-                          <Button
-                            onClick={() => handleSelectRecipe(recipe)}
-                            className="bg-emerald-500/20 border-emerald-500/40 hover:bg-emerald-500/30"
-                          >
-                            Use Recipe
-                          </Button>
-                        )}
-                        <Button
-                          onClick={() => setDeleteId(recipe.id)}
-                          className="bg-red-500/20 border-red-500/40 hover:bg-red-500/30 opacity-0 group-hover:opacity-100 transition-opacity"
+                      </div>
+                    </td>
+                    <td>
+                      <Badge className="bg-indigo-500/10 text-indigo-300 border-indigo-500/20 text-[8px]">
+                        OPTIMIZED
+                      </Badge>
+                    </td>
+                    <td>
+                      <Badge className={r.engine_type === 'llamacpp' ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20' : 'bg-blue-500/10 text-blue-300 border-blue-500/20'}>
+                        {r.engine_type}
+                      </Badge>
+                    </td>
+                    <td className="text-[9px] text-white/40 font-mono">
+                      {new Date(r.created_at).toLocaleDateString()}
+                    </td>
+                    <td className="text-right pr-6">
+                      <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button 
+                          variant="cyan" 
+                          size="sm" 
+                          onClick={() => { onSelectRecipe(r); onClose(); }}
+                          className="px-3 font-bold uppercase tracking-widest text-[8px]"
+                        >
+                          Load Blueprint
+                        </Button>
+                        <Button 
+                          variant="danger" 
+                          size="sm" 
+                          onClick={() => setDeleteId(r.id)}
+                          className="px-2"
                         >
                           Delete
                         </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </Table>
-            )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {(recipes.data || []).length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="text-center py-16 text-white/40">
+                      <div className="text-4xl mb-4 opacity-10">📜</div>
+                      <div className="text-xs font-bold uppercase tracking-[0.2em]">No Blueprints cataloged</div>
+                      <p className="text-[10px] mt-1 italic">Save a configuration from the Models page to see it here.</p>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </Table>
           </Card>
 
-          {/* Summary */}
-          <div className="text-sm text-white/60 text-center">
-            {recipes.length} recipe{recipes.length !== 1 ? 's' : ''} found
-          </div>
+          <InfoBox variant="blue" title="Efficiency Tip" className="text-[10px] p-2">
+            Using recipes reduces deployment errors by locking in Tensor Parallel sizes and quantization levels that have been pre-validated for your cluster.
+          </InfoBox>
         </div>
       </Modal>
 
-      {/* Delete Confirmation */}
       <ConfirmDialog
         open={deleteId !== null}
-        title="Delete Recipe?"
-        description={
-          <div>
-            Are you sure you want to delete this recipe? This action cannot be undone.
-            {deleteId && (
-              <div className="mt-2 p-2 bg-red-500/10 border border-red-500/30 rounded">
-                <strong className="text-red-300">
-                  {recipes.find(r => r.id === deleteId)?.name}
-                </strong>
-              </div>
-            )}
-          </div>
-        }
-        confirmLabel={deleteRecipe.isPending ? 'Deleting...' : 'Delete Recipe'}
-        onConfirm={() => deleteId && deleteRecipe.mutate(deleteId)}
+        title="Purge Recipe?"
+        description="This will permanently remove this deployment blueprint from your local catalog. Actual running models will not be affected."
+        confirmLabel="Purge Blueprint"
+        onConfirm={() => deleteId && remove.mutate(deleteId)}
         onClose={() => setDeleteId(null)}
       />
     </>

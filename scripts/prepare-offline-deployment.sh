@@ -9,8 +9,50 @@ echo "Cortex Offline Deployment Preparation"
 echo "=========================================="
 echo ""
 
+# Timeout controls (seconds). Set to 0 to disable timeouts.
+# These protect you from long hangs when network/Docker is unhealthy.
+PULL_TIMEOUT_SEC=${PULL_TIMEOUT_SEC:-1800}   # 30 minutes
+SAVE_TIMEOUT_SEC=${SAVE_TIMEOUT_SEC:-1800}   # 30 minutes
+DOCKER_RETRY_COUNT=${DOCKER_RETRY_COUNT:-2}  # retries for pull/save
+
+# Portable-ish timeout wrapper (uses GNU coreutils `timeout` when available)
+run_with_timeout() {
+    local timeout_sec="$1"
+    shift
+    if [ "${timeout_sec}" = "0" ] || [ "${timeout_sec}" = "0s" ]; then
+        "$@"
+        return $?
+    fi
+    if command -v timeout >/dev/null 2>&1; then
+        timeout --preserve-status "${timeout_sec}" "$@"
+        return $?
+    fi
+    # No timeout command available; run normally
+    "$@"
+}
+
+retry() {
+    local attempts="$1"
+    shift
+    local i=1
+    while true; do
+        if "$@"; then
+            return 0
+        fi
+        if [ "$i" -ge "$attempts" ]; then
+            return 1
+        fi
+        i=$((i+1))
+        echo -e "${YELLOW}  retry ${i}/${attempts}...${NC}"
+        sleep 2
+    done
+}
+
 # Configuration - read from config or use defaults
-VLLM_VERSION=${VLLM_VERSION:-"v0.6.3"}
+# NOTE: Qwen3 models require newer Transformers (>= 4.51). The current vllm/vllm-openai:latest
+# satisfies this, but for true offline reproducibility you should pin VLLM_VERSION to a specific tag
+# you have validated in your environment.
+VLLM_VERSION=${VLLM_VERSION:-"latest"}
 LLAMACPP_TAG=${LLAMACPP_TAG:-"server-cuda"}
 OUTPUT_DIR=${OUTPUT_DIR:-"./cortex-offline-images"}
 
@@ -50,20 +92,28 @@ pull_and_save() {
     
     # Pull image
     echo -n "  Pulling... "
-    if docker pull "$image" > /dev/null 2>&1; then
+    if retry "${DOCKER_RETRY_COUNT}" run_with_timeout "${PULL_TIMEOUT_SEC}" docker pull "$image" > /dev/null 2>&1; then
         echo -e "${GREEN}✓${NC}"
     else
-        echo -e "❌ Failed to pull"
+        if command -v timeout >/dev/null 2>&1; then
+            echo -e "❌ Failed to pull (or timed out after ${PULL_TIMEOUT_SEC}s)"
+        else
+            echo -e "❌ Failed to pull"
+        fi
         return 1
     fi
     
     # Save to tar
     echo -n "  Saving... "
-    if docker save -o "$OUTPUT_DIR/$output_name" "$image" 2>/dev/null; then
+    if retry "${DOCKER_RETRY_COUNT}" run_with_timeout "${SAVE_TIMEOUT_SEC}" docker save -o "$OUTPUT_DIR/$output_name" "$image" 2>/dev/null; then
         SIZE=$(du -h "$OUTPUT_DIR/$output_name" | cut -f1)
         echo -e "${GREEN}✓${NC} ($SIZE)"
     else
-        echo -e "❌ Failed to save"
+        if command -v timeout >/dev/null 2>&1; then
+            echo -e "❌ Failed to save (or timed out after ${SAVE_TIMEOUT_SEC}s)"
+        else
+            echo -e "❌ Failed to save"
+        fi
         return 1
     fi
 }

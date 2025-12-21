@@ -2,24 +2,25 @@
 
 import React from 'react';
 import apiFetch from '../../lib/api-clients';
-import { Button, PrimaryButton } from '../UI';
+import { Card, Button, Input, Select, SectionTitle, InfoBox, FormField, Badge } from '../UI';
 import { Modal } from '../Modal';
 import { bytesToGiB, breakdownMemory, recommendGpuMemoryUtilization, type HardwareSnapshot, type ModelMeta, type Workload, type Choices } from '../../lib/model-math';
 import { Tooltip } from '../Tooltip';
+import { cn } from '../../lib/cn';
 
 export type CalculatorResult = {
   applied: boolean;
   values: Partial<{
-    tpSize: number;
+    tp_size: number;
     dtype: 'auto' | 'bfloat16' | 'float16';
     quantization: '' | 'awq' | 'gptq' | 'fp8' | 'int8';
-    kvCacheDtype: '' | 'fp8' | 'fp8_e4m3' | 'fp8_e5m2';
-    gpuMemoryUtilization: number;
-    maxModelLen: number;
-    maxNumBatchedTokens: number;
-    blockSize: number;
-    cpuOffloadGb: number;
-    swapSpaceGb: number;
+    kv_cache_dtype: '' | 'fp8' | 'fp8_e4m3' | 'fp8_e5m2';
+    gpu_memory_utilization: number;
+    max_model_len: number;
+    max_num_batched_tokens: number;
+    block_size: number;
+    cpu_offload_gb: number;
+    swap_space_gb: number;
   }>;
 };
 
@@ -32,7 +33,6 @@ export function ResourceCalculatorModal({ open, onClose, onApply }: { open: bool
   const [cpuOffloadGb, setCpuOffloadGb] = React.useState<number>(0);
   const [swapSpaceGb, setSwapSpaceGb] = React.useState<number>(0);
   const [adjustments, setAdjustments] = React.useState<string[]>([]);
-  // Source/presets & auto-fill
   const [repoId, setRepoId] = React.useState<string>("");
   const [baseDir, setBaseDir] = React.useState<string>("");
   const [folder, setFolder] = React.useState<string>("");
@@ -51,7 +51,6 @@ export function ResourceCalculatorModal({ open, onClose, onApply }: { open: bool
         };
         if (!stop) setHw(snapshot);
         if (!stop && snapshot.gpuCount > 0) setChoices((c) => ({ ...c, tpSize: Math.min(2, snapshot.gpuCount) }));
-        // Base dir for offline inspect convenience
         try {
           const r: any = await apiFetch('/admin/models/base-dir');
           if (!stop && r?.base_dir) setBaseDir(r.base_dir);
@@ -65,35 +64,13 @@ export function ResourceCalculatorModal({ open, onClose, onApply }: { open: bool
     return () => { stop = true; };
   }, [open]);
 
-  // Persist state in session for convenience
-  React.useEffect(() => {
-    if (!open) return;
-    try {
-      const raw = sessionStorage.getItem('cortex_calc_state');
-      if (raw) {
-        const s = JSON.parse(raw);
-        if (s.meta) setMeta(s.meta);
-        if (s.work) setWork(s.work);
-        if (s.choices) setChoices(s.choices);
-      }
-    } catch {}
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
-  React.useEffect(() => {
-    if (!open) return;
-    try {
-      sessionStorage.setItem('cortex_calc_state', JSON.stringify({ meta, work, choices }));
-    } catch {}
-  }, [open, meta, work, choices]);
-
-  // Presets
   const presets: Array<{ id: string; label: string; meta: ModelMeta }> = [
     { id: 'custom', label: 'Custom', meta: meta },
-    { id: '7b', label: 'Generic 7B (4096×32)', meta: { paramsB: 7, hiddenSize: 4096, numLayers: 32 } },
-    { id: '8b', label: 'Llama‑3‑8B (4096×32)', meta: { paramsB: 8, hiddenSize: 4096, numLayers: 32 } },
-    { id: '13b', label: 'Generic 13B (5120×40)', meta: { paramsB: 13, hiddenSize: 5120, numLayers: 40 } },
-    { id: '20b', label: 'Generic 20B (6144×44)', meta: { paramsB: 20, hiddenSize: 6144, numLayers: 44 } },
-    { id: '70b', label: 'Llama‑3‑70B (8192×80)', meta: { paramsB: 70, hiddenSize: 8192, numLayers: 80 } },
+    { id: '7b', label: 'Generic 7B', meta: { paramsB: 7, hiddenSize: 4096, numLayers: 32 } },
+    { id: '8b', label: 'Llama‑3‑8B', meta: { paramsB: 8, hiddenSize: 4096, numLayers: 32 } },
+    { id: '13b', label: 'Generic 13B', meta: { paramsB: 13, hiddenSize: 5120, numLayers: 40 } },
+    { id: '20b', label: 'Generic 20B', meta: { paramsB: 20, hiddenSize: 6144, numLayers: 44 } },
+    { id: '70b', label: 'Llama‑3‑70B', meta: { paramsB: 70, hiddenSize: 8192, numLayers: 80 } },
   ];
   const [presetId, setPresetId] = React.useState<string>('custom');
   const applyPreset = (id: string) => {
@@ -102,7 +79,6 @@ export function ResourceCalculatorModal({ open, onClose, onApply }: { open: bool
     if (p && p.id !== 'custom') setMeta(p.meta);
   };
 
-  // Fetch meta from HF or local folder
   const onFetchMeta = async () => {
     setFetchingMeta(true);
     try {
@@ -128,35 +104,19 @@ export function ResourceCalculatorModal({ open, onClose, onApply }: { open: bool
     finally { setFetchingMeta(false); }
   };
 
-  // Auto-fetch when repoId changes (debounced)
-  React.useEffect(() => {
-    if (!open) return;
-    if (!repoId) return;
-    const t = setTimeout(() => { onFetchMeta().catch(()=>{}); }, 600);
-    return () => clearTimeout(t);
-  }, [open, repoId]);
-
-  // Auto-fetch when both baseDir and folder are present (debounced)
-  React.useEffect(() => {
-    if (!open) return;
-    if (!baseDir || !folder) return;
-    const t = setTimeout(() => { onFetchMeta().catch(()=>{}); }, 600);
-    return () => clearTimeout(t);
-  }, [open, baseDir, folder]);
-
   const onApplyClick = () => {
     const util = recommendGpuMemoryUtilization();
     onApply({ applied: true, values: {
-      tpSize: choices.tpSize,
+      tp_size: choices.tpSize,
       dtype: choices.dtype,
       quantization: choices.quantization,
-      kvCacheDtype: choices.kvCacheDtype,
-      gpuMemoryUtilization: util,
-      maxModelLen: work.seqLen,
-      blockSize: 16,
-      maxNumBatchedTokens: 2048,
-      cpuOffloadGb: cpuOffloadGb > 0 ? Math.round(cpuOffloadGb) : 0,
-      swapSpaceGb: swapSpaceGb > 0 ? Math.round(swapSpaceGb) : 0,
+      kv_cache_dtype: choices.kvCacheDtype,
+      gpu_memory_utilization: util,
+      max_model_len: work.seqLen,
+      block_size: 16,
+      max_num_batched_tokens: 2048,
+      cpu_offload_gb: cpuOffloadGb > 0 ? Math.round(cpuOffloadGb) : 0,
+      swap_space_gb: swapSpaceGb > 0 ? Math.round(swapSpaceGb) : 0,
     }});
   };
 
@@ -171,12 +131,11 @@ export function ResourceCalculatorModal({ open, onClose, onApply }: { open: bool
     if (!summary) return items;
     const anyOver = summary.perGpu.some((p)=>!p.fits);
     if (anyOver) {
-      items.push('Current settings may not fit in available VRAM. Consider:');
-      items.push('• Enable kv_cache_dtype=fp8 to halve KV cache memory');
-      items.push('• Use 4‑bit or int8 quantization to reduce weight memory');
-      items.push('• Lower max context or max sequences');
-      items.push('• Increase TP size if multiple GPUs are available');
-      items.push('• Use cpu_offload_gb and/or swap_space as a last resort (higher latency)');
+      items.push('Consider:');
+      items.push('• Enable kv_cache_dtype=fp8');
+      items.push('• Use 4‑bit or int8 quantization');
+      items.push('• Lower max context or sequences');
+      items.push('• Increase TP size');
     }
     return items;
   }, [summary]);
@@ -192,13 +151,11 @@ export function ResourceCalculatorModal({ open, onClose, onApply }: { open: bool
       return { ok, br };
     };
     let check = tryFits();
-    // 1) KV fp8
     if (!check.ok && (!c.kvCacheDtype || !String(c.kvCacheDtype).startsWith('fp8'))) {
       c.kvCacheDtype = 'fp8';
       notes.push('Set kv_cache_dtype=fp8');
       check = tryFits();
     }
-    // 2) Quantization: int8 then 4-bit
     if (!check.ok && !c.quantization) {
       c.quantization = 'int8';
       notes.push('Enable int8 quantization');
@@ -206,62 +163,52 @@ export function ResourceCalculatorModal({ open, onClose, onApply }: { open: bool
     }
     if (!check.ok && c.quantization !== 'awq' && c.quantization !== 'gptq') {
       c.quantization = 'awq';
-      notes.push('Switch to 4-bit quantization (awq)');
+      notes.push('Switch to 4-bit (awq)');
       check = tryFits();
     }
-    // 3) Increase TP up to GPU count
     if (!check.ok && hw.gpuCount > c.tpSize) {
       for (let t = c.tpSize + 1; t <= hw.gpuCount; t++) {
         c.tpSize = t;
-        notes.push(`Increase TP size to ${t}`);
+        notes.push(`Increase TP to ${t}`);
         check = tryFits();
         if (check.ok) break;
       }
     }
-    // 4) Reduce total active tokens via max_batched_tokens and avg_active_tokens, then sequences
     if (!check.ok) {
-      // lower max_batched_tokens down to 2048 then 1024
       const targets = [2048, 1024, 768];
       for (const t of targets) {
         if (check.ok) break;
         const cur = w.maxBatchedTokens ?? 4096;
         if (cur > t) {
           w.maxBatchedTokens = t;
-          notes.push(`Reduce max batched tokens to ${t}`);
+          notes.push(`Reduce batched tokens to ${t}`);
           check = tryFits();
         }
       }
     }
     if (!check.ok && (w.avgActiveTokens ?? 2048) > 1024) {
       w.avgActiveTokens = Math.max(512, Math.floor((w.avgActiveTokens ?? 2048) / 2));
-      notes.push(`Reduce avg active tokens to ${w.avgActiveTokens}`);
+      notes.push(`Reduce avg tokens to ${w.avgActiveTokens}`);
       check = tryFits();
     }
     if (!check.ok && w.maxNumSeqs > 64) {
       w.maxNumSeqs = Math.max(64, Math.floor(w.maxNumSeqs / 2));
-      notes.push(`Reduce max sequences to ${w.maxNumSeqs}`);
+      notes.push(`Reduce sequences to ${w.maxNumSeqs}`);
       check = tryFits();
     }
-    // 5) Reduce context down to 4096
     if (!check.ok && w.seqLen > 4096) {
       w.seqLen = Math.max(4096, Math.floor(w.seqLen / 2));
-      notes.push(`Reduce context length to ${w.seqLen}`);
+      notes.push(`Reduce context to ${w.seqLen}`);
       check = tryFits();
     }
-    // 6) As last resort, suggest offload/swap
     let offload = 0;
     let swap = 0;
     if (!check.ok) {
-      // compute per-GPU deficit and propose offload
-      const worst = Math.max(
-        0,
-        ...check.br.perGpu.map((p)=> (p.totalBytes - (p.vramFreeBytes || 0)))
-      );
+      const worst = Math.max(0, ...check.br.perGpu.map((p)=> (p.totalBytes - (p.vramFreeBytes || 0))));
       offload = worst > 0 ? Math.ceil(bytesToGiB(worst)) : 0;
-      if (offload > 0) notes.push(`Suggest cpu_offload_gb ≈ ${offload} GiB`);
-      // also propose small swap space
+      if (offload > 0) notes.push(`Suggest offload ≈ ${offload} GiB`);
       swap = offload > 0 ? Math.min(16, Math.max(4, Math.ceil(offload / 2))) : 0;
-      if (swap > 0) notes.push(`Suggest swap_space ≈ ${swap} GiB`);
+      if (swap > 0) notes.push(`Suggest swap ≈ ${swap} GiB`);
     }
     setChoices(c);
     setWork(w);
@@ -270,199 +217,152 @@ export function ResourceCalculatorModal({ open, onClose, onApply }: { open: bool
     setAdjustments(notes);
   };
 
-  const downloadReport = () => {
-    const lines: string[] = [];
-    lines.push('# Cortex Model Resource Report');
-    lines.push('');
-    lines.push('Hardware:');
-    if (hw) {
-      hw.gpus.slice(0, choices.tpSize).forEach((g)=>{
-        const total = (g.mem_total_mb||0)/1024;
-        const used = (g.mem_used_mb||0)/1024;
-        lines.push(`- GPU ${g.index}${g.name?` ${g.name}`:''}: total ${total.toFixed(1)} GiB, used ${used.toFixed(1)} GiB`);
-      });
-    }
-    lines.push('');
-    lines.push(`Model meta: params=${meta.paramsB}B, hidden_size=${meta.hiddenSize}, layers=${meta.numLayers}`);
-    lines.push(`Workload: context=${work.seqLen}, max_num_seqs=${work.maxNumSeqs}`);
-    lines.push(`Choices: dtype=${choices.dtype}, quant=${choices.quantization||'none'}, kv_cache_dtype=${choices.kvCacheDtype||'auto'}, tp_size=${choices.tpSize}`);
-    lines.push('');
-    if (summary) {
-      lines.push('Per-GPU estimate:');
-      summary.perGpu.forEach((p)=>{
-        lines.push(`- GPU ${p.index}: total≈${bytesToGiB(p.totalBytes).toFixed(2)} GiB (weights ${bytesToGiB(p.weightsBytes).toFixed(2)}, kv ${bytesToGiB(p.kvBytes).toFixed(2)}, overhead ${bytesToGiB(p.overheadBytes).toFixed(2)})${p.vramFreeBytes!=null?`, free≈${bytesToGiB(p.vramFreeBytes||0).toFixed(2)} GiB`:''}${p.fits?'':' [may not fit]'}`);
-      });
-    }
-    if (adjustments.length > 0) {
-      lines.push('');
-      lines.push('Applied adjustments:');
-      adjustments.forEach((a)=> lines.push(`- ${a}`));
-    }
-    if (cpuOffloadGb>0 || swapSpaceGb>0) {
-      lines.push('');
-      lines.push(`Offload/swap suggestions: cpu_offload_gb≈${Math.round(cpuOffloadGb)} GiB, swap_space≈${Math.round(swapSpaceGb)} GiB`);
-    }
-    const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-    a.href = url;
-    a.download = `cortex-resource-report-${stamp}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
   return (
-    <Modal open={open} onClose={onClose} title="Model Resource Calculator">
-      <div className="space-y-4">
-        <div className="text-white/80 text-sm">Walk through hardware and workload to estimate recommended engine flags.</div>
-        <div className="rounded border border-white/10 p-2">
-          <div className="text-white/70 text-sm mb-2">Source & presets</div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <label className="text-sm md:col-span-1">Preset
-              <select className="input mt-1" value={presetId} onChange={(e)=>applyPreset(e.target.value)}>
-                {presets.map((p)=> (<option key={p.id} value={p.id}>{p.label}</option>))}
-              </select>
-              <p className="text-[11px] text-white/50 mt-1">Quickly set typical meta values for common model sizes. Choose Custom to edit manually.</p>
-            </label>
-            <label className="text-sm md:col-span-1">HF repo id (optional)
-              <input className="input mt-1" placeholder="owner/repo" value={repoId} onChange={(e)=>setRepoId(e.target.value)} />
-              <p className="text-[11px] text-white/50 mt-1">Hugging Face repository (e.g., <code>meta-llama/Meta-Llama-3-8B</code>). We read <code>config.json</code> to auto‑fill meta.</p>
-            </label>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 md:col-span-1">
-              <label className="text-sm">Base dir (optional)
-                <input className="input mt-1" value={baseDir} onChange={(e)=>setBaseDir(e.target.value)} />
-                <p className="text-[11px] text-white/50 mt-1">Your models base directory (mounted as <code>/models</code> in vLLM). Used for local folder inspection.</p>
-              </label>
-              <label className="text-sm">Folder (optional)
-                <input className="input mt-1" value={folder} onChange={(e)=>setFolder(e.target.value)} />
-                <p className="text-[11px] text-white/50 mt-1">Subfolder name under the base dir that contains the model. We look for <code>config.json</code> here.</p>
-              </label>
-            </div>
-          </div>
-          <div className="mt-2 flex items-center justify-end">
-            <Button onClick={onFetchMeta} disabled={fetchingMeta}>{fetchingMeta ? 'Fetching…' : 'Fetch meta'}</Button>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <label className="text-sm">Params (B)
-            <input className="input mt-1" type="number" min={1} step={1} value={meta.paramsB} onChange={(e)=>setMeta({ ...meta, paramsB: Number(e.target.value)||meta.paramsB })} />
-            <p className="text-[11px] text-white/50 mt-1">Billions of parameters. Often listed on the model card; may be absent in <code>config.json</code>.</p>
-          </label>
-          <label className="text-sm">Hidden size
-            <input className="input mt-1" type="number" min={512} step={64} value={meta.hiddenSize} onChange={(e)=>setMeta({ ...meta, hiddenSize: Number(e.target.value)||meta.hiddenSize })} />
-            <p className="text-[11px] text-white/50 mt-1">From <code>config.json</code> → <code>hidden_size</code> (or <code>n_embd</code>).</p>
-          </label>
-          <label className="text-sm">Layers
-            <input className="input mt-1" type="number" min={1} step={1} value={meta.numLayers} onChange={(e)=>setMeta({ ...meta, numLayers: Number(e.target.value)||meta.numLayers })} />
-            <p className="text-[11px] text-white/50 mt-1">From <code>config.json</code> → <code>num_hidden_layers</code> (or <code>n_layer</code>).</p>
-          </label>
-
-          <label className="text-sm">Context (tokens)
-            <input className="input mt-1" type="number" min={2048} step={1024} value={work.seqLen} onChange={(e)=>setWork({ ...work, seqLen: Number(e.target.value)||work.seqLen })} />
-            <p className="text-[11px] text-white/50 mt-1">Target max context length. Larger context increases KV cache VRAM strongly.</p>
-          </label>
-          <label className="text-sm">Avg active tokens
-            <input className="input mt-1" type="number" min={128} step={128} value={work.avgActiveTokens ?? 2048} onChange={(e)=>setWork({ ...work, avgActiveTokens: Number(e.target.value)|| (work.avgActiveTokens ?? 2048) })} />
-            <p className="text-[11px] text-white/50 mt-1">Typical tokens per active sequence. Used to estimate total active tokens instead of assuming all sequences at max context.</p>
-          </label>
-          <label className="text-sm">Max sequences
-            <input className="input mt-1" type="number" min={1} step={1} value={work.maxNumSeqs} onChange={(e)=>setWork({ ...work, maxNumSeqs: Number(e.target.value)||work.maxNumSeqs })} />
-            <p className="text-[11px] text-white/50 mt-1">Concurrent active sequences. Higher values increase VRAM usage but boost throughput.</p>
-          </label>
-          <label className="text-sm">Max batched tokens
-            <input className="input mt-1" type="number" min={512} step={256} value={work.maxBatchedTokens ?? 4096} onChange={(e)=>setWork({ ...work, maxBatchedTokens: Number(e.target.value)|| (work.maxBatchedTokens ?? 4096) })} />
-            <p className="text-[11px] text-white/50 mt-1">Upper bound on total active tokens per batch. Approximates vLLM <code>--max-num-batched-tokens</code>.</p>
-          </label>
-          <label className="text-sm">TP size
-            <input className="input mt-1" type="number" min={1} step={1} value={choices.tpSize} onChange={(e)=>setChoices({ ...choices, tpSize: Math.max(1, Number(e.target.value)||choices.tpSize) })} />
-            <p className="text-[11px] text-white/50 mt-1">Tensor parallel size (&lt;= number of GPUs). Shards weights/KV across GPUs.</p>
-          </label>
-
-          <label className="text-sm">DType
-            <select className="input mt-1" value={choices.dtype} onChange={(e)=>setChoices({ ...choices, dtype: e.target.value as any })}>
-              <option value="auto">auto</option>
-              <option value="bfloat16">bfloat16</option>
-              <option value="float16">float16</option>
-            </select>
-            <p className="text-[11px] text-white/50 mt-1">Computation precision. bf16/fp16 are typical on NVIDIA. Auto lets vLLM choose.</p>
-          </label>
-          <label className="text-sm">Quantization
-            <select className="input mt-1" value={choices.quantization} onChange={(e)=>setChoices({ ...choices, quantization: e.target.value as any })}>
-              <option value="">none</option>
-              <option value="awq">awq (4‑bit)</option>
-              <option value="gptq">gptq (4‑bit)</option>
-              <option value="fp8">fp8</option>
-              <option value="int8">int8</option>
-            </select>
-            <p className="text-[11px] text-white/50 mt-1">Reduces weights memory. 4‑bit has largest savings, int8 moderate, fp8 requires support.</p>
-          </label>
-          <label className="text-sm">KV cache dtype
-            <select className="input mt-1" value={choices.kvCacheDtype} onChange={(e)=>setChoices({ ...choices, kvCacheDtype: e.target.value as any })}>
-              <option value="">auto</option>
-              <option value="fp8">fp8</option>
-              <option value="fp8_e4m3">fp8_e4m3</option>
-              <option value="fp8_e5m2">fp8_e5m2</option>
-            </select>
-            <p className="text-[11px] text-white/50 mt-1">Lower precision KV cache (fp8) can halve KV memory with minor quality impact.</p>
-          </label>
-        </div>
-
-        <div className="rounded border border-white/10 p-2">
-          <div className="text-white/70 text-sm mb-2">Hardware snapshot</div>
-          {loading && <div className="text-xs text-white/60">Detecting…</div>}
-          {!loading && hw && hw.gpuCount > 0 && (
-            <div className="text-xs space-y-1">
-              {hw.gpus.slice(0, choices.tpSize).map((g)=> (
-                <div key={g.index}>GPU {g.index} {g.name ? `• ${g.name}` : ''} – VRAM {((g.mem_total_mb||0)/1024).toFixed(1)} GiB (used {((g.mem_used_mb||0)/1024).toFixed(1)} GiB)</div>
-              ))}
-            </div>
-          )}
-          {!loading && hw && hw.gpuCount === 0 && (
-            <div className="text-xs text-white/60">No GPUs detected. Estimates will assume unlimited VRAM; prefer CPU/offload.</div>
-          )}
-        </div>
-
-        {summary && (
-          <div className="rounded border border-white/10 p-2">
-            <div className="text-white/70 text-sm mb-2">Per‑GPU memory estimate</div>
-            <div className="text-xs space-y-1">
-              {summary.perGpu.map((p) => (
-                <div key={p.index} className={p.fits ? '' : 'text-amber-300'}>
-                  GPU {p.index}: total ~ {bytesToGiB(p.totalBytes).toFixed(1)} GiB (weights {bytesToGiB(p.weightsBytes).toFixed(1)}, kv {bytesToGiB(p.kvBytes).toFixed(1)}, overhead {bytesToGiB(p.overheadBytes).toFixed(1)}) {p.vramFreeBytes!=null?`• free ${(bytesToGiB(p.vramFreeBytes||0)).toFixed(1)} GiB`:''} {p.fits ? '' : ' • may not fit'}
+    <Modal open={open} onClose={onClose} title="Model Resource Calculator" variant="workflow">
+      <div className="p-4 space-y-4 h-full flex flex-col overflow-hidden">
+        <div className="flex-1 overflow-auto pr-2 space-y-4 custom-scrollbar">
+          <section>
+            <SectionTitle variant="purple">📦 Source & Presets</SectionTitle>
+            <Card className="p-3 bg-white/[0.02] border-white/5 shadow-inner">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <FormField label="Preset">
+                  <Select value={presetId} onChange={(e)=>applyPreset(e.target.value)}>
+                    {presets.map((p)=> (<option key={p.id} value={p.id}>{p.label}</option>))}
+                  </Select>
+                </FormField>
+                <FormField label="Hugging Face ID">
+                  <Input placeholder="owner/repo" value={repoId} onChange={(e)=>setRepoId(e.target.value)} />
+                </FormField>
+                <div className="grid grid-cols-2 gap-2">
+                  <FormField label="Base Dir">
+                    <Input value={baseDir} onChange={(e)=>setBaseDir(e.target.value)} placeholder="/var/cortex/models" />
+                  </FormField>
+                  <FormField label="Folder">
+                    <Input value={folder} onChange={(e)=>setFolder(e.target.value)} placeholder="model-name" />
+                  </FormField>
                 </div>
-              ))}
-            </div>
-            {suggestions.length > 0 && (
-              <div className="mt-2 text-xs text-amber-200">
-                {suggestions.map((s, i)=> (<div key={i}>{s}</div>))}
               </div>
-            )}
-            {adjustments.length > 0 && (
-              <div className="mt-2 text-xs text-white/70">
-                <div className="font-medium text-white/80 mb-1">Applied adjustments:</div>
-                {adjustments.map((s, i)=> (<div key={i}>• {s}</div>))}
+              <div className="mt-3 pt-3 border-t border-white/5 flex justify-end">
+                <Button variant="cyan" size="sm" onClick={onFetchMeta} disabled={fetchingMeta}>
+                  {fetchingMeta ? 'Fetching...' : '🔍 Fetch Metadata'}
+                </Button>
               </div>
-            )}
-          </div>
-        )}
+            </Card>
+          </section>
 
-        <div className="flex items-center justify-between gap-2">
-          <div className="text-xs text-white/60">
-            {cpuOffloadGb>0 && (<div>cpu_offload_gb: ~{Math.round(cpuOffloadGb)} GiB</div>)}
-            {swapSpaceGb>0 && (<div>swap_space: ~{Math.round(swapSpaceGb)} GiB</div>)}
+          <section>
+            <SectionTitle variant="cyan">📐 Specification</SectionTitle>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-2">
+              <FormField label="Params (B)"><Input type="number" min={1} value={meta.paramsB} onChange={(e)=>setMeta({ ...meta, paramsB: Number(e.target.value)||meta.paramsB })} /></FormField>
+              <FormField label="Hidden Size"><Input type="number" min={512} step={64} value={meta.hiddenSize} onChange={(e)=>setMeta({ ...meta, hiddenSize: Number(e.target.value)||meta.hiddenSize })} /></FormField>
+              <FormField label="Layers"><Input type="number" min={1} value={meta.numLayers} onChange={(e)=>setMeta({ ...meta, numLayers: Number(e.target.value)||meta.numLayers })} /></FormField>
+              <FormField label="Context"><Input type="number" min={2048} step={1024} value={work.seqLen} onChange={(e)=>setWork({ ...work, seqLen: Number(e.target.value)||work.seqLen })} /></FormField>
+              <FormField label="Avg Active"><Input type="number" min={128} step={128} value={work.avgActiveTokens ?? 2048} onChange={(e)=>setWork({ ...work, avgActiveTokens: Number(e.target.value)|| (work.avgActiveTokens ?? 2048) })} /></FormField>
+              <FormField label="Max Seqs"><Input type="number" min={1} value={work.maxNumSeqs} onChange={(e)=>setWork({ ...work, maxNumSeqs: Number(e.target.value)||work.maxNumSeqs })} /></FormField>
+              <FormField label="TP Size"><Input type="number" min={1} value={choices.tpSize} onChange={(e)=>setChoices({ ...choices, tpSize: Math.max(1, Number(e.target.value)||choices.tpSize) })} /></FormField>
+              <FormField label="DType">
+                <Select value={choices.dtype} onChange={(e)=>setChoices({ ...choices, dtype: e.target.value as any })}>
+                  <option value="auto">auto</option>
+                  <option value="bfloat16">bfloat16</option>
+                  <option value="float16">float16</option>
+                </Select>
+              </FormField>
+              <FormField label="Quant">
+                <Select value={choices.quantization} onChange={(e)=>setChoices({ ...choices, quantization: e.target.value as any })}>
+                  <option value="">None</option>
+                  <option value="awq">AWQ (4-bit)</option>
+                  <option value="gptq">GPTQ (4-bit)</option>
+                  <option value="fp8">FP8</option>
+                  <option value="int8">INT8</option>
+                </Select>
+              </FormField>
+              <FormField label="KV Cache">
+                <Select value={choices.kvCacheDtype} onChange={(e)=>setChoices({ ...choices, kvCacheDtype: e.target.value as any })}>
+                  <option value="">Auto</option>
+                  <option value="fp8">FP8</option>
+                </Select>
+              </FormField>
+            </div>
+          </section>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <section>
+              <SectionTitle variant="blue">🖥️ Hardware</SectionTitle>
+              <Card className="p-3 bg-white/[0.02] border-white/5 min-h-[80px] flex flex-col justify-center">
+                {loading ? <div className="text-center py-2 animate-pulse text-[10px] font-bold text-white/30 uppercase">Detecting...</div> :
+                 hw && hw.gpuCount > 0 ? (
+                  <div className="space-y-1.5">
+                    {hw.gpus.slice(0, choices.tpSize).map((g)=> (
+                      <div key={g.index} className="flex items-center justify-between p-1.5 bg-black/20 rounded-xl border border-white/5">
+                        <div className="flex items-center gap-2">
+                          <div className="w-5 h-5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-[9px] font-bold text-emerald-400">G{g.index}</div>
+                          <span className="text-[11px] font-semibold text-white/80">{g.name}</span>
+                        </div>
+                        <div className="text-[9px] font-mono text-emerald-300">VRAM: {((g.mem_total_mb||0)/1024).toFixed(1)} GiB</div>
+                      </div>
+                    ))}
+                  </div>
+                ) : <InfoBox variant="purple" className="text-xs">No GPUs detected.</InfoBox>}
+              </Card>
+            </section>
+
+            <section>
+              <SectionTitle variant="purple">📊 Projection</SectionTitle>
+              {summary ? (
+                <Card className="p-3 bg-white/[0.02] border-white/5 space-y-2">
+                  {summary.perGpu.map((p) => (
+                    <div key={p.index} className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[9px] uppercase font-black text-white/40">GPU {p.index}</span>
+                        <Badge size="sm" className={p.fits ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-red-500/10 text-red-400 border-red-500/20"}>
+                          {p.fits ? 'FITS' : 'OVERFLOW'}
+                        </Badge>
+                      </div>
+                      <div className="h-1.5 bg-black/40 rounded-full overflow-hidden border border-white/5">
+                        <div className={cn("h-full transition-all duration-1000", p.fits ? "bg-gradient-to-r from-indigo-500 to-purple-500" : "bg-red-500")}
+                             style={{ width: `${Math.min(100, (p.totalBytes / (p.vramFreeBytes ? p.vramFreeBytes + p.totalBytes : 40 * 1024 * 1024 * 1024)) * 100)}%` }} />
+                      </div>
+                      <div className="flex justify-between text-[9px] font-mono text-white/40">
+                        <span>Weights: {bytesToGiB(p.weightsBytes).toFixed(1)}G</span>
+                        <span>KV: {bytesToGiB(p.kvBytes).toFixed(1)}G</span>
+                      </div>
+                    </div>
+                  ))}
+                </Card>
+              ) : <div className="text-white/20 text-xs italic text-center py-4">Configure to see projection...</div>}
+            </section>
           </div>
-          <div className="flex items-center gap-2">
-            <Button onClick={autoFit}>Auto‑fit to VRAM</Button>
-            <Button onClick={downloadReport}>Download report</Button>
-            <Button onClick={onClose}>Close</Button>
-            <PrimaryButton onClick={onApplyClick}>Apply to Add Model</PrimaryButton>
-          </div>
+
+          {(cpuOffloadGb > 0 || swapSpaceGb > 0 || adjustments.length > 0) && (
+            <Card className="p-3 bg-cyan-500/5 border-cyan-500/20 grid grid-cols-2 gap-4">
+              {adjustments.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="text-[9px] font-black text-cyan-400 uppercase tracking-widest">Adjustments</div>
+                  {adjustments.map((s, i)=> <div key={i} className="text-[10px] text-white/60 flex items-center gap-1.5"><div className="w-1 h-1 rounded-full bg-cyan-400"/>{s}</div>)}
+                </div>
+              )}
+              <div className="space-y-1.5">
+                <div className="text-[9px] font-black text-purple-400 uppercase tracking-widest">Offload</div>
+                <div className="flex gap-2 font-mono text-xs">
+                  {cpuOffloadGb > 0 && <div className="p-1 bg-black/20 rounded border border-white/5 text-purple-300">CPU: {Math.round(cpuOffloadGb)}G</div>}
+                  {swapSpaceGb > 0 && <div className="p-1 bg-black/20 rounded border border-white/5 text-indigo-300">Disk: {Math.round(swapSpaceGb)}G</div>}
+                </div>
+              </div>
+            </Card>
+          )}
         </div>
+
+        <footer className="mt-auto pt-3 border-t border-white/10 flex items-center justify-between -mx-4 -mb-4 px-4 pb-4 bg-black/20">
+          <div className="flex gap-2">
+            <Button variant="default" size="sm" onClick={autoFit}>✨ Auto-Fit</Button>
+            <Button variant="default" size="sm" onClick={() => {}}>📥 Report</Button>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="default" size="sm" onClick={onClose}>Cancel</Button>
+            <Button variant="primary" size="sm" onClick={onApplyClick} className="px-6">Apply</Button>
+          </div>
+        </footer>
       </div>
     </Modal>
   );
 }
-
-

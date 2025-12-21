@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import React from 'react';
-import { Card, H1, ThresholdBadge } from '../../../src/components/UI';
+import { Card, H1, ThresholdBadge, PageHeader, Button, Badge, InfoBox } from '../../../src/components/UI';
 import { LineChart } from '../../../src/components/Charts';
 import { Modal } from '../../../src/components/Modal';
 import { Tooltip } from '../../../src/components/Tooltip';
@@ -14,6 +14,7 @@ import apiFetch from '../../../src/lib/api-clients';
 import { z } from 'zod';
 import { ThroughputSummarySchema, GpuMetricsListSchema, HostSummarySchema, HostTrendsSchema, CapabilitiesSchema } from '../../../src/lib/validators';
 import { HostIpDisplay } from '../../../src/components/HostIpDisplay';
+import { cn } from '../../../src/lib/cn';
 
 type Throughput = z.infer<typeof ThroughputSummarySchema>;
 type Gpu = z.infer<typeof GpuMetricsListSchema>[number];
@@ -40,346 +41,269 @@ export default function SystemMonitoringPage() {
   useEffect(() => {
     let stop = false;
     const load = async () => {
-      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
-        return;
-      }
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
       try {
-        const c = await apiFetch('/admin/system/capabilities');
-        const cz = CapabilitiesSchema.parse(c);
-        if (!stop) setCaps(cz);
-      } catch {}
-      try {
-        const t = await apiFetch('/admin/system/throughput');
-        const tz = ThroughputSummarySchema.parse(t);
-        if (!stop) setThroughput(tz);
-      } catch (e: any) {
-        if (!stop) setError('Failed to load throughput');
-      }
-      try {
-        const h = await apiFetch('/admin/system/host/summary');
-        const hz = HostSummarySchema.parse(h);
-        if (!stop) setHost(hz);
-      } catch {}
-      try {
+        const [c, t, h, g] = await Promise.all([
+          apiFetch('/admin/system/capabilities'),
+          apiFetch('/admin/system/throughput'),
+          apiFetch('/admin/system/host/summary'),
+          apiFetch('/admin/system/gpus'),
+        ]);
+        if (stop) return;
+        setCaps(CapabilitiesSchema.parse(c));
+        setThroughput(ThroughputSummarySchema.parse(t));
+        setHost(HostSummarySchema.parse(h));
+        const gz = GpuMetricsListSchema.parse(g);
+        setGpus(gz);
+        setGpuTrends((prev) => {
+          const nowTs = Date.now();
+          const cutoff = nowTs - 15 * 60 * 1000;
+          const next = { ...prev };
+          for (const item of gz) {
+            const idx = item.index;
+            const cur = next[idx] || { util: [], mem: [] };
+            next[idx] = {
+              util: [...cur.util, { ts: nowTs, value: item.utilization_pct || 0 }].filter(p => p.ts >= cutoff).slice(-200),
+              mem: [...cur.mem, { ts: nowTs, value: item.mem_used_mb || 0 }].filter(p => p.ts >= cutoff).slice(-200),
+            };
+          }
+          return next;
+        });
         const step = rangeMin <= 60 ? 15 : 60;
         const tr = await apiFetch(`/admin/system/host/trends?minutes=${rangeMin}&step_s=${step}`);
-        const trz = HostTrendsSchema.parse(tr);
-        if (!stop) setTrends(trz);
-      } catch {}
-      try {
-        const g = await apiFetch('/admin/system/gpus');
-        const gz = GpuMetricsListSchema.parse(g);
-        if (!stop) {
-          setGpus(gz);
-          // accumulate simple client-side 15m trend (5s poll → ~180 pts)
-          setGpuTrends((prev) => {
-            const nowTs = Date.now();
-            const cutoff = nowTs - 15 * 60 * 1000;
-            const next = { ...prev } as typeof prev;
-            for (const item of gz) {
-              const idx = item.index;
-              const utilVal = typeof item.utilization_pct === 'number' ? item.utilization_pct : 0;
-              const memVal = typeof item.mem_used_mb === 'number' ? item.mem_used_mb : 0;
-              const cur = next[idx] || { util: [], mem: [] };
-              const utilSeries = [...cur.util, { ts: nowTs, value: utilVal }].filter(p => p.ts >= cutoff).slice(-200);
-              const memSeries = [...cur.mem, { ts: nowTs, value: memVal }].filter(p => p.ts >= cutoff).slice(-200);
-              next[idx] = { util: utilSeries, mem: memSeries };
-            }
-            return next;
-          });
-        }
-      } catch {
-        if (!stop) setGpus([]);
-      }
-      if (!stop) setLastUpdated(Date.now());
+        if (!stop) setTrends(HostTrendsSchema.parse(tr));
+        setLastUpdated(Date.now());
+      } catch (e) { if (!stop) setError('Synchronization failed'); }
     };
     load();
     const id = setInterval(load, live ? 5000 : 30000);
-    return () => {
-      stop = true;
-      clearInterval(id);
-    };
+    return () => { stop = true; clearInterval(id); };
   }, [rangeMin, live]);
 
   return (
     <section className="space-y-4">
-      <H1>System Monitor</H1>
-      
-      <HostIpDisplay variant="banner" />
-      
-      {error && <div className="text-xs text-red-400">{error}</div>}
-
-      {/* Global summary + refresh */}
-      <Card className="p-3">
-        <div className="text-sm flex items-center gap-2">Backend throughput <Tooltip text="Aggregates from gateway and vLLM: requests per second and tokens per second (prompt/generation) plus request latency and time‑to‑first‑token percentiles." /></div>
-        <div className="text-xs text-white/70 mt-1">Realtime summary from Prometheus: requests/sec, tokens/sec, latency and TTFT percentiles.</div>
-        <div className="flex items-center justify-between mt-2">
-          <div className="text-xs text-white/60">
-            {lastUpdated ? `Updated ${new Date(lastUpdated).toLocaleTimeString()}` : '—'}
-            {lastUpdated && Date.now() - lastUpdated > 15000 && (
-              <span className="ml-2 text-amber-300">(stale)</span>
-            )}
-          </div>
-          <div className="flex items-center gap-3">
+      <PageHeader 
+        title="System Analytics" 
+        actions={
+          <div className="flex items-center gap-3 bg-white/5 p-1 rounded-xl border border-white/10 glass shadow-lg">
+            <div className="flex items-center gap-2 px-2 border-r border-white/10">
+              <span className="text-[9px] uppercase font-black text-white/30 tracking-widest">Status</span>
+              <span className="text-[10px] font-mono text-emerald-400 font-bold flex items-center gap-1.5">
+                <div className="w-1 h-1 rounded-full bg-emerald-500 animate-pulse" /> Live
+              </span>
+            </div>
             <TimeRangeControls minutes={rangeMin} onChange={setRangeMin} live={live} onToggleLive={setLive} />
-            <button
-            className="px-2 py-1 text-xs rounded bg-white/10 hover:bg-white/15"
-            onClick={() => {
-              (async () => {
-                try { const c = await apiFetch('/admin/system/capabilities'); setCaps(CapabilitiesSchema.parse(c)); } catch {}
-                try { const t = await apiFetch('/admin/system/throughput'); setThroughput(ThroughputSummarySchema.parse(t)); } catch {}
-                try { const h = await apiFetch('/admin/system/host/summary'); setHost(HostSummarySchema.parse(h)); } catch {}
-                try { const step = rangeMin <= 60 ? 15 : 60; const tr = await apiFetch(`/admin/system/host/trends?minutes=${rangeMin}&step_s=${step}`); setTrends(HostTrendsSchema.parse(tr)); } catch {}
-                try { const g = await apiFetch('/admin/system/gpus'); setGpus(GpuMetricsListSchema.parse(g)); } catch {}
-                setLastUpdated(Date.now());
-              })();
-            }}
-          >Refresh</button>
+            <Button variant="cyan" size="sm" className="h-7 px-3 text-[10px] font-bold uppercase" onClick={() => window.location.reload()}>Refresh</Button>
           </div>
+        } 
+      />
+      
+      <HostIpDisplay variant="banner" className="py-2" />
+      
+      {error && <InfoBox variant="purple" title="Metric Error" className="py-2 text-xs">{error}</InfoBox>}
+
+      <Card className="p-4 relative group">
+        <div className="flex items-center justify-between mb-4">
+          <div className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em] flex items-center gap-2">📊 Performance KPIs</div>
+          <div className="text-[9px] font-mono text-white/20">{lastUpdated ? new Date(lastUpdated).toLocaleTimeString() : '...'}</div>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mt-3">
-          <Kpi label={<span className="inline-flex items-center gap-1">Req/s <Tooltip text="Requests per second served by the gateway (instantaneous rate over ~1m)." /></span>} value={throughput?.req_per_sec} suffix="" />
-          <Kpi label={<span className="inline-flex items-center gap-1">Prompt tok/s <Tooltip text="Prompt tokens per second processed by vLLM (rate over ~1m)." /></span>} value={throughput?.prompt_tokens_per_sec} />
-          <Kpi label={<span className="inline-flex items-center gap-1">Gen tok/s <Tooltip text="Generation tokens per second produced by vLLM (rate over ~1m)." /></span>} value={throughput?.generation_tokens_per_sec} />
-          <Kpi label={<span className="inline-flex items-center gap-1">p50 latency <Tooltip text="Median end‑to‑end request latency measured at the gateway." /></span>} value={throughput?.latency_p50_ms} suffix="ms" />
-          <Kpi label={<span className="inline-flex items-center gap-1">p95 latency <Tooltip text="95th percentile end‑to‑end request latency measured at the gateway." /></span>} value={throughput?.latency_p95_ms} suffix="ms" />
-          <Kpi label={<span className="inline-flex items-center gap-1">p50 TTFT <Tooltip text="Median time to first token observed in streaming responses." /></span>} value={throughput?.ttft_p50_ms} suffix="ms" />
+        <div className="grid grid-cols-3 lg:grid-cols-6 gap-3">
+          <Kpi 
+            label="Req/s" 
+            value={throughput?.req_per_sec} 
+            color="cyan" 
+            tooltip="Requests per second. Total inference requests processed by the gateway per second."
+          />
+          <Kpi 
+            label="Prompt" 
+            value={throughput?.prompt_tokens_per_sec} 
+            color="indigo" 
+            tooltip="Prompt tokens per second. The rate at which the system processes incoming tokens."
+          />
+          <Kpi 
+            label="Gen" 
+            value={throughput?.generation_tokens_per_sec} 
+            color="purple" 
+            tooltip="Generation tokens per second. The rate at which the system generates new tokens."
+          />
+          <Kpi 
+            label="p50 Lat" 
+            value={throughput?.latency_p50_ms} 
+            suffix="ms" 
+            color="blue" 
+            tooltip="50th percentile latency. Half of all requests are completed within this time."
+          />
+          <Kpi 
+            label="p95 Lat" 
+            value={throughput?.latency_p95_ms} 
+            suffix="ms" 
+            color="amber" 
+            tooltip="95th percentile latency. 95% of all requests are completed within this time. Useful for identifying worst-case performance."
+          />
+          <Kpi 
+            label="p50 TTFT" 
+            value={throughput?.ttft_p50_ms} 
+            suffix="ms" 
+            color="emerald" 
+            tooltip="50th percentile Time To First Token. The median time before the user receives the first chunk of generated text."
+          />
         </div>
       </Card>
 
       <Accordion storageKey="sysmon">
-        {/* GPUs (moved to top) */}
         <AccordionItem
           id="gpus"
-          title={<span>GPUs</span>}
+          title={<span className="font-bold tracking-tight text-white/90 text-sm uppercase">🖥️ Graphics Processors (GPUs)</span>}
           miniKpis={[
             { label: 'Count', value: (gpus || []).length },
-            { label: 'Util avg', value: Array.isArray(gpus) && gpus.length ? `${Math.round((gpus.reduce((a, g) => a + (g.utilization_pct || 0), 0) / gpus.length) || 0)}%` : '—' },
+            { label: 'Avg Util', value: Array.isArray(gpus) && gpus.length ? `${Math.round((gpus.reduce((a, g) => a + (g.utilization_pct || 0), 0) / gpus.length) || 0)}%` : '—' },
+            { label: 'VRAM Total', value: Array.isArray(gpus) && gpus.length ? `${(gpus.reduce((a, g) => a + (g.mem_used_mb || 0), 0) / 1024).toFixed(1)} GiB` : '—' },
           ]}
         >
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
             {(gpus || []).map((g) => (
-              <div key={g.index} className="card p-3">
-                <div className="text-sm font-medium flex items-center justify-between">GPU {g.index} {g.name ? `· ${g.name}` : ''}
+              <Card key={g.index} className="p-3 border-white/5 bg-white/[0.02] hover:bg-white/[0.04]">
+                <div className="flex items-center justify-between mb-2 pb-2 border-b border-white/5">
+                  <div className="flex flex-col">
+                    <div className="text-[8px] uppercase font-black text-white/20 tracking-[0.2em]">GPU {g.index}</div>
+                    <div className="text-[11px] font-bold text-white/80 truncate max-w-[140px]">{g.name}</div>
+                  </div>
                   {typeof g.temperature_c === 'number' && (
-                    <ThresholdBadge level={g.temperature_c >= 85 ? 'crit' : g.temperature_c >= 75 ? 'warn' : 'ok'} />
+                    <div className="flex items-center gap-2">
+                       <ThresholdBadge level={g.temperature_c >= 85 ? 'crit' : g.temperature_c >= 75 ? 'warn' : 'ok'} />
+                       <span className="text-[10px] font-mono text-white/40">{g.temperature_c}°</span>
+                    </div>
                   )}
                 </div>
-                <div className="text-xs text-white/70 mt-1">Util {fmt(g.utilization_pct, '%')} · Mem {fmt(g.mem_used_mb, 'MB')} / {fmt(g.mem_total_mb, 'MB')} · Temp {fmt(g.temperature_c, '°C')}</div>
-                <div className="mt-3 grid grid-cols-1 gap-3">
-                  <div className="relative">
-                    <LineChart enableControls filePrefix={`gpu${g.index}_util_15m`} footerExtra={<button className="btn text-xs" onClick={() => setFullscreen({ title: `GPU ${g.index} Util (15m)`, content: <LineChart enableControls filePrefix={`gpu${g.index}_util_15m`} data={(gpuTrends[g.index]?.util || []).map(p => ({ ts: p.ts, value: p.value }))} stroke="#8b5cf6" valueSuffix="%" xLabel="time" yLabel="util" smoothAlpha={0.25} thresholds={{ warn: 70, crit: 90 }} height={560} promQuery={`DCGM_FI_DEV_GPU_UTIL{gpu="${g.index}"}`} /> })}>Fullscreen</button>} data={(gpuTrends[g.index]?.util || []).map(p => ({ ts: p.ts, value: p.value }))} stroke="#8b5cf6" valueSuffix="%" xLabel="time" yLabel="util" smoothAlpha={0.25} thresholds={{ warn: 70, crit: 90 }} height={240} promQuery={`DCGM_FI_DEV_GPU_UTIL{gpu="${g.index}"}`} />
+                <div className="grid grid-cols-2 gap-2 mb-3">
+                  <div className="p-2 bg-white/5 rounded-xl border border-white/5">
+                    <div className="text-[8px] uppercase font-black text-white/30 flex items-center gap-1">
+                      Utilization
+                      <Tooltip text="Percentage of time GPU kernels were active. High values indicate heavy inference load." />
+                    </div>
+                    <div className="text-sm font-mono font-bold text-purple-400">{fmt(g.utilization_pct, '%')}</div>
                   </div>
-                  <div className="relative">
-                    <LineChart enableControls filePrefix={`gpu${g.index}_mem_15m`} footerExtra={<button className="btn text-xs" onClick={() => setFullscreen({ title: `GPU ${g.index} Mem Used MB (15m)`, content: <LineChart enableControls filePrefix={`gpu${g.index}_mem_15m`} data={(gpuTrends[g.index]?.mem || []).map(p => ({ ts: p.ts, value: p.value }))} stroke="#f59e0b" valueSuffix=" MB" xLabel="time" yLabel="mem" smoothAlpha={0.15} height={560} /> })}>Fullscreen</button>} data={(gpuTrends[g.index]?.mem || []).map(p => ({ ts: p.ts, value: p.value }))} stroke="#f59e0b" valueSuffix=" MB" xLabel="time" yLabel="mem" smoothAlpha={0.15} height={240} />
+                  <div className="p-2 bg-white/5 rounded-xl border border-white/5">
+                    <div className="text-[8px] uppercase font-black text-white/30 flex items-center gap-1">
+                      VRAM Usage
+                      <Tooltip text="Video RAM allocated for model weights and KV cache. Approaching 100% may cause OOM errors." />
+                    </div>
+                    <div className="text-sm font-mono font-bold text-cyan-400 whitespace-nowrap">
+                      {g.mem_used_mb != null && g.mem_total_mb != null 
+                        ? `${(g.mem_used_mb / 1024).toFixed(1)} / ${(g.mem_total_mb / 1024).toFixed(1)} GiB`
+                        : fmt(g.mem_used_mb, 'MB')}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-            {gpus && gpus.length === 0 && (<div className="text-xs text-white/60">No GPU metrics available.</div>)}
-          </div>
-        </AccordionItem>
-
-        {/* CPU */}
-        <AccordionItem
-          id="cpu"
-          title={<span>CPU</span>}
-          miniKpis={[
-            { label: 'Util', value: `${shortNum(host?.cpu_util_pct)}%` },
-            { label: 'Load1m', value: shortNum(host?.load_avg_1m ?? null) },
-          ]}
-        >
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <div className="text-xs text-white/70 mb-1 inline-flex items-center gap-1">CPU Util % (15m) <Tooltip text="CPU utilization percentage over the last 15 minutes." /></div>
-              <div className="relative">
-                <LineChart enableControls filePrefix="cpu_util_15m" footerExtra={<button className="btn text-xs" onClick={() => setFullscreen({ title: 'CPU Util % (15m)', content: <LineChart enableControls filePrefix="cpu_util_15m" data={(trends?.cpu_util_pct || []).map(p => ({ ts: p.ts * 1000, value: p.value }))} valueSuffix="%" xLabel="time" yLabel="util" smoothAlpha={0.2} height={560} thresholds={{ warn: 70, crit: 90 }} promQuery={'100 - (avg(rate(node_cpu_seconds_total{mode="idle"}[1m])) * 100)'} /> })}>Fullscreen</button>} data={(trends?.cpu_util_pct || []).map(p => ({ ts: p.ts * 1000, value: p.value }))} valueSuffix="%" xLabel="time" yLabel="util" smoothAlpha={0.2} height={240} thresholds={{ warn: 70, crit: 90 }} promQuery={'100 - (avg(rate(node_cpu_seconds_total{mode="idle"}[1m])) * 100)'} />
-              </div>
-            </div>
-            {/* Per-core overlay collapsed by default */}
-            <div>
-              <Accordion storageKey="sysmon-cpu">
-                <AccordionItem id="cpu-cores" title={<span>CPU per‑core</span>} defaultOpen={false}>
-                  <div className="text-xs text-white/70 mb-1 inline-flex items-center gap-1">Per‑core util <Tooltip text="Per‑core utilization percentage. Toggle cores in legend to focus." /></div>
-                  {Object.keys(trends?.cpu_per_core_pct || {}).length > 0 ? (
-                    <>
-                      <LegendToggle
-                        items={Object.keys(trends?.cpu_per_core_pct || {})
-                          .sort((a,b) => Number(a) - Number(b))
-                          .map((id) => ({ id, label: `CPU ${id}` }))}
-                        active={activeCores}
-                        onChange={setActiveCores}
-                      />
-                      <div className="mt-2 space-y-2 max-h-[520px] overflow-auto pr-2">
-                        {Object.entries(trends?.cpu_per_core_pct || {})
-                          .sort(([a],[b]) => Number(a) - Number(b))
-                          .map(([core, series]) => {
-                            const shown = activeCores[core] !== false;
-                            if (!shown) return null;
-                            return (
-                              <LineChart key={core} enableControls filePrefix={`cpu_core_${core}`} data={(series || []).map(p => ({ ts: p.ts * 1000, value: p.value }))} valueSuffix="%" xLabel="time" yLabel={`cpu ${core}`} smoothAlpha={0.2} height={120} />
-                            );
-                          })}
+                <div className="space-y-3">
+                  <div className="relative p-1.5 bg-black/20 rounded-xl border border-white/5">
+                    <div className="flex justify-between px-1 mb-1 text-[8px] font-black text-white/20 uppercase tracking-widest flex items-center gap-1">
+                      <div className="flex items-center gap-1">
+                        <span>Inference Load</span>
+                        <Tooltip text="Real-time trend of computational activity on this GPU." />
                       </div>
-                    </>
-                  ) : (
-                    <div className="text-xs text-white/50">No per‑core data available yet.</div>
-                  )}
-                </AccordionItem>
-              </Accordion>
-            </div>
-          </div>
-        </AccordionItem>
-
-        {/* Memory */}
-        <AccordionItem
-          id="memory"
-          title={<span>Memory</span>}
-          miniKpis={[
-            { label: 'Used', value: `${shortNum(host?.mem_used_mb)} MB` },
-          ]}
-        >
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <div className="text-xs text-white/70 mb-1 inline-flex items-center gap-1">Mem Used MB (15m) <Tooltip text="Physical memory used over the last 15 minutes." /></div>
-              <div className="relative">
-                <LineChart enableControls filePrefix="mem_used_mb_15m" footerExtra={<button className="btn text-xs" onClick={() => setFullscreen({ title: 'Mem Used MB (15m)', content: <LineChart enableControls filePrefix="mem_used_mb_15m" data={(trends?.mem_used_mb || []).map(p => ({ ts: p.ts * 1000, value: p.value }))} valueSuffix=" MB" xLabel="time" yLabel="mem" smoothAlpha={0.15} height={560} promQuery={'sum(node_memory_MemTotal_bytes)/(1024*1024) - sum(node_memory_MemAvailable_bytes)/(1024*1024)'} /> })}>Fullscreen</button>} data={(trends?.mem_used_mb || []).map(p => ({ ts: p.ts * 1000, value: p.value }))} valueSuffix=" MB" xLabel="time" yLabel="mem" smoothAlpha={0.15} height={240} promQuery={'sum(node_memory_MemTotal_bytes)/(1024*1024) - sum(node_memory_MemAvailable_bytes)/(1024*1024)'} />
-              </div>
-            </div>
-          </div>
-        </AccordionItem>
-
-        {/* Disks */}
-        <AccordionItem
-          id="disks"
-          title={<span>Disks</span>}
-          miniKpis={[
-            { label: 'Used %', value: `${shortNum(host?.disk_used_pct)}%` },
-          ]}
-        >
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <div className="text-xs text-white/70 mb-1 inline-flex items-center gap-1">Disk Used % (15m) <Tooltip text="Root filesystem usage percentage over the last 15 minutes." /></div>
-              <div className="relative">
-                <LineChart enableControls filePrefix="disk_used_pct_15m" footerExtra={<button className="btn text-xs" onClick={() => setFullscreen({ title: 'Disk Used % (15m)', content: <LineChart enableControls filePrefix="disk_used_pct_15m" data={(trends?.disk_used_pct || []).map(p => ({ ts: p.ts * 1000, value: p.value }))} valueSuffix="%" xLabel="time" yLabel="disk" smoothAlpha={0.2} height={560} thresholds={{ warn: 80, crit: 95 }} promQuery={'100 * (1 - (sum(node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay|squashfs|aufs|fuse.lxcfs"}) / sum(node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|overlay|squashfs|aufs|fuse.lxcfs"})) )'} /> })}>Fullscreen</button>} data={(trends?.disk_used_pct || []).map(p => ({ ts: p.ts * 1000, value: p.value }))} valueSuffix="%" xLabel="time" yLabel="disk" smoothAlpha={0.2} height={240} thresholds={{ warn: 80, crit: 95 }} promQuery={'100 * (1 - (sum(node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay|squashfs|aufs|fuse.lxcfs"}) / sum(node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|overlay|squashfs|aufs|fuse.lxcfs"})) )'} />
-              </div>
-            </div>
-            {/* Per-disk R/W throughput with LegendToggle and StatTable */}
-            <div>
-              <div className="text-xs text-white/70 mb-1 inline-flex items-center gap-1">Per‑disk throughput <Tooltip text="Bytes per second read/write by physical device." /></div>
-              <LegendToggle
-                items={Object.keys(trends?.disk_rw_bps || {}).sort().map((dev) => ({ id: dev, label: dev }))}
-                active={activeDisks}
-                onChange={setActiveDisks}
-              />
-              <div className="mt-2 space-y-2">
-                {Object.entries(trends?.disk_rw_bps || {}).sort(([a],[b]) => a.localeCompare(b)).map(([dev, rw]) => {
-                  if (activeDisks[dev] === false) return null;
-                  return (
-                    <div key={dev} className="space-y-1">
-                      <div className="text-xs text-white/60">{dev}</div>
-                      <LineChart enableControls showScaleToggle filePrefix={`disk_${dev}_read`} data={(rw.read || []).map(p => ({ ts: p.ts * 1000, value: p.value }))} stroke="#34d399" valueSuffix=" B/s" xLabel="time" yLabel="read" smoothAlpha={0.15} height={120} />
-                      <LineChart enableControls showScaleToggle filePrefix={`disk_${dev}_write`} data={(rw.write || []).map(p => ({ ts: p.ts * 1000, value: p.value }))} stroke="#f59e0b" valueSuffix=" B/s" xLabel="time" yLabel="write" smoothAlpha={0.15} height={120} />
+                      <Button variant="default" size="sm" className="h-4 p-0 px-1 text-[7px]" onClick={() => setFullscreen({ title: `GPU ${g.index} Load`, content: <LineChart data={gpuTrends[g.index]?.util || []} stroke="#8b5cf6" valueSuffix="%" height={500} /> })}>FS</Button>
                     </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        </AccordionItem>
-
-        {/* Network */}
-        <AccordionItem
-          id="network"
-          title={<span>Network</span>}
-          miniKpis={[
-            { label: 'RX', value: `${shortNum(host?.net_rx_bps)} B/s` },
-            { label: 'TX', value: `${shortNum(host?.net_tx_bps)} B/s` },
-          ]}
-        >
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <div className="text-xs text-white/70 mb-1 inline-flex items-center gap-1">Net RX B/s (15m) <Tooltip text="Estimated inbound throughput over the last 15 minutes." /></div>
-              <div className="relative">
-                <LineChart enableControls showScaleToggle filePrefix="net_rx_bps_15m" footerExtra={<button className="btn text-xs" onClick={() => setFullscreen({ title: 'Net RX B/s (15m)', content: <LineChart enableControls showScaleToggle filePrefix="net_rx_bps_15m" data={(trends?.net_rx_bps || []).map(p => ({ ts: p.ts * 1000, value: p.value }))} stroke="#34d399" valueSuffix=" B/s" xLabel="time" yLabel="rx" smoothAlpha={0.15} height={560} promQuery={'sum(rate(node_network_receive_bytes_total{device!~"lo|docker.*|veth.*"}[1m]))'} /> })}>Fullscreen</button>} data={(trends?.net_rx_bps || []).map(p => ({ ts: p.ts * 1000, value: p.value }))} stroke="#34d399" valueSuffix=" B/s" xLabel="time" yLabel="rx" smoothAlpha={0.15} height={240} promQuery={'sum(rate(node_network_receive_bytes_total{device!~"lo|docker.*|veth.*"}[1m]))'} />
-              </div>
-            </div>
-            <div>
-              <div className="text-xs text-white/70 mb-1 inline-flex items-center gap-1">Net TX B/s (15m) <Tooltip text="Estimated outbound throughput over the last 15 minutes." /></div>
-              <div className="relative">
-                <LineChart enableControls showScaleToggle filePrefix="net_tx_bps_15m" footerExtra={<button className="btn text-xs" onClick={() => setFullscreen({ title: 'Net TX B/s (15m)', content: <LineChart enableControls showScaleToggle filePrefix="net_tx_bps_15m" data={(trends?.net_tx_bps || []).map(p => ({ ts: p.ts * 1000, value: p.value }))} stroke="#22d3ee" valueSuffix=" B/s" xLabel="time" yLabel="tx" smoothAlpha={0.15} height={560} promQuery={'sum(rate(node_network_transmit_bytes_total{device!~"lo|docker.*|veth.*"}[1m]))'} /> })}>Fullscreen</button>} data={(trends?.net_tx_bps || []).map(p => ({ ts: p.ts * 1000, value: p.value }))} stroke="#22d3ee" valueSuffix=" B/s" xLabel="time" yLabel="tx" smoothAlpha={0.15} height={240} promQuery={'sum(rate(node_network_transmit_bytes_total{device!~"lo|docker.*|veth.*"}[1m]))'} />
-              </div>
-            </div>
-            {/* Per-interface overlay */}
-            <div className="md:col-span-2">
-              <div className="text-xs text-white/70 mb-1 inline-flex items-center gap-1">Per‑interface throughput <Tooltip text="Bytes per second per network interface (exclude loopback and docker)." /></div>
-              <LegendToggle
-                items={Object.keys(trends?.net_per_iface_bps || {}).sort().map((iface) => ({ id: iface, label: iface }))}
-                active={activeIfaces}
-                onChange={setActiveIfaces}
-              />
-              <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-3">
-                {Object.entries(trends?.net_per_iface_bps || {}).sort(([a],[b]) => a.localeCompare(b)).map(([iface, bps]) => {
-                  if (activeIfaces[iface] === false) return null;
-                  return (
-                    <div key={iface} className="card p-2">
-                      <div className="text-xs text-white/60 mb-1">{iface}</div>
-                      <LineChart enableControls showScaleToggle filePrefix={`iface_${iface}_rx`} data={(bps.rx || []).map(p => ({ ts: p.ts * 1000, value: p.value }))} stroke="#34d399" valueSuffix=" B/s" xLabel="time" yLabel="rx" smoothAlpha={0.15} height={120} />
-                      <LineChart enableControls showScaleToggle filePrefix={`iface_${iface}_tx`} data={(bps.tx || []).map(p => ({ ts: p.ts * 1000, value: p.value }))} stroke="#22d3ee" valueSuffix=" B/s" xLabel="time" yLabel="tx" smoothAlpha={0.15} height={120} />
+                    <LineChart data={gpuTrends[g.index]?.util || []} stroke="#8b5cf6" height={60} smoothAlpha={0.25} valueSuffix="%" />
+                  </div>
+                  <div className="relative p-1.5 bg-black/20 rounded-xl border border-white/5">
+                    <div className="flex justify-between px-1 mb-1 text-[8px] font-black text-white/20 uppercase tracking-widest flex items-center gap-1">
+                      <div className="flex items-center gap-1">
+                        <span>Memory Allocation</span>
+                        <Tooltip text="Trend of VRAM reserved for inference. Stability is expected after model load." />
+                      </div>
+                      <Button variant="default" size="sm" className="h-4 p-0 px-1 text-[7px]" onClick={() => setFullscreen({ title: `GPU ${g.index} VRAM`, content: <LineChart data={gpuTrends[g.index]?.mem || []} stroke="#f59e0b" valueSuffix=" MB" height={500} /> })}>FS</Button>
                     </div>
-                  );
-                })}
+                    <LineChart data={gpuTrends[g.index]?.mem || []} stroke="#f59e0b" height={60} smoothAlpha={0.15} valueSuffix=" MB" />
+                  </div>
+                </div>
+              </Card>
+            ))}
+            {gpus && gpus.length === 0 && (
+              <div className="col-span-full py-12 text-center glass rounded-3xl border border-white/5">
+                <div className="text-4xl mb-4 opacity-10">🔌</div>
+                <div className="text-white/40 text-sm font-bold uppercase tracking-widest">No Active GPU Detectors</div>
+              </div>
+            )}
+          </div>
+        </AccordionItem>
+
+        <AccordionItem id="cpu" title={<span className="text-sm font-bold uppercase text-white/90">💾 Host Processors (CPU)</span>} miniKpis={[{ label: 'Util', value: `${shortNum(host?.cpu_util_pct)}%` }]}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <div className="text-[9px] uppercase font-black text-white/30 tracking-widest flex items-center gap-1">
+                Aggregate Utilization
+                <Tooltip text="Average CPU usage across all available cores." />
+              </div>
+              <div className="bg-black/20 p-2 rounded-2xl border border-white/5">
+                <LineChart data={(trends?.cpu_util_pct || []).map(p => ({ ts: p.ts * 1000, value: p.value }))} valueSuffix="%" height={180} smoothAlpha={0.2} stroke="#6366f1" />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <div className="text-[9px] uppercase font-black text-white/30 tracking-widest flex items-center gap-1">
+                Per-Core Topology
+                <Tooltip text="Individual utilization for each detected CPU core." />
+              </div>
+              <div className="max-h-[200px] overflow-auto custom-scrollbar space-y-1.5 pr-2">
+                {Object.entries(trends?.cpu_per_core_pct || {}).map(([core, series]) => (
+                  <div key={core} className="flex items-center gap-3 bg-white/5 p-1.5 rounded-xl border border-white/5">
+                    <span className="text-[9px] font-mono font-bold text-indigo-300 w-8">C{core}</span>
+                    <div className="flex-1 h-6"><LineChart data={(series || []).map(p => ({ ts: p.ts * 1000, value: p.value }))} height={24} stroke="#818cf8" /></div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
         </AccordionItem>
 
-        
+        <AccordionItem id="memory" title={<span className="text-sm font-bold uppercase text-white/90">🧠 System RAM</span>} miniKpis={[{ label: 'Allocated', value: host?.mem_used_mb ? `${(host.mem_used_mb / 1024).toFixed(1)} GiB` : '—' }]}>
+          <div className="bg-black/20 p-3 rounded-2xl border border-white/5 space-y-2">
+            <div className="text-[9px] uppercase font-black text-white/30 tracking-widest flex items-center gap-1">
+              Memory Utilization
+              <Tooltip text="Total system memory currently in use by all processes on the host machine." />
+            </div>
+            <LineChart data={(trends?.mem_used_mb || []).map(p => ({ ts: p.ts * 1000, value: p.value }))} valueSuffix=" MB" height={160} smoothAlpha={0.15} stroke="#3b82f6" />
+          </div>
+        </AccordionItem>
 
-        {/* Gateway/vLLM */}
-        <AccordionItem
-          id="gateway"
-          title={<span>Gateway / vLLM</span>}
-          miniKpis={[
-            { label: 'Req/s', value: shortNum(throughput?.req_per_sec ?? null) },
-            { label: 'Tok/s', value: shortNum((throughput?.prompt_tokens_per_sec ?? 0) + (throughput?.generation_tokens_per_sec ?? 0)) },
-          ]}
-        >
-          <div className="text-xs text-white/60">Detailed gateway/vLLM charts will appear here as we add per‑model and error rate panels.</div>
+        <AccordionItem id="network" title={<span className="text-sm font-bold uppercase text-white/90">🌐 Network Interfaces</span>} miniKpis={[{ label: 'RX/TX', value: `${shortNum(host?.net_rx_bps)} / ${shortNum(host?.net_tx_bps)}` }]}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <div className="text-[9px] font-black uppercase text-white/20 tracking-widest flex items-center gap-1">
+                Inbound (RX)
+                <Tooltip text="Bytes received per second across all non-loopback network interfaces." />
+              </div>
+              <div className="bg-black/20 p-2 rounded-2xl border border-white/5"><LineChart data={(trends?.net_rx_bps || []).map(p => ({ ts: p.ts * 1000, value: p.value }))} stroke="#34d399" height={120} /></div>
+            </div>
+            <div className="space-y-2">
+              <div className="text-[9px] font-black uppercase text-white/20 tracking-widest flex items-center gap-1">
+                Outbound (TX)
+                <Tooltip text="Bytes transmitted per second across all non-loopback network interfaces." />
+              </div>
+              <div className="bg-black/20 p-2 rounded-2xl border border-white/5"><LineChart data={(trends?.net_tx_bps || []).map(p => ({ ts: p.ts * 1000, value: p.value }))} stroke="#22d3ee" height={120} /></div>
+            </div>
+          </div>
         </AccordionItem>
       </Accordion>
 
       <Modal open={!!fullscreen} onClose={() => setFullscreen(null)} title={fullscreen?.title} variant="fullscreen">
-        {fullscreen?.content}
+        <div className="h-full p-4">{fullscreen?.content}</div>
       </Modal>
     </section>
   );
 }
 
-function Kpi({ label, value, suffix = '' }: { label: React.ReactNode; value: number | undefined; suffix?: string }) {
-  const text = value === undefined || value === null ? '—' : shortNum(value) + (suffix ? ` ${suffix}` : '');
+function Kpi({ label, value, suffix = '', color = 'default', tooltip }: { label: string; value: number | undefined; suffix?: string; color?: any; tooltip?: string }) {
+  const text = value === undefined || value === null ? '—' : shortNum(value) + suffix;
+  const gradients = { default: 'from-white/5 to-transparent', cyan: 'from-cyan-500/10 to-transparent', indigo: 'from-indigo-500/10 to-transparent', purple: 'from-purple-500/10 to-transparent', blue: 'from-blue-500/10 to-transparent', amber: 'from-amber-500/10 to-transparent', emerald: 'from-emerald-500/10 to-transparent' };
+  const textColors = { default: 'text-white/90', cyan: 'text-cyan-300', indigo: 'text-indigo-300', purple: 'text-purple-300', blue: 'text-blue-300', amber: 'text-amber-300', emerald: 'text-emerald-300' };
   return (
-    <div className="glass rounded p-3">
-      <div className="text-xs text-white/70">{label}</div>
-      <div className="text-lg font-semibold">{text}</div>
-    </div>
-  );
-}
-
-function KpiWithBadge({ label, value, suffix = '', warn, crit }: { label: React.ReactNode; value: number | undefined; suffix?: string; warn?: number; crit?: number }) {
-  const text = value === undefined || value === null ? '—' : shortNum(value) + (suffix ? ` ${suffix}` : '');
-  let level: 'ok' | 'warn' | 'crit' = 'ok';
-  if (typeof value === 'number') {
-    if (crit != null && value >= crit) level = 'crit';
-    else if (warn != null && value >= warn) level = 'warn';
-  }
-  return (
-    <div className="glass rounded p-3">
-      <div className="flex items-center justify-between">
-        <div className="text-xs text-white/70">{label}</div>
-        <ThresholdBadge level={level} />
+    <div className={cn("glass rounded-xl p-3 bg-gradient-to-br border-white/5 shadow-lg transition-transform hover:scale-[1.02]", gradients[color as keyof typeof gradients])}>
+      <div className="text-[8px] font-black text-white/30 uppercase tracking-[0.2em] mb-1 flex items-center gap-1">
+        {label}
+        {tooltip && <Tooltip text={tooltip} />}
       </div>
-      <div className="text-lg font-semibold">{text}</div>
+      <div className={cn("text-lg font-mono font-bold tracking-tighter", textColors[color as keyof typeof textColors])}>{text}</div>
     </div>
   );
 }
@@ -399,38 +323,3 @@ function fmt(n?: number | null, unit?: string) {
   if (unit === '°C') return `${n.toFixed(0)}°C`;
   return `${n}`;
 }
-
-function MiniLine({ data, color = '#60a5fa', overlay = false }: { data?: { ts: number; value: number }[] | null | undefined; color?: string; overlay?: boolean }) {
-  const safe: { ts: number; value: number }[] = Array.isArray(data) ? data : [];
-  const series = safe.map(d => ({ ts: d.ts * 1000, value: d.value }));
-  return (
-    <div className={overlay ? '-mt-8' : ''}>
-      <svg className="w-full h-24" viewBox="0 0 600 96" preserveAspectRatio="none">
-        {series.length > 1 ? (
-          <polyline
-            fill="none"
-            stroke={color}
-            strokeWidth="2"
-            points={polyPoints(series, 600, 96)}
-            vectorEffect="non-scaling-stroke"
-          />
-        ) : (
-          <text x="8" y="16" className="text-[10px] fill-white/60">No data</text>
-        )}
-      </svg>
-    </div>
-  );
-}
-
-function polyPoints(data: { ts: number; value: number }[], width: number, height: number) {
-  if (!data.length) return '';
-  const minX = data[0]!.ts;
-  const maxX = data[data.length - 1]!.ts;
-  const ys = data.map(d => d.value);
-  const minY = 0;
-  const maxY = Math.max(1, Math.max(...ys));
-  const toX = (v: number) => ((v - minX) / (maxX - minX || 1)) * width;
-  const toY = (v: number) => height - ((v - minY) / (maxY - minY || 1)) * height;
-  return data.map(d => `${toX(d.ts)},${toY(d.value)}`).join(' ');
-}
-

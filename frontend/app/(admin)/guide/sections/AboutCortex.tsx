@@ -1,67 +1,75 @@
 'use client';
 
-import Image from 'next/image';
-import { Card } from '../../../../src/components/UI';
+import { Card, SectionTitle, InfoBox } from '../../../../src/components/UI';
+import { cn } from '../../../../src/lib/cn';
 
 export default function AboutCortex() {
   return (
-    <div className="space-y-4">
-      <Card className="p-4">
-        <h2 className="text-lg font-semibold">What is CORTEX?</h2>
-        <p className="mt-2 text-white/80 text-sm">
-          CORTEX is a secure, OpenAI-compatible AI gateway developed by Aulendur LLC. The mission: make advanced AI
-          capabilities usable, reliable, and governable inside classified and restricted networks, and to enable rapid
-          integration of AI into mission workflows.
+    <section className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-700">
+      <header className="space-y-2 text-center md:text-left">
+        <h1 className="text-2xl font-black tracking-tight text-white uppercase italic">Platform Architecture</h1>
+        <p className="text-white/60 text-sm leading-relaxed max-w-3xl">
+          CORTEX is a secure AI gateway developed by Aulendur LLC. 
+          Enabling usable, reliable, and governable advanced AI within restricted environments.
         </p>
-      </Card>
+      </header>
 
-      <Card className="p-4">
-        <h3 className="font-medium">Design Goals</h3>
-        <ul className="mt-2 list-disc pl-5 text-white/80 text-sm space-y-1">
-          <li>Deliver high-performance LLM inference in secure, disconnected, or bandwidth-constrained environments.</li>
-          <li>Provide an OpenAI-compatible API layer to simplify application integration and tool reuse.</li>
-          <li>Support multi-model orchestration (generation, embeddings) with health checks, metrics, and routing.</li>
-          <li>Serve and orchestrate enterprise‑scalable vLLM as the primary inference provider (single node to clustered pools).</li>
-          <li>Enable attribution, auditing, and administrative controls (orgs, users, keys, usage metering).</li>
-          <li>Fuse disparate tools and datasets through a common gateway to leverage AI across the enterprise.</li>
-        </ul>
-      </Card>
-
-      <Card className="p-4">
-        <h3 className="font-medium">How It Helps</h3>
-        <p className="mt-2 text-white/80 text-sm">
-          CORTEX abstracts the complexity of model hosting and security from end users and analysts. It provides
-          a hardened entry point where teams can authenticate, attribute usage, and call a consistent API––whether the
-          underlying engine is open-source, commercial, or a bespoke model. This lets planners focus on scenario design
-          and analysis, while CORTEX handles performance, safety, and governance.
-        </p>
-      </Card>
-
-      <Card className="p-4">
-        <h3 className="font-medium">Key Capabilities</h3>
-        <div className="mt-2 grid md:grid-cols-2 gap-3 text-sm">
-          <ul className="list-disc pl-5 text-white/80 space-y-1">
-            <li>OpenAI-compatible REST API (chat, completions, embeddings)</li>
-            <li>Health monitoring and circuit breaking of upstream model servers</li>
-            <li>Per-key usage metering with request IDs for traceability</li>
-            <li>Admin UI for keys, orgs/programs, users, and usage insights</li>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card className="p-4 bg-white/[0.02] border-white/5 space-y-2">
+          <SectionTitle variant="purple" className="mb-1 text-[10px]">Design Philosophy</SectionTitle>
+          <ul className="list-disc pl-4 text-white/70 text-xs space-y-2 leading-relaxed font-medium">
+            <li><span className="text-indigo-300">Offline Resilience</span>: High-performance in disconnected networks.</li>
+            <li><span className="text-indigo-300">Standardized I/O</span>: Native OpenAI-compatible API layer.</li>
+            <li><span className="text-indigo-300">Orchestration</span>: Unified routing for generation and embeddings.</li>
+            <li><span className="text-indigo-300">Enterprise Scale</span>: vLLM clusters from single-node to pools.</li>
           </ul>
-          <ul className="list-disc pl-5 text-white/80 space-y-1">
-            <li>vLLM orchestration: pool multiple engines, select by policy, and scale horizontally</li>
-            <li>Attribution by user and organization/program</li>
-            <li>Secure-by-default cookie auth (dev) and pluggable auth in production</li>
-            <li>Composable frontend with a modern design system</li>
-            <li>Dev/ops ready: Docker, Prometheus metrics, optional tracing</li>
-          </ul>
-        </div>
-      </Card>
+        </Card>
 
-      <div className="text-xs text-white/60">
-        Built for the mission: integrate advanced AI into secure environments while respecting security, attribution,
-        and operational realities.
+        <Card className="p-4 bg-white/[0.02] border-white/5 space-y-2">
+          <SectionTitle variant="cyan" className="mb-1 text-[10px]">Mission Impact</SectionTitle>
+          <p className="text-[11px] text-white/70 leading-relaxed italic">
+            "CORTEX abstracts model hosting complexity. It provides a hardened entry point where teams can authenticate and attribute usage."
+          </p>
+          <div className="pt-2 border-t border-white/5">
+            <InfoBox variant="blue" className="text-[10px] p-2 leading-tight">
+              Planners focus on scenario design while CORTEX handles safety and governance.
+            </InfoBox>
+          </div>
+        </Card>
       </div>
-    </div>
+
+      <section className="space-y-2">
+        <SectionTitle variant="blue" className="text-[10px]">Capabilities Matrix</SectionTitle>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          <FeatureCard title="Protocols" items={["OpenAI REST API", "Streaming SSE"]} color="indigo" />
+          <FeatureCard title="Audit" items={["Per-key metering", "Org attribution"]} color="purple" />
+          <FeatureCard title="Stability" items={["Live health checks", "Circuit breaking"]} color="cyan" />
+        </div>
+      </section>
+
+      <div className="text-[9px] text-white/20 uppercase font-black tracking-[0.3em] text-center pt-4 border-t border-white/5">
+        Aulendur LLC
+      </div>
+    </section>
   );
 }
 
-
+function FeatureCard({ title, items, color }: { title: string; items: string[]; color: 'indigo' | 'purple' | 'cyan' }) {
+  const iconColors = {
+    indigo: 'text-indigo-400 bg-indigo-500/10 border-indigo-500/20',
+    purple: 'text-purple-400 bg-purple-500/10 border-purple-500/20',
+    cyan: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20',
+  };
+  return (
+    <Card className="p-3 bg-white/[0.01] border-white/5 transition-colors">
+      <div className={cn("text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded border w-fit mb-2", iconColors[color])}>{title}</div>
+      <ul className="space-y-1">
+        {items.map((item, idx) => (
+          <li key={idx} className="flex items-start gap-1.5 text-[10px] text-white/60">
+            <span className="text-white/20">•</span> {item}
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}

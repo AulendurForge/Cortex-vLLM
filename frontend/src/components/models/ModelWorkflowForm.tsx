@@ -80,61 +80,61 @@ export function ModelWorkflowForm({
   
   const [values, setValues] = useState<ModelFormValues>({
     mode: defaults?.mode || 'online',
-    repoId: defaults?.repoId || '',
-    localPath: defaults?.localPath || '',
+    repo_id: defaults?.repo_id || '',
+    local_path: defaults?.local_path || '',
     name: defaults?.name || '',
-    servedModelName: defaults?.servedModelName || '',
+    served_model_name: defaults?.served_model_name || '',
     task: (defaults?.task as any) || 'generate',
     dtype: defaults?.dtype || 'auto',
-    tpSize: defaults?.tpSize ?? 1,
-    selectedGpus: defaults?.selectedGpus ?? [0],
-    gpuMemoryUtilization: defaults?.gpuMemoryUtilization ?? 0.9,
-    maxModelLen: defaults?.maxModelLen ?? 8192,
-    maxNumBatchedTokens: defaults?.maxNumBatchedTokens ?? 2048,
-    kvCacheDtype: defaults?.kvCacheDtype || '',
+    tp_size: defaults?.tp_size ?? 1,
+    selected_gpus: defaults?.selected_gpus ?? [0],
+    gpu_memory_utilization: defaults?.gpu_memory_utilization ?? 0.9,
+    max_model_len: defaults?.max_model_len ?? 8192,
+    max_num_batched_tokens: defaults?.max_num_batched_tokens ?? 2048,
+    kv_cache_dtype: defaults?.kv_cache_dtype || '',
     quantization: defaults?.quantization || '',
-    blockSize: defaults?.blockSize ?? undefined,
-    swapSpaceGb: defaults?.swapSpaceGb ?? undefined,
-    enforceEager: defaults?.enforceEager ?? true,
-    trustRemoteCode: defaults?.trustRemoteCode ?? false,
-    hfOffline: defaults?.hfOffline ?? false,
-    hfToken: (defaults as any)?.hfToken || '',
-    cpuOffloadGb: (defaults as any)?.cpuOffloadGb ?? 0,
-    enablePrefixCaching: (defaults as any)?.enablePrefixCaching ?? undefined,
-    prefixCachingHashAlgo: (defaults as any)?.prefixCachingHashAlgo ?? '',
-    enableChunkedPrefill: (defaults as any)?.enableChunkedPrefill ?? undefined,
-    maxNumSeqs: (defaults as any)?.maxNumSeqs ?? undefined,
-    cudaGraphSizes: (defaults as any)?.cudaGraphSizes ?? '',
-    pipelineParallelSize: (defaults as any)?.pipelineParallelSize ?? undefined,
+    block_size: defaults?.block_size ?? undefined,
+    swap_space_gb: defaults?.swap_space_gb ?? undefined,
+    enforce_eager: defaults?.enforce_eager ?? true,
+    trust_remote_code: defaults?.trust_remote_code ?? false,
+    hf_offline: defaults?.hf_offline ?? false,
+    hf_token: (defaults as any)?.hf_token || '',
+    cpu_offload_gb: (defaults as any)?.cpu_offload_gb ?? 0,
+    enable_prefix_caching: (defaults as any)?.enable_prefix_caching ?? undefined,
+    prefix_caching_hash_algo: (defaults as any)?.prefix_caching_hash_algo ?? '',
+    enable_chunked_prefill: (defaults as any)?.enable_chunked_prefill ?? undefined,
+    max_num_seqs: (defaults as any)?.max_num_seqs ?? undefined,
+    cuda_graph_sizes: (defaults as any)?.cuda_graph_sizes ?? '',
+    pipeline_parallel_size: (defaults as any)?.pipeline_parallel_size ?? undefined,
     device: (defaults as any)?.device ?? 'cuda',
     tokenizer: (defaults as any)?.tokenizer || '',
-    hfConfigPath: (defaults as any)?.hfConfigPath || '',
-    engineType: (defaults as any)?.engineType || defaults?.engineType || 'vllm',
+    hf_config_path: (defaults as any)?.hf_config_path || '',
+    engine_type: (defaults as any)?.engine_type || defaults?.engine_type || 'vllm',
     ngl: (defaults as any)?.ngl ?? 999,
-    tensorSplit: (defaults as any)?.tensorSplit ?? '',
-    batchSize: (defaults as any)?.batchSize ?? 2048,
-    ubatchSize: (defaults as any)?.ubatchSize ?? 2048,
+    tensor_split: (defaults as any)?.tensor_split ?? '',
+    batch_size: (defaults as any)?.batch_size ?? 2048,
+    ubatch_size: (defaults as any)?.ubatch_size ?? 2048,
     threads: (defaults as any)?.threads ?? 32,
-    contextSize: (defaults as any)?.contextSize ?? 16384,
-    parallelSlots: (defaults as any)?.parallelSlots ?? 16,
-    ropeFreqBase: (defaults as any)?.ropeFreqBase ?? undefined,
-    ropeFreqScale: (defaults as any)?.ropeFreqScale ?? undefined,
-    flashAttention: (defaults as any)?.flashAttention ?? true,
+    context_size: (defaults as any)?.context_size ?? 16384,
+    parallel_slots: (defaults as any)?.parallel_slots ?? 16,
+    rope_freq_base: (defaults as any)?.rope_freq_base ?? undefined,
+    rope_freq_scale: (defaults as any)?.rope_freq_scale ?? undefined,
+    flash_attention: (defaults as any)?.flash_attention ?? true,
     mlock: (defaults as any)?.mlock ?? true,
-    noMmap: (defaults as any)?.noMmap ?? false,
-    numaPolicy: (defaults as any)?.numaPolicy ?? 'isolate',
-    splitMode: (defaults as any)?.splitMode ?? undefined,
-    cacheTypeK: (defaults as any)?.cacheTypeK ?? 'q8_0',
-    cacheTypeV: (defaults as any)?.cacheTypeV ?? 'q8_0',
-    repetitionPenalty: (defaults as any)?.repetitionPenalty ?? 1.2,
-    frequencyPenalty: (defaults as any)?.frequencyPenalty ?? 0.5,
-    presencePenalty: (defaults as any)?.presencePenalty ?? 0.5,
+    no_mmap: (defaults as any)?.no_mmap ?? false,
+    numa_policy: (defaults as any)?.numa_policy ?? 'isolate',
+    split_mode: (defaults as any)?.split_mode ?? undefined,
+    cache_type_k: (defaults as any)?.cache_type_k ?? 'q8_0',
+    cache_type_v: (defaults as any)?.cache_type_v ?? 'q8_0',
+    repetition_penalty: (defaults as any)?.repetition_penalty ?? 1.2,
+    frequency_penalty: (defaults as any)?.frequency_penalty ?? 0.5,
+    presence_penalty: (defaults as any)?.presence_penalty ?? 0.5,
     temperature: (defaults as any)?.temperature ?? 0.8,
-    topK: (defaults as any)?.topK ?? 40,
-    topP: (defaults as any)?.topP ?? 0.9,
-    customRequestJson: (defaults as any)?.customRequestJson ?? '',
-    customArgs: (defaults as any)?.customArgs ?? [],
-    customEnv: (defaults as any)?.customEnv ?? [],
+    top_k: (defaults as any)?.top_k ?? 40,
+    top_p: (defaults as any)?.top_p ?? 0.9,
+    custom_request_json: (defaults as any)?.custom_request_json ?? '',
+    engine_startup_args_json: (defaults as any)?.engine_startup_args_json || '[]',
+    engine_startup_env_json: (defaults as any)?.engine_startup_env_json || '[]',
   });
 
   const [baseDir, setBaseDir] = useState<string>('');
@@ -221,9 +221,9 @@ export function ModelWorkflowForm({
     
     // For Add workflow
     if (!modeLocked) {
-      if (step.type === 'model') return !!values.engineType;
-      if (step.type === 'core') return !!values.engineType && (values.mode === 'online' ? !!values.repoId : !!values.localPath);
-      if (step.type === 'startup') return !!values.name && !!values.servedModelName;
+      if (step.type === 'model') return !!values.engine_type;
+      if (step.type === 'core') return !!values.engine_type && (values.mode === 'online' ? !!values.repo_id : !!values.local_path);
+      if (step.type === 'startup') return !!values.name && !!values.served_model_name;
     }
     
     return true;
@@ -238,8 +238,8 @@ export function ModelWorkflowForm({
         const group = inspect.gguf_groups.find((g: any) => g.quant_type === selectedGgufGroup);
         if (group) gg = group.files[0] || '';
       }
-      if (gg) next.localPath = `${next.localPath}/${gg}`;
-      if (!next.hfConfigPath && baseDir) next.hfConfigPath = `/models/${values.localPath}`;
+      if (gg) next.local_path = `${next.local_path}/${gg}`;
+      if (!next.hf_config_path && baseDir) next.hf_config_path = `/models/${values.local_path}`;
       if (useLocalTokenizer) next.tokenizer = '';
     }
     onSubmit(next);
@@ -287,23 +287,57 @@ export function ModelWorkflowForm({
 
               {/* Active Content */}
               {isActive && (
-                <div className="p-6 overflow-y-auto h-full space-y-6 flex flex-col">
-                  <header className="shrink-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className={cn("text-xs font-bold px-2 py-0.5 rounded-full border", `bg-${step.color}-500/20 border-${step.color}-500/40 text-${step.color}-200`)}>
-                        STEP 0{idx + 1}
-                      </span>
-                      {isPast && <span className="text-emerald-400 text-xs">✓ COMPLETED</span>}
+                <div className="p-4 overflow-y-auto h-full flex flex-col relative custom-scrollbar">
+                  <header className="sticky top-0 z-20 -mx-4 -mt-4 px-4 py-3 border-b border-white/5 bg-black/40 backdrop-blur-md flex items-center justify-between shrink-0 mb-6">
+                    <div className="flex flex-col">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded-full border uppercase tracking-wider", `bg-${step.color}-500/20 border-${step.color}-500/40 text-${step.color}-200`)}>
+                          STEP 0{idx + 1}
+                        </span>
+                        {isPast && <span className="text-emerald-400 text-[10px] font-bold ml-1">✓ COMPLETED</span>}
+                      </div>
+                      <h2 className="text-xl font-bold text-white tracking-tight">{step.title}</h2>
                     </div>
-                    <h2 className="text-2xl font-bold text-white tracking-tight">{step.title}</h2>
+
+                    <div className="flex items-center gap-2">
+                      {idx < currentSteps.length - 1 ? (
+                        <PrimaryButton 
+                          type="button"
+                          size="sm"
+                          className="shadow-lg shadow-indigo-500/20"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (canNavigateTo(idx + 1)) {
+                              setActiveStepIdx(idx + 1);
+                            } else {
+                              alert('Please complete the required fields in this step before proceeding.');
+                            }
+                          }}
+                        >
+                          Next: {currentSteps[idx + 1]?.title} →
+                        </PrimaryButton>
+                      ) : (
+                        <PrimaryButton 
+                          type="button"
+                          size="sm"
+                          className="px-8 shadow-lg shadow-indigo-500/20"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleFinalSubmit(e);
+                          }}
+                        >
+                          {submitLabel || 'Launch Model'}
+                        </PrimaryButton>
+                      )}
+                    </div>
                   </header>
 
                   <div className="flex-1 space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
                     {step.type === 'engine' && (
-                      <div className="space-y-8">
+                      <div className="space-y-4">
                         <EngineSelection 
-                          engineType={values.engineType} 
-                          onChange={(e) => set('engineType', e)} 
+                          engineType={values.engine_type} 
+                          onChange={(e) => set('engine_type', e)} 
                           mode={values.mode} 
                           onModeChange={(m) => set('mode', m)} 
                           modeLocked={modeLocked} 
@@ -311,7 +345,7 @@ export function ModelWorkflowForm({
                         <ModeSelection 
                           mode={values.mode} 
                           onChange={(m) => set('mode', m)} 
-                          engineType={values.engineType} 
+                          engineType={values.engine_type} 
                           modeLocked={modeLocked} 
                         />
                       </div>
@@ -321,19 +355,19 @@ export function ModelWorkflowForm({
                       <div className="space-y-4">
                         {values.mode === 'online' ? (
                           <OnlineModeFields 
-                            repoId={values.repoId || ''} 
-                            hfToken={values.hfToken || ''} 
-                            onRepoIdChange={(v) => set('repoId', v)} 
-                            onHfTokenChange={(v) => set('hfToken', v)} 
+                            repoId={values.repo_id || ''} 
+                            hfToken={values.hf_token || ''} 
+                            onRepoIdChange={(v) => set('repo_id', v)} 
+                            onHfTokenChange={(v) => set('hf_token', v)} 
                             modeLocked={modeLocked} 
                           />
                         ) : (
                           <OfflineModeFields
                             baseDir={baseDir}
                             folders={folders}
-                            localPath={values.localPath || ''}
+                            localPath={values.local_path || ''}
                             tokenizer={values.tokenizer || ''}
-                            hfConfigPath={values.hfConfigPath || ''}
+                            hfConfigPath={values.hf_config_path || ''}
                             loadingFolders={loadingFolders}
                             savingBase={savingBase}
                             inspect={inspect}
@@ -344,7 +378,7 @@ export function ModelWorkflowForm({
                             showGgufHelp={showGgufHelp}
                             modeLocked={modeLocked}
                             onBaseDirChange={setBaseDir}
-                            onFolderSelect={(f) => { set('localPath', f); runInspect(f); if(!values.name) set('name', f); }}
+                            onFolderSelect={(f) => { set('local_path', f); runInspect(f); if(!values.name) set('name', f); }}
                             onRefreshFolders={refreshFolders}
                             onSaveBaseDir={saveBaseDir ? async () => { setSavingBase(true); await saveBaseDir(baseDir); await refreshFolders(); setSavingBase(false); } : undefined}
                             onUseGgufChange={setUseGguf}
@@ -354,26 +388,26 @@ export function ModelWorkflowForm({
                             onShowGgufHelpToggle={() => setShowGgufHelp(!showGgufHelp)}
                             onShowMergeHelp={() => setShowMergeHelp(true)}
                             onTokenizerChange={(v) => set('tokenizer', v)}
-                            onHfConfigPathChange={(v) => set('hfConfigPath', v)}
+                            onHfConfigPathChange={(v) => set('hf_config_path', v)}
                           />
                         )}
                       </div>
                     )}
 
                     {step.type === 'core' && (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3">
                         <BasicModelInfo
                           name={values.name}
-                          servedModelName={values.servedModelName}
+                          servedModelName={values.served_model_name}
                           task={values.task}
-                          engineType={values.engineType}
+                          engineType={values.engine_type}
                           onNameChange={(v) => set('name', v)}
-                          onServedModelNameChange={(v) => set('servedModelName', v)}
+                          onServedModelNameChange={(v) => set('served_model_name', v)}
                           onTaskChange={(v) => set('task', v)}
                           modeLocked={modeLocked}
                         />
-                        <div className="md:col-span-2 space-y-4 mt-4 border-t border-white/5 pt-4">
-                          {values.engineType === 'vllm' ? (
+                        <div className="md:col-span-2 space-y-3 mt-2 border-t border-white/5 pt-3">
+                          {values.engine_type === 'vllm' ? (
                             <VLLMConfiguration values={values} gpuCount={gpuCount} onChange={set} />
                           ) : (
                             <LlamaCppConfiguration values={values} onChange={set} />
@@ -385,11 +419,11 @@ export function ModelWorkflowForm({
                     {step.type === 'startup' && (
                       <div className="space-y-4 h-full">
                         <CustomArgsEditor
-                          args={values.customArgs || []}
-                          envVars={values.customEnv || []}
-                          onArgsChange={(a) => set('customArgs', a)}
-                          onEnvVarsChange={(e) => set('customEnv', e)}
-                          engineType={values.engineType || 'vllm'}
+                          args={JSON.parse(values.engine_startup_args_json || '[]')}
+                          envVars={JSON.parse(values.engine_startup_env_json || '[]')}
+                          onArgsChange={(a) => set('engine_startup_args_json', JSON.stringify(a))}
+                          onEnvVarsChange={(e) => set('engine_startup_env_json', JSON.stringify(e))}
+                          engineType={values.engine_type || 'vllm'}
                         />
                       </div>
                     )}
@@ -401,92 +435,64 @@ export function ModelWorkflowForm({
                     )}
 
                     {step.type === 'summary' && (
-                      <div className="space-y-6 flex flex-col h-full">
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="p-4 bg-white/5 rounded-lg border border-white/10">
-                            <h3 className="text-xs font-bold text-white/40 uppercase mb-3">Identity</h3>
-                            <div className="space-y-1">
+                      <div className="space-y-4 flex flex-col h-full">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="p-3 bg-white/5 rounded-lg border border-white/10">
+                            <h3 className="text-[10px] font-bold text-white/40 uppercase mb-2">Identity</h3>
+                            <div className="space-y-0.5">
                               <div className="text-sm font-semibold">{values.name}</div>
-                              <div className="text-xs font-mono text-emerald-400">{values.servedModelName}</div>
-                              <div className="text-xs text-white/60 uppercase">{values.task} · {values.engineType}</div>
+                              <div className="text-[11px] font-mono text-emerald-400">{values.served_model_name}</div>
+                              <div className="text-[10px] text-white/60 uppercase">{values.task} · {values.engine_type}</div>
                             </div>
                           </div>
-                          <div className="p-4 bg-white/5 rounded-lg border border-white/10">
-                            <h3 className="text-xs font-bold text-white/40 uppercase mb-3">Compute</h3>
-                            <div className="space-y-1 text-sm">
-                              <div>{values.tpSize || 1} GPU(s) {values.dtype && `· ${values.dtype}`}</div>
-                              {values.engineType === 'vllm' ? (
-                                <div className="text-xs text-white/60">{values.maxModelLen} tokens · {values.gpuMemoryUtilization} util</div>
+                          <div className="p-3 bg-white/5 rounded-lg border border-white/10">
+                            <h3 className="text-[10px] font-bold text-white/40 uppercase mb-2">Compute</h3>
+                            <div className="space-y-0.5 text-xs">
+                              <div>{values.tp_size || 1} GPU(s) {values.dtype && `· ${values.dtype}`}</div>
+                              {values.engine_type === 'vllm' ? (
+                                <div className="text-[10px] text-white/60">{values.max_model_len} tokens · {values.gpu_memory_utilization} util</div>
                               ) : (
-                                <div className="text-xs text-white/60">{values.contextSize} context · {values.parallelSlots} slots</div>
+                                <div className="text-[10px] text-white/60">{values.context_size} context · {values.parallel_slots} slots</div>
                               )}
                             </div>
                           </div>
                         </div>
 
                         {dryRunResult && (
-                          <div className="flex-1 overflow-auto p-4 bg-black/40 rounded-lg border border-white/10 space-y-3">
-                            <h3 className="text-xs font-bold text-white/40 uppercase">Dry Run Validation</h3>
+                          <div className="flex-1 overflow-auto p-3 bg-black/40 rounded-lg border border-white/10 space-y-2">
+                            <h3 className="text-[10px] font-bold text-white/40 uppercase">Dry Run Validation</h3>
                             {dryRunResult.warnings?.map((w: any, i: number) => (
-                              <div key={i} className={cn("text-xs p-2 rounded border", w.severity === 'error' ? "bg-red-500/10 border-red-500/30 text-red-200" : "bg-amber-500/10 border-amber-500/30 text-amber-200")}>
+                              <div key={i} className={cn("text-[11px] p-1.5 rounded border", w.severity === 'error' ? "bg-red-500/10 border-red-500/30 text-red-200" : "bg-amber-500/10 border-amber-500/30 text-amber-200")}>
                                 <strong>{w.title}:</strong> {w.message}
                               </div>
                             ))}
                             {dryRunResult.vram_estimate && (
-                              <div className="text-xs text-cyan-300 font-mono">
+                              <div className="text-[11px] text-cyan-300 font-mono">
                                 Required VRAM: {dryRunResult.vram_estimate.required_vram_gb} GB
                               </div>
                             )}
-                            <pre className="text-[10px] text-white/40 overflow-x-auto pt-2 border-t border-white/5">
+                            <pre className="text-[9px] text-white/40 overflow-x-auto pt-1 border-t border-white/5">
                               {dryRunResult.command_str}
                             </pre>
                           </div>
                         )}
 
-                        <div className="mt-auto flex items-center justify-between gap-4 border-t border-white/10 pt-6">
+                        <div className="mt-auto flex items-center justify-between gap-4 border-t border-white/10 pt-4">
                           <Button 
                             type="button"
+                            variant="default"
+                            size="sm"
                             onClick={(e) => { e.stopPropagation(); dryRun.mutate(); }} 
                             disabled={dryRun.isPending || !modelId}
-                            className="bg-cyan-500/10 border-cyan-500/30 text-cyan-200 hover:bg-cyan-500/20"
+                            className="bg-cyan-500/10 border-cyan-500/30 text-cyan-200"
                           >
                             {dryRun.isPending ? 'Validating...' : '🔍 Dry Run'}
                           </Button>
-                          <div className="flex gap-3">
-                            <Button type="button" onClick={(e) => { e.stopPropagation(); onCancel(); }}>Cancel</Button>
-                            <PrimaryButton 
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleFinalSubmit(e);
-                              }}
-                            >
-                              {submitLabel || 'Launch Model'}
-                            </PrimaryButton>
-                          </div>
+                          <Button type="button" size="sm" onClick={(e) => { e.stopPropagation(); onCancel(); }}>Cancel</Button>
                         </div>
                       </div>
                     )}
                   </div>
-
-                  {idx < currentSteps.length - 1 && (
-                    <div className="mt-auto pt-6 border-t border-white/5 flex justify-end">
-                      <PrimaryButton 
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (canNavigateTo(idx + 1)) {
-                            setActiveStepIdx(idx + 1);
-                          } else {
-                            // Provide feedback if they can't move forward
-                            alert('Please complete the required fields in this step before proceeding.');
-                          }
-                        }}
-                      >
-                        Next: {currentSteps[idx + 1]?.title} →
-                      </PrimaryButton>
-                    </div>
-                  )}
                 </div>
               )}
             </div>
@@ -497,4 +503,3 @@ export function ModelWorkflowForm({
     </div>
   );
 }
-

@@ -13,7 +13,7 @@ interface LlamaCppConfigurationProps {
 }
 
 export function LlamaCppConfiguration({ values, onChange }: LlamaCppConfigurationProps) {
-  if (values.engineType !== 'llamacpp') return null;
+  if (values.engine_type !== 'llamacpp') return null;
 
   // Fetch GPU information
   const { data: gpuInfo } = useQuery({
@@ -44,8 +44,8 @@ export function LlamaCppConfiguration({ values, onChange }: LlamaCppConfiguratio
           min={512} 
           max={131072} 
           step={512} 
-          value={values.contextSize ?? 16384} 
-          onChange={(e) => onChange('contextSize', Number(e.target.value) || 16384)} 
+          value={values.context_size ?? 16384} 
+          onChange={(e) => onChange('context_size', Number(e.target.value) || 16384)} 
         />
         <p className="text-[11px] text-white/50 mt-1">
           Total context window in tokens. Divided among parallel slots. 
@@ -60,16 +60,16 @@ export function LlamaCppConfiguration({ values, onChange }: LlamaCppConfiguratio
           min={1} 
           max={32} 
           step={1} 
-          value={values.parallelSlots ?? 16} 
-          onChange={(e) => onChange('parallelSlots', Number(e.target.value) || 16)} 
+          value={values.parallel_slots ?? 16} 
+          onChange={(e) => onChange('parallel_slots', Number(e.target.value) || 16)} 
         />
         <div className="mt-2 p-2 bg-blue-500/10 border border-blue-500/30 rounded text-xs">
           <div className="font-medium text-blue-200 mb-1">📊 Context per slot calculation:</div>
           <div className="text-white/80">
-            {Math.floor((values.contextSize ?? 16384) / (values.parallelSlots ?? 16)).toLocaleString()} tokens per slot
+            {Math.floor((values.context_size ?? 16384) / (values.parallel_slots ?? 16)).toLocaleString()} tokens per slot
           </div>
           <div className="text-white/60 mt-1">
-            ({(values.contextSize ?? 16384).toLocaleString()} total context ÷ {values.parallelSlots ?? 16} slots)
+            ({(values.context_size ?? 16384).toLocaleString()} total context ÷ {values.parallel_slots ?? 16} slots)
           </div>
         </div>
         <p className="text-[11px] text-white/50 mt-1">
@@ -85,8 +85,8 @@ export function LlamaCppConfiguration({ values, onChange }: LlamaCppConfiguratio
           min={128} 
           max={4096} 
           step={128} 
-          value={values.ubatchSize ?? 2048} 
-          onChange={(e) => onChange('ubatchSize', Number(e.target.value) || 2048)} 
+          value={values.ubatch_size ?? 2048} 
+          onChange={(e) => onChange('ubatch_size', Number(e.target.value) || 2048)} 
         />
         <p className="text-[11px] text-white/50 mt-1">
           Physical batch size for prompt processing. Higher = faster prefill. 
@@ -95,7 +95,7 @@ export function LlamaCppConfiguration({ values, onChange }: LlamaCppConfiguratio
       </label>
 
       <label className="text-sm">KV Cache Type K
-        <select className="input mt-1" value={values.cacheTypeK ?? 'q8_0'} onChange={(e) => onChange('cacheTypeK', e.target.value)}>
+        <select className="input mt-1" value={values.cache_type_k ?? 'q8_0'} onChange={(e) => onChange('cache_type_k', e.target.value)}>
           <option value="f16">f16 (2 bytes, full precision)</option>
           <option value="q8_0">q8_0 (1 byte, 50% savings, recommended)</option>
           <option value="q4_0">q4_0 (0.5 bytes, 75% savings)</option>
@@ -107,7 +107,7 @@ export function LlamaCppConfiguration({ values, onChange }: LlamaCppConfiguratio
       </label>
 
       <label className="text-sm">KV Cache Type V
-        <select className="input mt-1" value={values.cacheTypeV ?? 'q8_0'} onChange={(e) => onChange('cacheTypeV', e.target.value)}>
+        <select className="input mt-1" value={values.cache_type_v ?? 'q8_0'} onChange={(e) => onChange('cache_type_v', e.target.value)}>
           <option value="f16">f16 (2 bytes, full precision)</option>
           <option value="q8_0">q8_0 (1 byte, 50% savings, recommended)</option>
           <option value="q4_0">q4_0 (0.5 bytes, 75% savings)</option>
@@ -142,16 +142,16 @@ export function LlamaCppConfiguration({ values, onChange }: LlamaCppConfiguratio
           </label>
           
           <GpuSelector
-            selectedGpus={values.selectedGpus ?? [0]}
+            selectedGpus={values.selected_gpus ?? [0]}
             onGpuSelectionChange={(gpuIndices) => {
-              onChange('selectedGpus', gpuIndices);
+              onChange('selected_gpus', gpuIndices);
               // Generate tensor_split string for backward compatibility
               if (gpuIndices.length > 0) {
                 const ratio = (1.0 / gpuIndices.length).toFixed(2);
                 const tensorSplit = gpuIndices.map(() => ratio).join(',');
-                onChange('tensorSplit', tensorSplit);
+                onChange('tensor_split', tensorSplit);
               } else {
-                onChange('tensorSplit', '');
+                onChange('tensor_split', '');
               }
             }}
             gpuInfo={gpuInfo}
@@ -165,8 +165,8 @@ export function LlamaCppConfiguration({ values, onChange }: LlamaCppConfiguratio
               type="number" 
               min={1} 
               max={2048} 
-              value={values.batchSize ?? 512} 
-              onChange={(e) => onChange('batchSize', Number(e.target.value) || 512)} 
+          value={values.batch_size ?? 512} 
+          onChange={(e) => onChange('batch_size', Number(e.target.value) || 512)} 
             />
             <p className="text-[11px] text-white/50 mt-1">Batch size for prompt processing. Higher = faster prefill.</p>
           </label>
@@ -185,7 +185,7 @@ export function LlamaCppConfiguration({ values, onChange }: LlamaCppConfiguratio
           
           <div className="text-sm flex flex-col gap-2 mt-2">
             <label className="inline-flex items-center gap-2">
-              <input type="checkbox" checked={!!values.flashAttention} onChange={(e) => onChange('flashAttention', e.target.checked)} />
+              <input type="checkbox" checked={!!values.flash_attention} onChange={(e) => onChange('flash_attention', e.target.checked)} />
               Flash Attention
             </label>
             <label className="inline-flex items-center gap-2">
@@ -193,13 +193,13 @@ export function LlamaCppConfiguration({ values, onChange }: LlamaCppConfiguratio
               Memory Lock (mlock)
             </label>
             <label className="inline-flex items-center gap-2">
-              <input type="checkbox" checked={!!values.noMmap} onChange={(e) => onChange('noMmap', e.target.checked)} />
+              <input type="checkbox" checked={!!values.no_mmap} onChange={(e) => onChange('no_mmap', e.target.checked)} />
               Disable Memory Mapping
             </label>
           </div>
           
           <label className="text-sm">NUMA Policy
-            <select className="input mt-1" value={values.numaPolicy || ''} onChange={(e) => onChange('numaPolicy', e.target.value)}>
+            <select className="input mt-1" value={values.numa_policy || ''} onChange={(e) => onChange('numa_policy', e.target.value)}>
               <option value="">default</option>
               <option value="isolate">isolate</option>
               <option value="distribute">distribute</option>

@@ -3,6 +3,7 @@
 import React from 'react';
 import { Tooltip } from '../../Tooltip';
 import { GGUFGroupSelector } from './GGUFGroupSelector';
+import { safeCopyToClipboard } from '../../../lib/clipboard';
 
 interface InspectResult {
   has_safetensors: boolean;
@@ -124,10 +125,10 @@ export function OfflineModeFields({
             type="button" 
             className="btn" 
             onClick={async () => {
-              try {
-                await navigator.clipboard.writeText(baseDir);
+              const ok = await safeCopyToClipboard(baseDir);
+              if (ok) {
                 alert('Path copied to clipboard!\n\nOpen this path in your file explorer:\n' + baseDir);
-              } catch {
+              } else {
                 alert('Path: ' + baseDir + '\n\nCopy this path and open it in your file explorer.');
               }
             }} 
@@ -259,6 +260,10 @@ export function OfflineModeFields({
                 <p className="text-[11px] text-white/50">
                   The HF repo id of the base Transformers model this GGUF came from (find it on Hugging Face). 
                   This is passed to vLLM as <code>--tokenizer</code>. Using the base model's tokenizer is recommended for stability.
+                </p>
+                <p className="text-[11px] text-amber-300/90">
+                  Note: in offline mode, vLLM will not download this tokenizer. It will only work if the tokenizer is already present in the shared HF cache,
+                  or if you switch to “Use tokenizer.json in this folder”.
                 </p>
               </>
             )}

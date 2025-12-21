@@ -27,6 +27,8 @@ services:
       GATEWAY_DEV_ALLOW_ALL_KEYS: "false"
       CORTEX_MODELS_DIR: ${CORTEX_MODELS_DIR:-/var/cortex/models}
       HF_CACHE_DIR: ${HF_CACHE_DIR:-/var/cortex/hf-cache}
+      # Keep in sync with backend/src/config.py and scripts/prepare-offline-deployment.sh
+      # NOTE: Qwen3 requires newer Transformers, so default to a compatible image.
       VLLM_IMAGE: ${VLLM_IMAGE:-vllm/vllm-openai:latest}
     ports: ["${GATEWAY_PORT:-80}:8084"]
     depends_on: [vllm-gen, vllm-emb, redis, postgres]
@@ -34,6 +36,8 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${CORTEX_MODELS_DIR:-/var/cortex/models}:/var/cortex/models:ro
       - ${HF_CACHE_DIR:-/var/cortex/hf-cache}:/var/cortex/hf-cache
+      # Persist Deployment exports (manifests/images/db dumps) on host
+      - ${CORTEX_EXPORT_DIR:-/var/cortex/exports}:/var/cortex/exports
 
 volumes:
   postgres_data:

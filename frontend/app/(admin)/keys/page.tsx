@@ -6,10 +6,12 @@ import { KeysListSchema, CreateKeyResponseSchema } from '../../../src/lib/valida
 import { useState } from 'react';
 import { useToast } from '../../../src/providers/ToastProvider';
 import { Modal } from '../../../src/components/Modal';
-import { PageHeader } from '../../../src/components/UI';
+import { PageHeader, Card, Table, Button, Badge, Input, Select, Label, InfoBox, FormField, SectionTitle } from '../../../src/components/UI';
 import { ConfirmDialog } from '../../../src/components/Confirm';
 import { useEffect, useState as useReactState } from 'react';
 import { z } from 'zod';
+import { cn } from '../../../src/lib/cn';
+import { safeCopyToClipboard } from '../../../src/lib/clipboard';
 
 const KeyCreateSchema = z.object({
   scopes: z.string().default('chat,completions,embeddings'),
@@ -21,31 +23,6 @@ const KeyCreateSchema = z.object({
 
 type KeyRow = { id: number; prefix: string; scopes: string; expires_at: string | null; last_used_at: string | null; disabled: boolean };
 type CreateResp = { id: number; prefix: string; token: string };
-
-async function safeCopyToClipboard(text: string): Promise<boolean> {
-  try {
-    // Prefer modern async clipboard API when available and permitted
-    if (typeof navigator !== 'undefined' && (navigator as any).clipboard && typeof (navigator as any).clipboard.writeText === 'function') {
-      await (navigator as any).clipboard.writeText(text);
-      return true;
-    }
-  } catch {}
-  // Fallback: temporary textarea + execCommand
-  try {
-    const ta = document.createElement('textarea');
-    ta.value = text;
-    ta.style.position = 'fixed';
-    ta.style.left = '-9999px';
-    document.body.appendChild(ta);
-    ta.focus();
-    ta.select();
-    const ok = document.execCommand('copy');
-    document.body.removeChild(ta);
-    return ok;
-  } catch {
-    return false;
-  }
-}
 
 export default function KeysPage() {
   const qc = useQueryClient();
@@ -140,161 +117,153 @@ export default function KeysPage() {
   return (
     <section className="space-y-4">
       <PageHeader
-        title="API Keys"
+        title="API Security"
         actions={
-          <div className="flex items-end gap-2">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
-              <label className="text-xs">
-                Search
-                <input className="input mt-1" placeholder="prefix…" value={filters.q}
-                  onChange={(e) => setFilters({ ...filters, q: e.target.value })} />
-              </label>
-              <label className="text-xs">
-                User
-                <select className="input mt-1" value={String(filters.user_id ?? '')}
-                  onChange={(e) => setFilters({ ...filters, user_id: e.target.value ? Number(e.target.value) : '' })}>
-                  <option value="">—</option>
-                  {userOptions.map(u => <option key={u.id} value={u.id}>{u.username}</option>)}
-                </select>
-              </label>
-              <label className="text-xs">
-                Org/Program
-                <select className="input mt-1" value={String(filters.org_id ?? '')}
-                  onChange={(e) => setFilters({ ...filters, org_id: e.target.value ? Number(e.target.value) : '' })}>
-                  <option value="">—</option>
-                  {orgOptions.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
-                </select>
-              </label>
-              <label className="text-xs">
-                Sort
-                <select className="input mt-1" value={filters.sort}
-                  onChange={(e) => setFilters({ ...filters, sort: e.target.value })}>
-                  <option value="created_at:desc">Newest</option>
-                  <option value="created_at:asc">Oldest</option>
-                  <option value="last_used_at:desc">Last used (desc)</option>
-                  <option value="last_used_at:asc">Last used (asc)</option>
-                </select>
-              </label>
+          <div className="flex flex-col md:flex-row items-stretch md:items-end gap-2">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-2 bg-white/5 p-1.5 rounded-xl border border-white/10 glass">
+              <FormField label="Search"><Input size="sm" className="bg-black/20 h-8" placeholder="Prefix…" value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })} /></FormField>
+              <FormField label="User"><Select size="sm" className="bg-black/20 h-8" value={String(filters.user_id ?? '')} onChange={(e) => setFilters({ ...filters, user_id: e.target.value ? Number(e.target.value) : '' })}><option value="">All Users</option>{userOptions.map(u => <option key={u.id} value={u.id}>{u.username}</option>)}</Select></FormField>
+              <FormField label="Org"><Select size="sm" className="bg-black/20 h-8" value={String(filters.org_id ?? '')} onChange={(e) => setFilters({ ...filters, org_id: e.target.value ? Number(e.target.value) : '' })}><option value="">All Orgs</option>{orgOptions.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}</Select></FormField>
+              <FormField label="Sort"><Select size="sm" className="bg-black/20 h-8" value={filters.sort} onChange={(e) => setFilters({ ...filters, sort: e.target.value })}><option value="created_at:desc">Newest</option><option value="last_used_at:desc">Recent</option></Select></FormField>
             </div>
-            <button className="btn btn-primary" onClick={() => setOpen(true)}>New Key</button>
+            <Button variant="cyan" size="sm" onClick={() => setOpen(true)} className="h-11 px-6 font-bold uppercase tracking-widest text-[10px]">
+              <span className="mr-2 text-base">🔑</span> New Key
+            </Button>
           </div>
         }
       />
 
-      {/* removed inline token banner; success is now handled via modal */}
-      {errorMsg && (
-        <div className="card p-3 border border-glass bg-red-500/10 text-red-200" role="alert">{errorMsg}</div>
-      )}
-
-      
-
-      <Modal open={open} onClose={() => setOpen(false)} title="Create API Key">
-        <form action={onCreate} className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <label className="text-sm">
-          Scopes
-          <input name="scopes" defaultValue="chat,completions,embeddings" className="input mt-1" />
-        </label>
-        <label className="text-sm">
-          Expires At (ISO)
-          <input name="expires_at" placeholder="YYYY-MM-DDTHH:mm:ssZ" className="input mt-1" />
-        </label>
-        <label className="text-sm md:col-span-3">
-          IP Allowlist (comma-separated)
-          <input name="ip_allowlist" placeholder="1.2.3.4,5.6.7.8" className="input mt-1" />
-          <div className="text-xs text-white/60 mt-1 space-y-1">
-            <p>• <strong>Leave empty</strong> to allow requests from any IP address</p>
-            <p>• <strong>Add IPs</strong> to restrict access to specific addresses only</p>
-            <p>• <strong>Host machine IP</strong> is automatically included when you add any IPs</p>
-            <p>• Format: comma-separated IPv4 addresses (e.g., "1.2.3.4,5.6.7.8")</p>
-          </div>
-        </label>
-        <label className="text-sm">
-          Attribute to User (optional)
-          <select name="user_id" className="input mt-1">
-            <option value="">—</option>
-            {userOptions.map(u => (<option key={u.id} value={u.id}>{u.username}</option>))}
-          </select>
-        </label>
-        <label className="text-sm">
-          Attribute to Org/Program (optional)
-          <select name="org_id" className="input mt-1">
-            <option value="">—</option>
-            {orgOptions.map(o => (<option key={o.id} value={o.id}>{o.name}</option>))}
-          </select>
-        </label>
-          <div className="md:col-span-3">
-            <button className="btn btn-primary bg-white text-black hover:bg-white/90" disabled={create.isPending}>
-            {create.isPending ? 'Creating…' : 'Create Key'}
-          </button>
-        </div>
-        </form>
-      </Modal>
-
-      <Modal open={tokenModalOpen} onClose={() => { setTokenModalOpen(false); setToken(null); }} title="API Key Created">
-        <div className="space-y-3">
-          <div className="text-amber-200 bg-amber-500/10 border border-amber-500/30 rounded-md p-3 text-sm">
-            Copy this token now. You will not be able to view it again.
-          </div>
-          <div className="glass rounded-md px-3 py-2 flex items-center justify-between gap-2">
-            <code className="font-mono text-sm break-all select-all">{token}</code>
-            <button
-              className="btn"
-              onClick={async () => { if (token) { const ok = await safeCopyToClipboard(token); addToast({ title: ok ? 'Copied to clipboard' : 'Copy failed', kind: ok ? 'success' : 'error' }); } }}
-              aria-label="Copy API key"
-              title="Copy API key"
-            >
-              {/* Copy icon (inline SVG) */}
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-                <path d="M16 1H4c-1.1 0-2 .9-2 2v12h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z" />
-              </svg>
-            </button>
-          </div>
-          <div className="text-right">
-            <button className="btn btn-primary" onClick={() => { setTokenModalOpen(false); setToken(null); }}>Done</button>
-          </div>
-        </div>
-      </Modal>
-
-      <div className="overflow-x-auto card p-2">
-        <table className="table">
-          <thead className="text-left">
+      <Card className="p-0 overflow-hidden shadow-xl border-white/5 bg-white/[0.01]">
+        <Table>
+          <thead>
             <tr>
-              <th className="p-2">Prefix</th>
-              <th className="p-2">Scopes</th>
-              <th className="p-2">Expires</th>
-              <th className="p-2">Last Used</th>
-              <th className="p-2">User</th>
-                <th className="p-2">Org/Prog</th>
-              <th className="p-2"></th>
+              <th className="pl-6">Prefix</th>
+              <th>Scopes</th>
+              <th>Last Used</th>
+              <th>Assignment</th>
+              <th className="text-right pr-6">Action</th>
             </tr>
           </thead>
           <tbody>
             {(list.data || []).map((k) => (
-              <tr key={k.id} className="border-t">
-                <td className="p-2 font-mono">{k.prefix}</td>
-                <td className="p-2">{k.scopes}</td>
-                <td className="p-2">{k.expires_at ? new Date(k.expires_at).toLocaleString() : '-'}</td>
-                <td className="p-2">{k.last_used_at ? new Date(k.last_used_at).toLocaleString() : '-'}</td>
-                <td className="p-2">{(k as any).username ?? (k as any).user_id ?? '-'}</td>
-                <td className="p-2">{(k as any).org_name ?? (k as any).org_id ?? '-'}</td>
-                <td className="p-2 text-right">
+              <tr key={k.id} className="group text-xs">
+                <td className="pl-6 font-mono text-cyan-300 font-bold tracking-wider">{k.prefix}</td>
+                <td>
+                  <div className="flex flex-wrap gap-1">
+                    {k.scopes.split(',').map(s => (
+                      <Badge key={s} className="bg-indigo-500/5 text-indigo-300/70 border-indigo-500/10 text-[8px]">{s.trim()}</Badge>
+                    ))}
+                  </div>
+                </td>
+                <td className="text-white/40 font-mono text-[10px]">{k.last_used_at ? new Date(k.last_used_at).toLocaleDateString() : 'Never'}</td>
+                <td>
+                  <div className="flex flex-col">
+                    <span className="font-semibold text-white/80">{(k as any).username || '—'}</span>
+                    <span className="text-[9px] text-white/30 uppercase tracking-tighter">{(k as any).org_name || 'Global'}</span>
+                  </div>
+                </td>
+                <td className="text-right pr-6">
                   {!k.disabled && (
-                    <button className="text-sm underline text-red-300 hover:text-red-200" onClick={() => setConfirmRevoke(k.id)} disabled={revoke.isPending}>
-                      {revoke.isPending ? 'Revoking…' : 'Revoke'}
-                    </button>
+                    <Button 
+                      variant="danger" 
+                      size="sm" 
+                      onClick={() => setConfirmRevoke(k.id)} 
+                      className="opacity-0 group-hover:opacity-100 px-3"
+                    >
+                      Revoke
+                    </Button>
                   )}
                 </td>
               </tr>
             ))}
+            {(list.data || []).length === 0 && (
+              <tr>
+                <td colSpan={7} className="text-center py-12 text-white/40">
+                  <div className="text-4xl mb-4 opacity-20">🗝️</div>
+                  No API keys generated yet.
+                </td>
+              </tr>
+            )}
           </tbody>
-        </table>
-      </div>
+        </Table>
+      </Card>
+
+      <Modal open={open} onClose={() => setOpen(false)} title="Create API Key" variant="workflow">
+        <form action={(fd) => onCreate(fd)} className="p-4 space-y-4">
+          <SectionTitle variant="purple" className="text-[10px]">Key Configuration</SectionTitle>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <FormField label="Scopes" description="Comma-separated scopes (default: chat,completions,embeddings)">
+              <Input name="scopes" defaultValue="chat,completions,embeddings" placeholder="chat,completions,embeddings" />
+            </FormField>
+            <FormField label="IP Allowlist" description="Optional: Comma-separated IP addresses or CIDR blocks">
+              <Input name="ip_allowlist" placeholder="e.g. 192.168.1.1, 10.0.0.0/24" />
+            </FormField>
+          </div>
+          
+          <SectionTitle variant="cyan" className="text-[10px]">Assignment</SectionTitle>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <FormField label="User (Optional)">
+              <Select name="user_id">
+                <option value="">System / Unassigned</option>
+                {userOptions.map(u => <option key={u.id} value={u.id}>{u.username}</option>)}
+              </Select>
+            </FormField>
+            <FormField label="Organization (Optional)">
+              <Select name="org_id">
+                <option value="">Global / Unassigned</option>
+                {orgOptions.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+              </Select>
+            </FormField>
+          </div>
+
+          <FormField label="Expires At (Optional)" description="Leave empty for never">
+            <Input name="expires_at" type="datetime-local" />
+          </FormField>
+
+          <div className="flex items-center justify-end gap-2 pt-4 border-t border-white/5">
+            <Button variant="default" size="sm" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button variant="primary" size="sm" type="submit" disabled={create.isPending} className="px-8">
+              {create.isPending ? '...' : 'Create Key'}
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal open={tokenModalOpen} onClose={() => setTokenModalOpen(false)} title="Key Created Successfully" variant="center">
+        <div className="p-6 space-y-6">
+          <InfoBox variant="cyan" title="Security Warning">
+            This is the only time your full API key will be displayed. Please copy it and store it securely.
+          </InfoBox>
+          
+          <div className="space-y-2">
+            <Label className="text-[10px] uppercase font-bold text-white/40">Your API Key</Label>
+            <div className="flex items-center gap-2 p-3 bg-black/40 rounded-xl border border-white/10 font-mono text-emerald-400 break-all text-sm">
+              {token}
+              <button 
+                onClick={async () => { 
+                  const ok = await safeCopyToClipboard(token || ''); 
+                  if (ok) addToast({ title: 'Token copied!', kind: 'success' });
+                }} 
+                className="shrink-0 p-2 hover:bg-white/10 rounded-lg transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <div className="flex justify-end pt-4">
+            <Button variant="primary" onClick={() => setTokenModalOpen(false)} className="px-8">Done</Button>
+          </div>
+        </div>
+      </Modal>
 
       <ConfirmDialog
         open={confirmRevoke != null}
-        title="Revoke API key?"
-        description={<span>This will disable the key immediately. This action cannot be undone.</span>}
-        confirmLabel="Revoke"
+        title="Revoke API Key?"
+        description={<div className="text-white/70">This will disable the key immediately. Clients using this key will receive 401 Unauthorized errors. <strong>This action cannot be undone.</strong></div>}
+        confirmLabel="Revoke Key"
         onConfirm={() => { if (confirmRevoke != null) revoke.mutate(confirmRevoke); setConfirmRevoke(null); }}
         onClose={() => setConfirmRevoke(null)}
       />

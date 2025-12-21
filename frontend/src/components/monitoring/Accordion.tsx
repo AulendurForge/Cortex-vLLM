@@ -29,7 +29,7 @@ export function AccordionItem({
   const [open, setOpen] = usePersistentOpen(storageKey, id, defaultOpen);
 
   return (
-    <div className="card rounded-xl overflow-hidden">
+    <div className="card rounded-xl">
       <button
         className="w-full flex items-center justify-between gap-3 px-3 py-2 bg-white/5 hover:bg-white/10 transition-colors"
         onClick={() => setOpen((v) => !v)}

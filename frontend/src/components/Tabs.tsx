@@ -32,8 +32,8 @@ export function Tabs({ tabs, defaultId }: { tabs: TabConfig[]; defaultId?: strin
   );
 
   return (
-    <div className="flex flex-col gap-4">
-      <div role="tablist" aria-label="Documentation sections" className="flex items-center gap-2 border-b border-white/10">
+    <div className="flex flex-col gap-6">
+      <div role="tablist" aria-label="Sections" className="flex items-center gap-1 bg-white/5 p-1 rounded-2xl border border-white/10 glass shadow-lg w-fit overflow-x-auto max-w-full no-scrollbar">
         {tabs.map((tab) => {
           const isActive = tab.id === activeId;
           return (
@@ -44,8 +44,10 @@ export function Tabs({ tabs, defaultId }: { tabs: TabConfig[]; defaultId?: strin
               aria-selected={isActive}
               aria-controls={`panel-${tab.id}`}
               className={cn(
-                'px-3 py-2 text-sm rounded-t-md transition-colors',
-                isActive ? 'bg-white/10 text-white' : 'text-white/70 hover:text-white hover:bg-white/5'
+                'px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-xl transition-all duration-300 whitespace-nowrap',
+                isActive 
+                  ? 'bg-white/15 text-white shadow-inner border border-white/10' 
+                  : 'text-white/40 hover:text-white/70 hover:bg-white/5'
               )}
               onClick={() => onSelect(tab.id)}
               type="button"
@@ -55,7 +57,7 @@ export function Tabs({ tabs, defaultId }: { tabs: TabConfig[]; defaultId?: strin
           );
         })}
       </div>
-      <div>
+      <div className="glass rounded-3xl p-5 shadow-2xl border-white/5 bg-white/[0.02]">
         {tabs.map((tab) => {
           const isActive = tab.id === activeId;
           return (
@@ -65,7 +67,7 @@ export function Tabs({ tabs, defaultId }: { tabs: TabConfig[]; defaultId?: strin
               role="tabpanel"
               aria-labelledby={`tab-${tab.id}`}
               hidden={!isActive}
-              className="focus:outline-none"
+              className="focus:outline-none animate-in fade-in slide-in-from-bottom-2 duration-500"
             >
               {isActive && tab.content}
             </div>

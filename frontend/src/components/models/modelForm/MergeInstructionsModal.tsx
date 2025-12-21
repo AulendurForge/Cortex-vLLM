@@ -1,6 +1,8 @@
 'use client';
 
 import React from 'react';
+import { Modal } from '../../Modal';
+import { Button, InfoBox, SectionTitle } from '../../UI';
 
 interface MergeInstructionsModalProps {
   open: boolean;
@@ -8,96 +10,67 @@ interface MergeInstructionsModalProps {
 }
 
 export function MergeInstructionsModal({ open, onClose }: MergeInstructionsModalProps) {
-  if (!open) return null;
-
   return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[9999] p-4" onClick={onClose}>
-      <div 
-        className="bg-zinc-900 border border-white/20 rounded-lg p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-medium text-white">How to Merge Multi-Part GGUF Files</h3>
-          <button 
-            onClick={onClose}
-            className="text-white/60 hover:text-white text-2xl leading-none"
-          >
-            ×
-          </button>
-        </div>
-        
-        <div className="space-y-4 text-sm text-white/80">
-          <p>
-            Multi-part GGUF files (e.g., <code className="bg-white/10 px-1.5 py-0.5 rounded">model-Q8_0-00001-of-00006.gguf</code>) 
-            will be automatically merged when you start the model.
+    <Modal open={open} onClose={onClose} title="GGUF Assembly Protocol" variant="center">
+      <div className="p-6 space-y-6 max-h-[80vh] overflow-auto custom-scrollbar">
+        <header className="space-y-2">
+          <p className="text-sm text-white/70 leading-relaxed">
+            Multi-part GGUF files (e.g., <code className="bg-white/10 px-1.5 py-0.5 rounded font-mono text-xs italic">model-Q8_0-00001-of-00006.gguf</code>) require unification before inference can initialize.
           </p>
-          
-          <div className="bg-emerald-500/10 border border-emerald-500/30 rounded p-3">
-            <div className="font-medium text-emerald-300 mb-2">✨ Automatic Merging</div>
-            <p className="mb-2">When you select a multi-part quantization and click "Add Model", Cortex will:</p>
-            <ol className="list-decimal pl-5 space-y-1">
-              <li>Detect that the GGUF file is split into multiple parts</li>
-              <li>Automatically merge all parts into a single file when you start the model</li>
-              <li>Store the merged file in the same directory as the parts</li>
-              <li>Use the merged file for all future starts (no re-merging needed)</li>
-            </ol>
+        </header>
+        
+        <section className="space-y-4">
+          <SectionTitle variant="purple">✨ Automatic Synchronization</SectionTitle>
+          <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-2xl p-5 space-y-3">
+            <p className="text-xs text-emerald-300 font-bold uppercase tracking-widest">Logic Flow:</p>
+            <ul className="space-y-3">
+              {[
+                "System detects split GGUF segments in target directory.",
+                "Atomic binary merge initiated on first model launch.",
+                "Merged artifact cached alongside original segments.",
+                "Future initializations bypass merge logic for zero-latency startup."
+              ].map((step, idx) => (
+                <li key={idx} className="flex gap-3 text-xs text-white/70 leading-relaxed">
+                  <span className="flex-shrink-0 w-5 h-5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-[10px] font-bold text-emerald-400">{idx + 1}</span>
+                  {step}
+                </li>
+              ))}
+            </ul>
           </div>
-          
-          <div className="bg-blue-500/10 border border-blue-500/30 rounded p-3">
-            <div className="font-medium text-blue-300 mb-2">📌 Manual Merging (Optional)</div>
-            <p className="mb-2">If you prefer to merge manually before adding the model:</p>
-            <ol className="list-decimal pl-5 space-y-2">
-              <li>Install llama.cpp if you haven't already:
-                <pre className="bg-black/50 p-2 rounded mt-1 text-xs overflow-x-auto">
-{`git clone https://github.com/ggerganov/llama.cpp
-cd llama.cpp
-make`}
-                </pre>
-              </li>
-              <li>Use the <code className="bg-white/10 px-1 rounded">llama-gguf-split</code> tool to merge:
-                <pre className="bg-black/50 p-2 rounded mt-1 text-xs overflow-x-auto">
-{`# Syntax:
-./llama-gguf-split --merge <input-prefix> <output-file>
+        </section>
 
-# Example:
-./llama-gguf-split --merge model-Q8_0-00001-of-00006.gguf model-Q8_0-merged.gguf`}
-                </pre>
-              </li>
-            </ol>
-          </div>
+        <section className="space-y-4">
+          <SectionTitle variant="blue">🛠️ Manual Procedures (Optional)</SectionTitle>
           
-          <div className="bg-amber-500/10 border border-amber-500/30 rounded p-3">
-            <div className="font-medium text-amber-300 mb-2">ℹ️ Alternative: Binary concatenation</div>
-            <p className="mb-2">On Linux/Mac, you can also use <code className="bg-white/10 px-1 rounded">cat</code>:</p>
-            <pre className="bg-black/50 p-2 rounded text-xs overflow-x-auto">
-{`# Navigate to the directory
-cd /path/to/model/directory
+          <div className="space-y-4">
+            <div className="bg-black/20 border border-white/5 rounded-2xl p-5">
+              <div className="text-[10px] uppercase font-black text-blue-400 tracking-widest mb-3">Segment Splitting Tool</div>
+              <pre className="text-[10px] bg-black/40 rounded-xl p-4 overflow-x-auto border border-white/5 font-mono text-blue-300 leading-relaxed">
+{`# Execute unification via llama-gguf-split:
+./llama-gguf-split --merge \\
+  model-Q8_0-00001-of-00006.gguf \\
+  model-Q8_0-merged.gguf`}
+              </pre>
+            </div>
 
-# Concatenate all parts in order
+            <div className="bg-black/20 border border-white/5 rounded-2xl p-5">
+              <div className="text-[10px] uppercase font-black text-amber-400 tracking-widest mb-3">Binary Concatenation (POSIX)</div>
+              <pre className="text-[10px] bg-black/40 rounded-xl p-4 overflow-x-auto border border-white/5 font-mono text-amber-200/80 leading-relaxed">
+{`# Sequence segments into a single pointer:
 cat model-Q8_0-00001-of-00006.gguf \\
     model-Q8_0-00002-of-00006.gguf \\
-    model-Q8_0-00003-of-00006.gguf \\
-    model-Q8_0-00004-of-00006.gguf \\
-    model-Q8_0-00005-of-00006.gguf \\
-    model-Q8_0-00006-of-00006.gguf \\
     > model-Q8_0-merged.gguf`}
-            </pre>
+              </pre>
+            </div>
           </div>
-          
-          <div className="pt-3 border-t border-white/10 flex justify-end">
-            <button 
-              onClick={onClose}
-              className="px-4 py-2 bg-blue-500/20 border border-blue-500/40 rounded hover:bg-blue-500/30 text-white"
-            >
-              Got it!
-            </button>
-          </div>
+        </section>
+
+        <div className="pt-4 border-t border-white/5 flex justify-end">
+          <Button variant="primary" onClick={onClose} className="px-10">
+            Acknowledge
+          </Button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }
-
-
-
-

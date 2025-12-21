@@ -16,68 +16,68 @@ import { MergeInstructionsModal } from './modelForm/MergeInstructionsModal';
 
 export type ModelFormValues = {
   mode: 'online' | 'offline';
-  repoId?: string;
-  localPath?: string;
+  repo_id?: string;
+  local_path?: string;
   name: string;
-  servedModelName: string;
+  served_model_name: string;
   task: 'generate' | 'embed';
   dtype?: string;
-  tpSize?: number;
-  selectedGpus?: number[];
-  gpuMemoryUtilization?: number;
-  maxModelLen?: number;
-  maxNumBatchedTokens?: number;
-  kvCacheDtype?: string;
+  tp_size?: number;
+  selected_gpus?: number[];
+  gpu_memory_utilization?: number;
+  max_model_len?: number;
+  max_num_batched_tokens?: number;
+  kv_cache_dtype?: string;
   quantization?: string;
-  blockSize?: number;
-  swapSpaceGb?: number;
-  enforceEager?: boolean;
-  trustRemoteCode?: boolean;
-  hfOffline?: boolean;
-  hfToken?: string;
-  cpuOffloadGb?: number;
-  enablePrefixCaching?: boolean;
-  prefixCachingHashAlgo?: string;
-  enableChunkedPrefill?: boolean;
-  maxNumSeqs?: number;
-  cudaGraphSizes?: string;
-  pipelineParallelSize?: number;
+  block_size?: number;
+  swap_space_gb?: number;
+  enforce_eager?: boolean;
+  trust_remote_code?: boolean;
+  hf_offline?: boolean;
+  hf_token?: string;
+  cpu_offload_gb?: number;
+  enable_prefix_caching?: boolean;
+  prefix_caching_hash_algo?: string;
+  enable_chunked_prefill?: boolean;
+  max_num_seqs?: number;
+  cuda_graph_sizes?: string;
+  pipeline_parallel_size?: number;
   device?: 'cuda' | 'cpu';
   tokenizer?: string;
-  hfConfigPath?: string;
-  engineType?: 'vllm' | 'llamacpp';
+  hf_config_path?: string;
+  engine_type?: 'vllm' | 'llamacpp';
   // Engine metadata for reproducibility (Plane D)
-  engineImage?: string;
-  engineVersion?: string;
-  engineDigest?: string;
+  engine_image?: string;
+  engine_version?: string;
+  engine_digest?: string;
   ngl?: number;
-  tensorSplit?: string;
-  batchSize?: number;
-  ubatchSize?: number;
+  tensor_split?: string;
+  batch_size?: number;
+  ubatch_size?: number;
   threads?: number;
-  contextSize?: number;
-  parallelSlots?: number;
-  ropeFreqBase?: number;
-  ropeFreqScale?: number;
-  flashAttention?: boolean;
+  context_size?: number;
+  parallel_slots?: number;
+  rope_freq_base?: number;
+  rope_freq_scale?: number;
+  flash_attention?: boolean;
   mlock?: boolean;
-  noMmap?: boolean;
-  numaPolicy?: string;
-  splitMode?: string;
-  cacheTypeK?: string;
-  cacheTypeV?: string;
+  no_mmap?: boolean;
+  numa_policy?: string;
+  split_mode?: string;
+  cache_type_k?: string;
+  cache_type_v?: string;
   // Repetition control parameters
-  repetitionPenalty?: number;
-  frequencyPenalty?: number;
-  presencePenalty?: number;
+  repetition_penalty?: number;
+  frequency_penalty?: number;
+  presence_penalty?: number;
   temperature?: number;
-  topK?: number;
-  topP?: number;
+  top_k?: number;
+  top_p?: number;
   // Custom request extensions (Plane C - advanced)
-  customRequestJson?: string;
+  custom_request_json?: string;
   // Custom startup args (Plane B - Phase 2)
-  customArgs?: CustomArg[];
-  customEnv?: Array<{key: string; value: string}>;
+  engine_startup_args_json?: string;  // Changed from customArgs
+  engine_startup_env_json?: string;   // Changed from customEnv
 };
 
 export function ModelForm({ onSubmit, onCancel, defaults, fetchBaseDir, saveBaseDir, listLocalFolders, submitLabel, modeLocked = false, onValuesChange }: {
@@ -93,64 +93,61 @@ export function ModelForm({ onSubmit, onCancel, defaults, fetchBaseDir, saveBase
 }) {
   const [values, setValues] = React.useState<ModelFormValues>({
     mode: defaults?.mode || 'online',
-    repoId: defaults?.repoId || '',
-    localPath: defaults?.localPath || '',
+    repo_id: defaults?.repo_id || '',
+    local_path: defaults?.local_path || '',
     name: defaults?.name || '',
-    servedModelName: defaults?.servedModelName || '',
+    served_model_name: defaults?.served_model_name || '',
     task: (defaults?.task as any) || 'generate',
     dtype: defaults?.dtype || 'auto',
-    tpSize: defaults?.tpSize ?? 1,
-    selectedGpus: defaults?.selectedGpus ?? [0],
-    gpuMemoryUtilization: defaults?.gpuMemoryUtilization ?? 0.9,
-    maxModelLen: defaults?.maxModelLen ?? 8192,
-    maxNumBatchedTokens: defaults?.maxNumBatchedTokens ?? 2048,
-    kvCacheDtype: defaults?.kvCacheDtype || '',
+    tp_size: defaults?.tp_size ?? 1,
+    selected_gpus: defaults?.selected_gpus ?? [0],
+    gpu_memory_utilization: defaults?.gpu_memory_utilization ?? 0.9,
+    max_model_len: defaults?.max_model_len ?? 8192,
+    max_num_batched_tokens: defaults?.max_num_batched_tokens ?? 2048,
+    kv_cache_dtype: defaults?.kv_cache_dtype || '',
     quantization: defaults?.quantization || '',
-    blockSize: defaults?.blockSize ?? undefined,
-    swapSpaceGb: defaults?.swapSpaceGb ?? undefined,
-    enforceEager: defaults?.enforceEager ?? true,
-    trustRemoteCode: defaults?.trustRemoteCode ?? false,
-    hfOffline: defaults?.hfOffline ?? false,
-    hfToken: (defaults as any)?.hfToken || '',
-    cpuOffloadGb: (defaults as any)?.cpuOffloadGb ?? 0,
-    enablePrefixCaching: (defaults as any)?.enablePrefixCaching ?? undefined,
-    prefixCachingHashAlgo: (defaults as any)?.prefixCachingHashAlgo ?? '',
-    enableChunkedPrefill: (defaults as any)?.enableChunkedPrefill ?? undefined,
-    maxNumSeqs: (defaults as any)?.maxNumSeqs ?? undefined,
-    cudaGraphSizes: (defaults as any)?.cudaGraphSizes ?? '',
-    pipelineParallelSize: (defaults as any)?.pipelineParallelSize ?? undefined,
-    device: (defaults as any)?.device ?? 'cuda',
-    tokenizer: (defaults as any)?.tokenizer || '',
-    hfConfigPath: (defaults as any)?.hfConfigPath || '',
-    engineType: (defaults as any)?.engineType || defaults?.engineType || 'vllm',
-    ngl: (defaults as any)?.ngl ?? 999,
-    tensorSplit: (defaults as any)?.tensorSplit ?? '0.25,0.25,0.25,0.25',
-    batchSize: (defaults as any)?.batchSize ?? 2048,
-    ubatchSize: (defaults as any)?.ubatchSize ?? 2048,
-    threads: (defaults as any)?.threads ?? 32,
-    contextSize: (defaults as any)?.contextSize ?? 16384,
-    parallelSlots: (defaults as any)?.parallelSlots ?? 16,
-    ropeFreqBase: (defaults as any)?.ropeFreqBase ?? undefined,
-    ropeFreqScale: (defaults as any)?.ropeFreqScale ?? undefined,
-    flashAttention: (defaults as any)?.flashAttention ?? true,
-    mlock: (defaults as any)?.mlock ?? true,
-    noMmap: (defaults as any)?.noMmap ?? false,
-    numaPolicy: (defaults as any)?.numaPolicy ?? 'isolate',
-    splitMode: (defaults as any)?.splitMode ?? undefined,
-    cacheTypeK: (defaults as any)?.cacheTypeK ?? 'q8_0',
-    cacheTypeV: (defaults as any)?.cacheTypeV ?? 'q8_0',
-    // Repetition control parameters
-    repetitionPenalty: (defaults as any)?.repetitionPenalty ?? 1.2,
-    frequencyPenalty: (defaults as any)?.frequencyPenalty ?? 0.5,
-    presencePenalty: (defaults as any)?.presencePenalty ?? 0.5,
-    temperature: (defaults as any)?.temperature ?? 0.8,
-    topK: (defaults as any)?.topK ?? 40,
-    topP: (defaults as any)?.topP ?? 0.9,
-    // Custom request extensions (Plane C - advanced)
-    customRequestJson: (defaults as any)?.customRequestJson ?? '',
-    // Custom startup args (Plane B - Phase 2)
-    customArgs: (defaults as any)?.customArgs ?? [],
-    customEnv: (defaults as any)?.customEnv ?? [],
+    block_size: defaults?.block_size ?? undefined,
+    swap_space_gb: defaults?.swap_space_gb ?? undefined,
+    enforce_eager: defaults?.enforce_eager ?? true,
+    trust_remote_code: defaults?.trust_remote_code ?? false,
+    hf_offline: defaults?.hf_offline ?? false,
+    hf_token: defaults?.hf_token || '',
+    cpu_offload_gb: defaults?.cpu_offload_gb ?? 0,
+    enable_prefix_caching: defaults?.enable_prefix_caching ?? undefined,
+    prefix_caching_hash_algo: defaults?.prefix_caching_hash_algo ?? '',
+    enable_chunked_prefill: defaults?.enable_chunked_prefill ?? undefined,
+    max_num_seqs: defaults?.max_num_seqs ?? undefined,
+    cuda_graph_sizes: defaults?.cuda_graph_sizes ?? '',
+    pipeline_parallel_size: defaults?.pipeline_parallel_size ?? undefined,
+    device: defaults?.device ?? 'cuda',
+    tokenizer: defaults?.tokenizer || '',
+    hf_config_path: defaults?.hf_config_path || '',
+    engine_type: defaults?.engine_type || 'vllm',
+    ngl: defaults?.ngl ?? 999,
+    tensor_split: defaults?.tensor_split ?? '0.25,0.25,0.25,0.25',
+    batch_size: defaults?.batch_size ?? 2048,
+    ubatch_size: defaults?.ubatch_size ?? 2048,
+    threads: defaults?.threads ?? 32,
+    context_size: defaults?.context_size ?? 16384,
+    parallel_slots: defaults?.parallel_slots ?? 16,
+    rope_freq_base: defaults?.rope_freq_base ?? undefined,
+    rope_freq_scale: defaults?.rope_freq_scale ?? undefined,
+    flash_attention: defaults?.flash_attention ?? true,
+    mlock: defaults?.mlock ?? true,
+    no_mmap: defaults?.no_mmap ?? false,
+    numa_policy: defaults?.numa_policy ?? 'isolate',
+    split_mode: defaults?.split_mode ?? undefined,
+    cache_type_k: defaults?.cache_type_k ?? 'q8_0',
+    cache_type_v: defaults?.cache_type_v ?? 'q8_0',
+    repetition_penalty: defaults?.repetition_penalty ?? 1.2,
+    frequency_penalty: defaults?.frequency_penalty ?? 0.5,
+    presence_penalty: defaults?.presence_penalty ?? 0.5,
+    temperature: defaults?.temperature ?? 0.8,
+    top_k: defaults?.top_k ?? 40,
+    top_p: defaults?.top_p ?? 0.9,
+    custom_request_json: defaults?.custom_request_json ?? '',
+    engine_startup_args_json: defaults?.engine_startup_args_json || '[]',
+    engine_startup_env_json: defaults?.engine_startup_env_json || '[]',
   });
 
   const set = (k: keyof ModelFormValues, v: any) => setValues(prev => { 
@@ -239,29 +236,29 @@ export function ModelForm({ onSubmit, onCancel, defaults, fetchBaseDir, saveBase
     e.preventDefault();
     
     // Frontend validation
-    if (values.engineType === 'llamacpp') {
+    if (values.engine_type === 'llamacpp') {
       if (values.mode === 'online') {
         alert('llama.cpp requires Offline mode. Please select a local GGUF file.');
         return;
       }
-      if (!values.localPath) {
+      if (!values.local_path) {
         alert('llama.cpp requires a local file path. Please select a GGUF file from your models directory.');
         return;
       }
     }
     
-    if (values.engineType === 'vllm') {
-      if (values.mode === 'online' && !values.repoId) {
+    if (values.engine_type === 'vllm') {
+      if (values.mode === 'online' && !values.repo_id) {
         alert('Online mode requires a HuggingFace repository ID (e.g., meta-llama/Llama-3-8B-Instruct)');
         return;
       }
-      if (values.mode === 'offline' && !values.localPath) {
+      if (values.mode === 'offline' && !values.local_path) {
         alert('Offline mode requires a local path. Please select a model folder.');
         return;
       }
     }
     
-    if (!values.name || !values.servedModelName) {
+    if (!values.name || !values.served_model_name) {
       alert('Model name and served model name are required.');
       return;
     }
@@ -318,10 +315,10 @@ export function ModelForm({ onSubmit, onCancel, defaults, fetchBaseDir, saveBase
       }
       
       if (!gg) { alert('Select a GGUF file'); return; }
-      next.localPath = `${next.localPath}/${gg}`;
+      next.local_path = `${next.local_path}/${gg}`;
       
-      if (!next.hfConfigPath && baseDir && next.localPath) {
-        next.hfConfigPath = `/models/${(values.localPath || '')}`;
+      if (!next.hf_config_path && baseDir && next.local_path) {
+        next.hf_config_path = `/models/${(values.local_path || '')}`;
       }
       if (useLocalTokenizer) next.tokenizer = '';
     }
@@ -330,10 +327,10 @@ export function ModelForm({ onSubmit, onCancel, defaults, fetchBaseDir, saveBase
   };
 
   const handleFolderSelect = (folder: string) => {
-    set('localPath', folder);
+    set('local_path', folder);
     if (!values.name) set('name', folder);
     const derived = (values.name || folder || '').toLowerCase().replace(/[^a-z0-9\-\_\s]/g, '').replace(/\s+/g, '-');
-    if (!values.servedModelName) set('servedModelName', derived);
+    if (!values.served_model_name) set('served_model_name', derived);
     if (folder) runInspect(folder);
   };
 
@@ -358,15 +355,15 @@ export function ModelForm({ onSubmit, onCancel, defaults, fetchBaseDir, saveBase
       <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {/* STEP 1: Engine Selection */}
         <EngineSelection
-          engineType={values.engineType}
-          onChange={(engine) => set('engineType', engine)}
+          engineType={values.engine_type}
+          onChange={(engine) => set('engine_type', engine)}
           mode={values.mode}
           onModeChange={(mode) => set('mode', mode)}
           modeLocked={modeLocked}
         />
 
         {/* Engine Metadata (Advanced) */}
-        {values.engineType && (
+        {values.engine_type && (
           <details className="md:col-span-2">
             <summary className="cursor-pointer text-sm text-white/70 hover:text-white">
               ⚙️ Advanced: Engine Image/Version (for reproducibility)
@@ -377,9 +374,9 @@ export function ModelForm({ onSubmit, onCancel, defaults, fetchBaseDir, saveBase
                 <input
                   className="input mt-1"
                   type="text"
-                  placeholder={values.engineType === 'vllm' ? 'e.g., vllm/vllm-openai:v0.6.3' : 'e.g., ghcr.io/ggerganov/llama.cpp:server'}
-                  value={values.engineImage || ''}
-                  onChange={(e) => set('engineImage', e.target.value)}
+                  placeholder={values.engine_type === 'vllm' ? 'e.g., vllm/vllm-openai:latest (Qwen3 requires newer Transformers)' : 'e.g., ghcr.io/ggerganov/llama.cpp:server'}
+                  value={values.engine_image || ''}
+                  onChange={(e) => set('engine_image', e.target.value)}
                 />
                 <p className="text-[11px] text-white/50 mt-1">
                   Leave blank to use system default. Pin specific version for reproducibility.
@@ -391,8 +388,8 @@ export function ModelForm({ onSubmit, onCancel, defaults, fetchBaseDir, saveBase
                   className="input mt-1"
                   type="text"
                   placeholder="e.g., v0.6.3"
-                  value={values.engineVersion || ''}
-                  onChange={(e) => set('engineVersion', e.target.value)}
+                  value={values.engine_version || ''}
+                  onChange={(e) => set('engine_version', e.target.value)}
                 />
                 <p className="text-[11px] text-white/50 mt-1">
                   Optional: For tracking/reference only.
@@ -403,7 +400,7 @@ export function ModelForm({ onSubmit, onCancel, defaults, fetchBaseDir, saveBase
         )}
 
         {/* Disable rest of form until engine selected */}
-        {!values.engineType && !modeLocked && (
+        {!values.engine_type && !modeLocked && (
           <div className="md:col-span-2 p-6 text-center text-white/60 bg-white/5 rounded border border-white/10">
             ⬆️ Please select an inference engine above to continue
           </div>
@@ -413,17 +410,17 @@ export function ModelForm({ onSubmit, onCancel, defaults, fetchBaseDir, saveBase
         <ModeSelection
           mode={values.mode}
           onChange={(mode) => set('mode', mode)}
-          engineType={values.engineType}
+          engineType={values.engine_type}
           modeLocked={modeLocked}
         />
 
         {/* Mode-specific fields */}
         {!modeLocked && values.mode === 'online' && (
           <OnlineModeFields
-            repoId={values.repoId || ''}
-            hfToken={values.hfToken || ''}
-            onRepoIdChange={(v) => set('repoId', v)}
-            onHfTokenChange={(v) => set('hfToken', v)}
+            repoId={values.repo_id || ''}
+            hfToken={values.hf_token || ''}
+            onRepoIdChange={(v) => set('repo_id', v)}
+            onHfTokenChange={(v) => set('hf_token', v)}
             modeLocked={modeLocked}
           />
         )}
@@ -432,9 +429,9 @@ export function ModelForm({ onSubmit, onCancel, defaults, fetchBaseDir, saveBase
           <OfflineModeFields
             baseDir={baseDir}
             folders={folders}
-            localPath={values.localPath || ''}
+            localPath={values.local_path || ''}
             tokenizer={values.tokenizer || ''}
-            hfConfigPath={values.hfConfigPath || ''}
+            hfConfigPath={values.hf_config_path || ''}
             loadingFolders={loadingFolders}
             savingBase={savingBase}
             inspect={inspect}
@@ -455,18 +452,18 @@ export function ModelForm({ onSubmit, onCancel, defaults, fetchBaseDir, saveBase
             onShowGgufHelpToggle={() => setShowGgufHelp(v => !v)}
             onShowMergeHelp={() => setShowMergeHelp(true)}
             onTokenizerChange={(v) => set('tokenizer', v)}
-            onHfConfigPathChange={(v) => set('hfConfigPath', v)}
+            onHfConfigPathChange={(v) => set('hf_config_path', v)}
           />
         )}
 
         {/* Basic Model Info */}
         <BasicModelInfo
           name={values.name}
-          servedModelName={values.servedModelName}
+          servedModelName={values.served_model_name}
           task={values.task}
-          engineType={values.engineType}
+          engineType={values.engine_type}
           onNameChange={(v) => set('name', v)}
-          onServedModelNameChange={(v) => set('servedModelName', v)}
+          onServedModelNameChange={(v) => set('served_model_name', v)}
           onTaskChange={(v) => set('task', v)}
           modeLocked={modeLocked}
         />
@@ -490,13 +487,13 @@ export function ModelForm({ onSubmit, onCancel, defaults, fetchBaseDir, saveBase
         />
 
         {/* Custom Startup Config (Plane B) - Applied at container startup */}
-        {values.engineType && (
+        {values.engine_type && (
           <CustomArgsEditor
-            args={values.customArgs || []}
-            envVars={values.customEnv || []}
-            onArgsChange={(args) => set('customArgs', args)}
-            onEnvVarsChange={(env) => set('customEnv', env)}
-            engineType={values.engineType}
+            args={JSON.parse(values.engine_startup_args_json || '[]')}
+            envVars={JSON.parse(values.engine_startup_env_json || '[]')}
+            onArgsChange={(args) => set('engine_startup_args_json', JSON.stringify(args))}
+            onEnvVarsChange={(env) => set('engine_startup_env_json', JSON.stringify(env))}
+            engineType={values.engine_type}
           />
         )}
 

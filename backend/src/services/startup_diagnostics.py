@@ -26,6 +26,18 @@ class DiagnosisResult(BaseModel):
 # Each pattern has: regex, title, message template, fix suggestions, error type
 ERROR_PATTERNS = [
     {
+        "pattern": r"model type [`']qwen3[`'].*Transformers does not recognize this architecture",
+        "title": "Qwen3 Requires Newer vLLM/Transformers",
+        "message": "This model is Qwen3 (model_type=qwen3), but the vLLM container’s Transformers version is too old to load it.",
+        "fixes": [
+            "Use a newer vLLM image that includes Qwen3 support (Transformers >= 4.51). Example: vllm/vllm-openai:latest",
+            "If you must stay pinned/offline: update the offline package to a newer vLLM tag and reload it, then set VLLM_IMAGE to that same tag",
+            "In Cortex: set the model’s 'Engine Image' (or global VLLM_IMAGE) to a compatible image and restart/re-apply the model",
+        ],
+        "error_type": "model",
+        "severity": "error",
+    },
+    {
         "pattern": r"Free memory on device \(([0-9.]+)/([0-9.]+) GiB\).*less than desired GPU memory utilization \(([0-9.]+), ([0-9.]+) GiB\)",
         "title": "GPU Memory Exceeded",
         "message": "vLLM requires {required} GiB but only {available} GiB is free per GPU. GPU memory utilization {util} is too high for available VRAM.",

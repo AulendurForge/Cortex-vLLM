@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { useToast } from '../../providers/ToastProvider';
+import { safeCopyToClipboard } from '../../lib/clipboard';
 
 type Props = {
   fetcher: () => Promise<string>;
@@ -200,21 +201,11 @@ export function LogsViewer({ fetcher, onClose, pollMs = 2000, modelName }: Props
   }, [matches, filteredText.length]);
 
   const copyLogs = async () => {
-    try {
-      await navigator.clipboard.writeText(filteredText || '');
+    const ok = await safeCopyToClipboard(filteredText || '');
+    if (ok) {
       addToast({ title: 'Logs copied', kind: 'success' });
-    } catch {
-      try {
-        const ta = document.createElement('textarea');
-        ta.value = filteredText || '';
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand('copy');
-        document.body.removeChild(ta);
-        addToast({ title: 'Logs copied', kind: 'success' });
-      } catch {
-        addToast({ title: 'Copy failed', kind: 'error' });
-      }
+    } else {
+      addToast({ title: 'Copy failed', kind: 'error' });
     }
   };
 

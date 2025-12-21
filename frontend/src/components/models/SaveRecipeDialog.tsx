@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { Modal } from '../Modal';
-import { Button, PrimaryButton } from '../UI';
+import { Button, Input, TextArea, SectionTitle, InfoBox, FormField } from '../UI';
 import { useToast } from '../../providers/ToastProvider';
 import apiFetch from '../../lib/api-clients';
 
@@ -32,7 +32,7 @@ export function SaveRecipeDialog({
     e.preventDefault();
     
     if (!name.trim()) {
-      addToast({ title: 'Recipe name is required', kind: 'error' });
+      addToast({ title: 'Blueprint name required', kind: 'error' });
       return;
     }
 
@@ -48,7 +48,7 @@ export function SaveRecipeDialog({
       });
 
       addToast({ 
-        title: 'Recipe saved successfully!', 
+        title: 'Blueprint cataloged!', 
         kind: 'success' 
       });
       
@@ -58,7 +58,7 @@ export function SaveRecipeDialog({
       onClose();
     } catch (error: any) {
       addToast({ 
-        title: `Failed to save recipe: ${error?.message || 'Unknown error'}`, 
+        title: `Catalog error: ${error?.message || 'Unknown error'}`, 
         kind: 'error' 
       });
     } finally {
@@ -75,55 +75,64 @@ export function SaveRecipeDialog({
   };
 
   return (
-    <Modal open={open} onClose={handleClose} title="Save Recipe">
-      <div className="space-y-4">
-        <div className="text-sm text-white/70">
-          Save the current configuration of <strong>{modelName}</strong> ({engineType}) as a reusable recipe.
-        </div>
+    <Modal open={open} onClose={handleClose} title="Blueprint Generation" variant="center">
+      <div className="p-4 space-y-4">
+        <header className="space-y-1">
+          <SectionTitle variant="purple">Configuration Source</SectionTitle>
+          <div className="bg-white/[0.03] p-3 rounded-2xl border border-white/5 flex items-center justify-between">
+            <div className="flex flex-col">
+              <span className="text-xs font-bold text-white uppercase tracking-wider">{modelName}</span>
+              <span className="text-[9px] text-white/30 uppercase font-black tracking-widest">{engineType} engine</span>
+            </div>
+            <div className="w-6 h-6 rounded-lg bg-indigo-500/10 flex items-center justify-center text-xs">💾</div>
+          </div>
+        </header>
         
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-white/90 mb-2">
-              Recipe Name *
-            </label>
-            <input
-              type="text"
+          <FormField label="Blueprint Name" description="Give this configuration a unique name for identification.">
+            <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="input w-full"
-              placeholder="e.g., GPT-OSS 120B Optimized"
+              placeholder="e.g. Production Optimized Llama-3"
               disabled={isLoading}
               required
             />
-          </div>
+          </FormField>
           
-          <div>
-            <label className="block text-sm font-medium text-white/90 mb-2">
-              Description
-            </label>
-            <textarea
+          <FormField label="Strategy Description" description="Optional notes on requirements or use-cases.">
+            <TextArea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="input w-full h-20 resize-none"
-              placeholder="Optional description of this recipe's purpose and configuration..."
+              className="min-h-[80px] py-2"
+              placeholder="Recommended for A100-80GB clusters..."
               disabled={isLoading}
             />
-          </div>
+          </FormField>
           
-          <div className="flex justify-end gap-2 pt-4">
+          <InfoBox variant="cyan" className="text-[10px] p-2">
+            Cataloging this blueprint will preserve all engine flags and sampling defaults.
+          </InfoBox>
+
+          <div className="flex justify-end gap-2 pt-3 border-t border-white/5">
             <Button 
               type="button" 
+              variant="default"
+              size="sm"
               onClick={handleClose}
               disabled={isLoading}
+              className="px-4"
             >
               Cancel
             </Button>
-            <PrimaryButton 
+            <Button 
               type="submit"
+              variant="primary"
+              size="sm"
               disabled={isLoading || !name.trim()}
+              className="px-6 shadow-lg shadow-indigo-500/20"
             >
-              {isLoading ? 'Saving...' : 'Save Recipe'}
-            </PrimaryButton>
+              {isLoading ? 'Processing...' : 'Catalog Blueprint'}
+            </Button>
           </div>
         </form>
       </div>

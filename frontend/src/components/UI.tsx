@@ -3,48 +3,165 @@
 import { ReactNode } from 'react';
 import { cn } from '../lib/cn';
 
-export function Button({ children, className = '', ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
-  return <button className={cn('btn', className)} {...props}>{children}</button>;
+export function Button({ 
+  children, 
+  className = '', 
+  variant = 'default',
+  size = 'default',
+  ...props 
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & { 
+  variant?: 'default' | 'primary' | 'cyan' | 'purple' | 'danger';
+  size?: 'default' | 'sm';
+}) {
+  const variants = {
+    default: 'btn',
+    primary: 'btn btn-primary',
+    cyan: 'btn btn-cyan',
+    purple: 'btn btn-purple',
+    danger: 'btn btn-danger',
+  };
+  
+  const sizes = {
+    default: '',
+    sm: 'btn-sm',
+  };
+
+  return (
+    <button 
+      className={cn(variants[variant], sizes[size], className)} 
+      {...props}
+    >
+      {children}
+    </button>
+  );
 }
 
-export function PrimaryButton({ children, className = '', ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
-  return <button className={cn('btn btn-primary', className)} {...props}>{children}</button>;
+export function PrimaryButton(props: React.ButtonHTMLAttributes<HTMLButtonElement> & { size?: 'default' | 'sm' }) {
+  return <Button variant="primary" {...props} />;
 }
 
-export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return <div className={cn('card rounded-xl', className)}>{children}</div>;
+export function Card({ children, className = '', variant = 'default' }: { children: ReactNode; className?: string; variant?: 'default' | 'purple' | 'blue' | 'cyan' }) {
+  const variants = {
+    default: '',
+    purple: 'bg-gemstone-purple',
+    blue: 'bg-gemstone-blue',
+    cyan: 'bg-gemstone-cyan',
+  };
+  return <div className={cn('card', variants[variant], className)}>{children}</div>;
 }
 
 export function Table({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return <table className={cn('table', className)}>{children}</table>;
+  return (
+    <div className="overflow-hidden rounded-2xl border border-white/10 glass">
+      <table className={cn('table', className)}>{children}</table>
+    </div>
+  );
 }
 
 export function Badge({ children, className = '', ...props }: React.HTMLAttributes<HTMLSpanElement>) {
   return (
-    <span className={cn('text-xs px-2 py-1 rounded bg-white/10 text-white', className)} {...props}>
+    <span className={cn('text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-full bg-white/10 text-white/90 border border-white/10 uppercase', className)} {...props}>
       {children}
     </span>
   );
 }
 
 export function H1({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return <h1 className={cn('text-xl font-semibold', className)}>{children}</h1>;
+  return <h1 className={cn('text-2xl font-bold tracking-tight text-white/90', className)}>{children}</h1>;
 }
 
+export function H2({ children, className = '' }: { children: ReactNode; className?: string }) {
+  return <h2 className={cn('text-lg font-semibold text-white/80 tracking-tight', className)}>{children}</h2>;
+}
 
 export function PageHeader({ title, actions, className = '' }: { title: ReactNode; actions?: ReactNode; className?: string }) {
   return (
-    <div className={cn('flex items-center justify-between gap-3', className)}>
+    <div className={cn('flex items-center justify-between gap-4 mb-4', className)}>
       <H1 className="m-0">{title}</H1>
-      <div className="flex items-center gap-2">{actions}</div>
+      <div className="flex items-center gap-3">{actions}</div>
     </div>
   );
 }
 
 export function ThresholdBadge({ level }: { level: 'ok' | 'warn' | 'crit' }) {
-  const cls = level === 'crit' ? 'bg-red-500/20 text-red-200 border-red-400/30' : level === 'warn' ? 'bg-amber-500/20 text-amber-200 border-amber-400/30' : 'bg-emerald-500/20 text-emerald-200 border-emerald-400/30';
-  return <span className={cn('text-[10px] px-1.5 py-0.5 rounded border', cls)}>{level.toUpperCase()}</span>;
+  const cls = 
+    level === 'crit' ? 'bg-red-500/20 text-red-200 border-red-400/30' : 
+    level === 'warn' ? 'bg-amber-500/20 text-amber-200 border-amber-400/30' : 
+    'bg-emerald-500/20 text-emerald-200 border-emerald-400/30';
+  
+  return <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded-md border tracking-wider', cls)}>{level.toUpperCase()}</span>;
 }
 
+/* New Gemstone Components */
 
+export function Input({ className = '', ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
+  return <input className={cn('input', className)} {...props} />;
+}
 
+export function TextArea({ className = '', ...props }: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return <textarea className={cn('input min-h-[100px]', className)} {...props} />;
+}
+
+export function Select({ className = '', children, ...props }: React.SelectHTMLAttributes<HTMLSelectElement>) {
+  return (
+    <select className={cn('input appearance-none', className)} {...props}>
+      {children}
+    </select>
+  );
+}
+
+export function Label({ children, className = '', ...props }: React.LabelHTMLAttributes<HTMLLabelElement>) {
+  return (
+    <label className={cn('block text-sm font-medium text-white/70 mb-1.5', className)} {...props}>
+      {children}
+    </label>
+  );
+}
+
+export function SectionTitle({ children, variant = 'purple', className = '' }: { children: ReactNode; variant?: 'purple' | 'cyan' | 'blue'; className?: string }) {
+  const variants = {
+    purple: 'section-title-purple',
+    cyan: 'section-title-cyan',
+    blue: 'section-title-blue',
+  };
+  return (
+    <div className={cn(variants[variant], className)}>
+      {children}
+    </div>
+  );
+}
+
+export function InfoBox({ children, variant = 'blue', title, className = '' }: { children: ReactNode; variant?: 'blue' | 'purple' | 'cyan'; title?: string; className?: string }) {
+  const variants = {
+    blue: 'info-box-blue',
+    purple: 'info-box-purple',
+    cyan: 'info-box-cyan',
+  };
+  
+  const iconColors = {
+    blue: 'text-blue-300',
+    purple: 'text-purple-300',
+    cyan: 'text-cyan-300',
+  };
+
+  return (
+    <div className={cn(variants[variant], className)}>
+      {title && <div className={cn('font-semibold mb-1 flex items-center gap-2', iconColors[variant])}>
+        {variant === 'blue' && 'ℹ️'} {variant === 'purple' && '📊'} {variant === 'cyan' && '⚡'} {title}
+      </div>}
+      <div className="text-white/80">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+export function FormField({ label, children, description, className = '' }: { label?: string; children: ReactNode; description?: ReactNode; className?: string }) {
+  return (
+    <div className={cn('space-y-1.5', className)}>
+      {label && <Label>{label}</Label>}
+      {children}
+      {description && <div className="text-[11px] text-white/40 px-1">{description}</div>}
+    </div>
+  );
+}

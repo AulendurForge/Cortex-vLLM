@@ -43,7 +43,7 @@ CORTEX is configured primarily via environment variables. Defaults are defined i
 | `HF_CACHE_DIR` | `/var/cortex/hf-cache` | Container-visible Hugging Face cache |
 | `CORTEX_MODELS_DIR_HOST` | same as `CORTEX_MODELS_DIR` | Host path for models (Docker bind) |
 | `HF_CACHE_DIR_HOST` | same as `HF_CACHE_DIR` | Host path for HF cache (Docker bind) |
-| `VLLM_IMAGE` | `vllm/vllm-openai:latest` | Image used for managed model containers |
+| `VLLM_IMAGE` | `vllm/vllm-openai:latest` | Image used for managed model containers (for offline reproducibility, pin to a tested tag and cache it via `make prepare-offline`) |
 
 ## Security guidance
 - In production, set `GATEWAY_DEV_ALLOW_ALL_KEYS=false` and configure API keys.

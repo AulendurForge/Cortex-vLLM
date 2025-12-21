@@ -5,6 +5,42 @@ set -e
 
 IMAGE_DIR=${IMAGE_DIR:-"./cortex-offline-images"}
 
+# Timeout controls (seconds). Set to 0 to disable.
+LOAD_TIMEOUT_SEC=${LOAD_TIMEOUT_SEC:-1800}   # 30 minutes per tar file
+DOCKER_RETRY_COUNT=${DOCKER_RETRY_COUNT:-2}
+
+# timeout wrapper (uses GNU `timeout` when available)
+run_with_timeout() {
+    local timeout_sec="$1"
+    shift
+    if [ "${timeout_sec}" = "0" ] || [ "${timeout_sec}" = "0s" ]; then
+        "$@"
+        return $?
+    fi
+    if command -v timeout >/dev/null 2>&1; then
+        timeout --preserve-status "${timeout_sec}" "$@"
+        return $?
+    fi
+    "$@"
+}
+
+retry() {
+    local attempts="$1"
+    shift
+    local i=1
+    while true; do
+        if "$@"; then
+            return 0
+        fi
+        if [ "$i" -ge "$attempts" ]; then
+            return 1
+        fi
+        i=$((i+1))
+        echo -e "${YELLOW}  retry ${i}/${attempts}...${NC}"
+        sleep 2
+    done
+}
+
 # Colors
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -83,12 +119,17 @@ for tar_file in "$IMAGE_DIR"/*.tar; do
     
     echo -n "Loading $filename ($filesize)... "
     
-    if docker load -i "$tar_file" > /dev/null 2>&1; then
+    if retry "${DOCKER_RETRY_COUNT}" run_with_timeout "${LOAD_TIMEOUT_SEC}" docker load -i "$tar_file" > /dev/null 2>&1; then
         echo -e "${GREEN}✓${NC}"
-        ((LOADED++))
+        # NOTE: avoid `((var++))` under `set -e` (it returns exit code 1 when var was 0)
+        ((++LOADED))
     else
-        echo -e "${RED}✗ Failed${NC}"
-        ((FAILED++))
+        if command -v timeout >/dev/null 2>&1; then
+            echo -e "${RED}✗ Failed (or timed out after ${LOAD_TIMEOUT_SEC}s)${NC}"
+        else
+            echo -e "${RED}✗ Failed${NC}"
+        fi
+        ((++FAILED))
     fi
 done
 

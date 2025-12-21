@@ -6,7 +6,7 @@ from ..auth import require_admin
 from ..config import get_settings
 from ..models import Model, ConfigKV
 from sqlalchemy import select, update, delete
-from ..docker_manager import start_container_for_model, stop_container_for_model, tail_logs_for_model
+from ..docker_manager import start_container_for_model, stop_container_for_model, tail_logs_for_model, OfflineImageUnavailableError
 from ..services.registry_persistence import persist_model_registry
 from ..services.model_testing import ModelTestResult, ReadinessResp, test_chat_model, test_embedding_model, check_model_readiness
 from ..services.folder_inspector import inspect_model_folder
@@ -517,6 +517,11 @@ async def start_model(model_id: int, _: dict = Depends(require_admin)):
             except Exception:
                 pass
             return {"status": "running", "container": name, "port": host_port}
+        except OfflineImageUnavailableError as e:
+            await session.execute(update(Model).where(Model.id == model_id).values(state="failed"))
+            await session.commit()
+            # Make this actionable for the UI/user; this often indicates "image not cached and no internet"
+            raise HTTPException(status_code=503, detail=str(e))
         except Exception as e:
             await session.execute(update(Model).where(Model.id == model_id).values(state="failed"))
             await session.commit()

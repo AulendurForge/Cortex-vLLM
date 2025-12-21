@@ -18,7 +18,7 @@ export function Tooltip({ text, className = '' }: { text: string; className?: st
       </svg>
       <span
         role="tooltip"
-        className="pointer-events-none absolute z-50 left-1/2 -translate-x-1/2 -top-3 translate-y-[-100%] hidden group-hover:block bg-black/90 text-white text-[11px] leading-snug px-3 py-2 rounded-md shadow-xl border border-white/10 whitespace-normal max-w-[150rem] text-left"
+        className="pointer-events-none absolute z-[100] left-1/2 -translate-x-1/2 -top-2 translate-y-[-100%] hidden group-hover:block bg-black/95 text-white text-[10px] leading-snug px-3 py-2 rounded-lg shadow-2xl border border-white/10 w-48 whitespace-normal text-left backdrop-blur-md"
       >
         {text}
       </span>

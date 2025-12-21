@@ -44,6 +44,8 @@ services:
       # Explicitly pass host paths for Docker-managed vLLM containers
       CORTEX_MODELS_DIR_HOST: ${CORTEX_MODELS_DIR:-/var/cortex/models}
       HF_CACHE_DIR_HOST: ${HF_CACHE_DIR:-/var/cortex/hf-cache}
+      # Keep in sync with backend/src/config.py and scripts/prepare-offline-deployment.sh
+      # NOTE: Qwen3 requires newer Transformers, so default to a compatible image.
       VLLM_IMAGE: ${VLLM_IMAGE:-vllm/vllm-openai:latest}
     ports: ["${GATEWAY_PORT:-8084}:8084"]
     depends_on:
@@ -54,6 +56,8 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${CORTEX_MODELS_DIR:-/var/cortex/models}:/var/cortex/models
       - ${HF_CACHE_DIR:-/var/cortex/hf-cache}:/var/cortex/hf-cache
+      # Persist Deployment exports (manifests/images/db dumps) on host
+      - ${CORTEX_EXPORT_DIR:-/var/cortex/exports}:/var/cortex/exports
     # Note: Gateway does not require GPU. Removed device reservations to allow startup on hosts
     # without NVIDIA runtime. GPU metrics are provided via dcgm-exporter profile when enabled.
     # Models directory is read-write to allow multi-part GGUF merging

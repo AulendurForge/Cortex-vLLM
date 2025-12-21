@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '../lib/cn';
+import { safeCopyToClipboard } from '../lib/clipboard';
 
 type Point = { x: number; y: number };
 
@@ -237,19 +238,44 @@ export function LineChart({
           const toYpx = (norm: number) => (norm / 100) * height;
           const lx = toX(latest.ts);
           const ly = toY(latest.value);
-          const anchor: 'start' | 'end' = lx > 95 ? 'end' : 'start';
-          const textX = Math.min(99, Math.max(x0 + 1, lx + 1.5));
-          const textY = Math.min(y1 - 2, Math.max(y0 + 6, ly - 1.5));
+          
+          // Positioning for the "leading edge" label
+          // lx is 0..100 norm. We want it near the latest point.
+          const anchor: 'start' | 'end' = lx > 85 ? 'end' : 'start';
+          const textX = lx > 85 ? lx - 2 : lx + 2;
+          const textY = Math.min(y1 - 2, Math.max(y0 + 10, ly));
+
           return (
             <>
-              <text x={toXpx(textX)} y={toYpx(textY)} fontSize={12} textAnchor={anchor} fill="var(--chart-label)">
-                {formatNum(latest.value)}{valueSuffix}
-              </text>
+              {/* Leading edge current value label with background pill */}
+              <g>
+                <rect 
+                  x={toXpx(lx > 85 ? textX - 12 : textX - 1)} 
+                  y={toYpx(textY - 5)} 
+                  width={toXpx(14)} 
+                  height={toYpx(8)} 
+                  rx={2} 
+                  fill="rgba(0,0,0,0.6)" 
+                  className="backdrop-blur-sm"
+                />
+                <text 
+                  x={toXpx(textX)} 
+                  y={toYpx(textY + 1)} 
+                  fontSize={10} 
+                  fontWeight="bold"
+                  textAnchor={anchor} 
+                  fill={stroke}
+                  className="font-mono"
+                >
+                  {formatNum(latest.value)}{valueSuffix}
+                </text>
+              </g>
+
               {xLabel && (
-                <text x={toXpx((x0 + x1) / 2)} y={toYpx(y1 + 6)} fontSize={12} textAnchor="middle" fill="var(--chart-axis)">{xLabel}</text>
+                <text x={toXpx((x0 + x1) / 2)} y={toYpx(y1 + 10)} fontSize={10} fontWeight="bold" textAnchor="middle" fill="var(--chart-axis)" className="uppercase tracking-widest opacity-50">{xLabel}</text>
               )}
               {yLabel && (
-                <text x={toXpx(x0 + 1)} y={toYpx(y0 + 6)} fontSize={12} textAnchor="start" fill="var(--chart-axis)">{yLabel}</text>
+                <text x={toXpx(x0 + 1)} y={toYpx(y0 + 6)} fontSize={10} fontWeight="bold" textAnchor="start" fill="var(--chart-axis)" className="uppercase tracking-widest opacity-50">{yLabel}</text>
               )}
             </>
           );
@@ -282,7 +308,7 @@ export function LineChart({
             <button className="btn text-xs" onClick={() => setScaleMode(scaleMode === 'log' ? 'linear' : 'log')}>{scaleMode === 'log' ? 'Linear' : 'Log'}</button>
           )}
           {promQuery && (
-            <button className="btn text-xs" onClick={() => { navigator.clipboard.writeText(promQuery); }} title={promQuery}>Copy PromQL</button>
+            <button className="btn text-xs" onClick={async () => { await safeCopyToClipboard(promQuery); }} title={promQuery}>Copy PromQL</button>
           )}
           <button className="btn text-xs" onClick={() => exportPNG(svgRef.current, `${filePrefix}.png`)}>PNG</button>
           <button className="btn text-xs" onClick={() => exportCSV(smoothed, [range[0], range[1]], `${filePrefix}.csv`)}>CSV</button>

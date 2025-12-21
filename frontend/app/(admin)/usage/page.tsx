@@ -1,14 +1,15 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiFetch from '../../../src/lib/api-clients';
 import { getGatewayBaseUrl } from '../../../src/lib/api-clients';
 import { UsageListSchema, UsageSeriesSchema, UsageAggListSchema, LatencySummarySchema, TtftSummarySchema } from '../../../src/lib/validators';
-import { PageHeader, Card } from '../../../src/components/UI';
+import { PageHeader, Card, Table, Button, Badge, Input, Select, Label, InfoBox, FormField, SectionTitle } from '../../../src/components/UI';
 import { LineChart, BarChart } from '../../../src/components/Charts';
 import { useEffect, useMemo, useState } from 'react';
 import { RangeSlider } from '../../../src/components/RangeSlider';
 import { Tooltip } from '../../../src/components/Tooltip';
+import { cn } from '../../../src/lib/cn';
 
 type UsageItem = {
   id: number;
@@ -132,178 +133,96 @@ export default function UsagePage() {
   return (
     <section className="space-y-4">
       <PageHeader
-        title="Usage"
+        title="Usage Analytics"
         actions={(
-          <div className="flex items-center gap-2">
-            <button onClick={() => { list.refetch(); series.refetch(); topModels.refetch(); latency.refetch(); ttft.refetch(); }} className="btn">Refresh</button>
-            <button onClick={() => setLive(v => !v)} className={"btn " + (live ? 'bg-white/10' : '')} aria-pressed={live}>Live</button>
-            <button onClick={() => { const base = getGatewayBaseUrl(); window.open(`${base}/admin/usage/export?${params.toString()}`, '_blank'); }} className="btn">Export CSV</button>
+          <div className="flex items-center gap-2 bg-white/5 p-1.5 rounded-xl border border-white/10 glass">
+            <Button variant="default" size="sm" onClick={() => { list.refetch(); series.refetch(); topModels.refetch(); latency.refetch(); ttft.refetch(); }}>Refresh</Button>
+            <Button variant={live ? 'cyan' : 'default'} size="sm" onClick={() => setLive(v => !v)} className={cn(live && "shadow-cyan-500/20")}>{live ? '● Live' : '○ Live'}</Button>
+            <Button variant="purple" size="sm" onClick={() => { const base = getGatewayBaseUrl(); window.open(`${base}/admin/usage/export?${params.toString()}`, '_blank'); }}>Export</Button>
           </div>
         )}
       />
 
-      <Card className="p-3">
-        <div className="text-sm font-medium mb-3">Filters</div>
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="text-xs min-w-[320px]">
-            <div className="mb-1 flex items-center gap-1">Range <Tooltip text="Select the time window to analyze usage trends." /></div>
+      <Card className="p-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+          <div className="md:col-span-2 xl:col-span-1">
+            <Label className="text-[10px] uppercase font-black tracking-widest text-white/30 mb-2">Time Window</Label>
             <RangeSlider
-              stops={[
-                { label: 'Last Hour', value: 1 },
-                { label: '6 Hours', value: 6 },
-                { label: '24 Hours', value: 24 },
-                { label: '7 Days', value: 168 },
-              ]}
+              stops={[{ label: '1h', value: 1 }, { label: '6h', value: 6 }, { label: '24h', value: 24 }, { label: '7d', value: 168 }]}
               value={filters.hours}
               onChange={(v) => setFilters({ ...filters, hours: v })}
             />
           </div>
-          <label className="text-xs min-w-[160px]">Model <Tooltip text="Filter by model name." />
-            <select className="input mt-1 w-full" value={filters.model ?? ''} onChange={(e) => setFilters({ ...filters, model: e.target.value })}>
-              <option value="">Any</option>
-              {(topModels.data || []).map(m => <option key={m.model_name} value={m.model_name}>{m.model_name}</option>)}
-            </select>
-          </label>
-          <label className="text-xs min-w-[160px]">Task <Tooltip text="Select request type: chat, completions, or embeddings." />
-            <select className="input mt-1 w-full" value={filters.task ?? ''} onChange={(e) => setFilters({ ...filters, task: e.target.value })}>
-              <option value="">Any</option>
-              <option value="chat">chat</option>
-              <option value="completions">completions</option>
-              <option value="embeddings">embeddings</option>
-            </select>
-          </label>
-          <label className="text-xs min-w-[200px]">Key <Tooltip text="Filter by API key (prefix)." />
-            <select className="input mt-1 w-full" value={String(filters.key_id ?? '')} onChange={(e) => setFilters({ ...filters, key_id: e.target.value ? Number(e.target.value) : '' })}>
-              <option value="">Any</option>
-              {(keysLookup.data || []).map((k: any) => (
-                <option key={k.id} value={k.id}>{k.prefix}{k.username ? ` • ${k.username}` : ''}{k.org_name ? ` • ${k.org_name}` : ''}</option>
-              ))}
-            </select>
-          </label>
-          <label className="text-xs min-w-[160px]">User <Tooltip text="Filter by user who owns the request or key." />
-            <select className="input mt-1 w-full" value={String(filters.user_id ?? '')} onChange={(e) => setFilters({ ...filters, user_id: e.target.value ? Number(e.target.value) : '' })}>
-              <option value="">Any</option>
-              {(usersLookup.data || []).map((u: any) => (
-                <option key={u.id} value={u.id}>{u.username}</option>
-              ))}
-            </select>
-          </label>
-          <label className="text-xs min-w-[160px]">Org/Program <Tooltip text="Filter by organization or program." />
-            <select className="input mt-1 w-full" value={String(filters.org_id ?? '')} onChange={(e) => setFilters({ ...filters, org_id: e.target.value ? Number(e.target.value) : '' })}>
-              <option value="">Any</option>
-              {(orgsLookup.data || []).map((o: any) => (
-                <option key={o.id} value={o.id}>{o.name}</option>
-              ))}
-            </select>
-          </label>
-          <label className="text-xs min-w-[140px]">Status <Tooltip text="Filter by HTTP status class (2xx/4xx/5xx) or specific code." />
-            <select className="input mt-1 w-full" value={filters.status ?? ''} onChange={(e) => setFilters({ ...filters, status: e.target.value })}>
-              <option value="">Any</option>
-              <option value="2xx">2xx</option>
-              <option value="4xx">4xx</option>
-              <option value="5xx">5xx</option>
-              <option value="200">200</option>
-              <option value="400">400</option>
-              <option value="500">500</option>
-            </select>
-          </label>
-          <label className="text-xs min-w-[120px]">Page size <Tooltip text="Number of rows per page in the table." />
-            <select className="input mt-1 w-full" value={String(limit)} onChange={(e) => { setPage(0); setLimit(Number(e.target.value)); }}>
-              <option value="25">25</option>
-              <option value="50">50</option>
-              <option value="100">100</option>
-            </select>
-          </label>
+          <FormField label="Model"><Select size="sm" value={filters.model ?? ''} onChange={(e) => setFilters({ ...filters, model: e.target.value })}><option value="">Any</option>{(topModels.data || []).map(m => <option key={m.model_name} value={m.model_name}>{m.model_name}</option>)}</Select></FormField>
+          <FormField label="Task"><Select size="sm" value={filters.task ?? ''} onChange={(e) => setFilters({ ...filters, task: e.target.value })}><option value="">Any</option><option value="chat">Chat</option><option value="completions">Completions</option><option value="embeddings">Embeddings</option></Select></FormField>
+          <FormField label="Status"><Select size="sm" value={filters.status ?? ''} onChange={(e) => setFilters({ ...filters, status: e.target.value })}><option value="">Any</option><option value="2xx">Success</option><option value="4xx">Client Err</option><option value="5xx">Server Err</option></Select></FormField>
+          <FormField label="Rows"><Select size="sm" value={String(limit)} onChange={(e) => { setPage(0); setLimit(Number(e.target.value)); }}><option value="25">25</option><option value="50">50</option><option value="100">100</option></Select></FormField>
         </div>
       </Card>
 
       {/* KPI Strip */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-        <Card className="p-3">
-          <div className="text-xs text-white/70">Requests in range</div>
-          <div className="text-lg font-semibold">{(series.data || []).reduce((a, b) => a + b.requests, 0).toLocaleString()}</div>
-          <div className="text-xs text-white/60 mt-1">Total number of API requests received during the selected time window.</div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <KpiUsage label="Requests" value={(series.data || []).reduce((a, b) => a + b.requests, 0)} color="indigo" />
+        <KpiUsage label="Tokens" value={(series.data || []).reduce((a, b) => a + b.total_tokens, 0)} color="purple" />
+        <KpiUsage label="Latency p50" value={latency.data ? `${Math.round(latency.data.p50_ms)}ms` : '—'} color="blue" />
+        <KpiUsage label="TTFT p50" value={ttft.data ? `${ttft.data.p50_s.toFixed(2)}s` : '—'} color="cyan" />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Card className="p-4">
+          <SectionTitle variant="blue" className="text-[10px]">Traffic Volume</SectionTitle>
+          <div className="bg-black/20 p-2 rounded-xl border border-white/5">
+            <LineChart data={(series.data || []).map(p => ({ ts: p.ts, value: p.requests }))} height={180} stroke="#6366f1" />
+          </div>
         </Card>
-        <Card className="p-3">
-          <div className="text-xs text-white/70">Total tokens in range</div>
-          <div className="text-lg font-semibold">{(series.data || []).reduce((a, b) => a + b.total_tokens, 0).toLocaleString()}</div>
-          <div className="text-xs text-white/60 mt-1">Sum of prompt and completion tokens reported (or estimated) over time.</div>
-        </Card>
-        <Card className="p-3">
-          <div className="text-xs text-white/70">Latency p50 / p95 (ms)</div>
-          <div className="text-lg font-semibold">{(() => {
-            if (!latency.data) return '—';
-            return `${Math.round(latency.data.p50_ms)} / ${Math.round(latency.data.p95_ms)}`;
-          })()}</div>
-          <div className="text-xs text-white/60 mt-1">Median and 95th percentile request latency during the selected range.</div>
-        </Card>
-        <Card className="p-3">
-          <div className="text-xs text-white/70">TTFT p50 / p95 (s)</div>
-          <div className="text-lg font-semibold">{ttft.data ? `${ttft.data.p50_s.toFixed(2)} / ${ttft.data.p95_s.toFixed(2)}` : '—'}</div>
-          <div className="text-xs text-white/60 mt-1">Time to first token for streaming responses; lower is better for perceived speed.</div>
+        <Card className="p-4">
+          <SectionTitle variant="purple" className="text-[10px]">Model Demand</SectionTitle>
+          <div className="bg-black/20 p-2 rounded-xl border border-white/5">
+            <BarChart data={(topModels.data || []).map(m => ({ label: m.model_name, value: m.requests }))} height={180} color="#a855f7" />
+          </div>
         </Card>
       </div>
 
-      {/* Trend chart */}
-      <Card className="p-3">
-        <div className="text-sm font-medium mb-2">Requests over time</div>
-        <LineChart data={(series.data || []).map(p => ({ ts: p.ts, value: p.requests }))} />
-        <div className="text-xs text-white/60 mt-2">Shows request volume across the selected time window. Spikes may indicate batch jobs or traffic surges.</div>
-      </Card>
-
-      {/* Top models */}
-      <Card className="p-3">
-        <div className="text-sm font-medium mb-2">Top models by requests</div>
-        <BarChart data={(topModels.data || []).map(m => ({ label: m.model_name, value: m.requests }))} />
-        <div className="text-xs text-white/60 mt-2">Compares model demand. High-request models may need more capacity or stricter quotas.</div>
-      </Card>
-
-      {/* Latest table */}
-      {list.data && (
-        <div className="overflow-x-auto card p-2">
-          <div className="flex items-center justify-between px-2 py-1">
-            <div className="text-xs text-white/70">Latest requests under current filters. Page {page + 1}.</div>
-            <div className="flex items-center gap-2">
-              <button className="btn" onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}>Prev</button>
-              <button className="btn" onClick={() => setPage(p => p + 1)} disabled={!list.data || list.data.length < limit}>Next</button>
-            </div>
+      <Card className="p-0 overflow-hidden border-white/5 bg-white/[0.01]">
+        <div className="px-4 py-2 border-b border-white/5 bg-white/[0.02] flex items-center justify-between">
+          <SectionTitle variant="cyan" className="mb-0 text-[10px]">Request Journal (Page {page + 1})</SectionTitle>
+          <div className="flex items-center gap-1.5">
+            <Button size="sm" onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}>←</Button>
+            <Button size="sm" onClick={() => setPage(p => p + 1)} disabled={!list.data || list.data.length < limit}>→</Button>
           </div>
-          <table className="table">
-            <thead className="text-left">
-              <tr>
-                <th>Time</th>
-                <th>Key</th>
-                <th>User</th>
-                <th>Org/Program</th>
-                <th>Model</th>
-                <th>Task</th>
-                <th>Tokens (p/c/t)</th>
-                <th>Latency (ms)</th>
-                <th>Status</th>
-                <th>Req ID</th>
-              </tr>
-            </thead>
-            <tbody>
-              {list.data.map(u => (
-                <tr key={u.id}>
-                  <td>{new Date(u.created_at * 1000).toLocaleString()}</td>
-                  <td className="font-mono text-xs">{u.key_id != null ? (keyIdToInfo[u.key_id]?.prefix || `id:${u.key_id}`) : '-'}</td>
-                  <td>{u.key_id != null ? (keyIdToInfo[u.key_id]?.username || '—') : '—'}</td>
-                  <td>{u.key_id != null ? (keyIdToInfo[u.key_id]?.org_name || '—') : '—'}</td>
-                  <td>{u.model_name}</td>
-                  <td>{u.task}</td>
-                  <td>{u.prompt_tokens}/{u.completion_tokens}/{u.total_tokens}</td>
-                  <td>{u.latency_ms}</td>
-                  <td>{u.status_code}</td>
-                  <td className="font-mono text-xs">{u.req_id}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
         </div>
-      )}
+        <Table>
+          <thead>
+            <tr><th>Time</th><th>Key</th><th>Model</th><th>Task</th><th>Tokens</th><th>Lat</th><th>Stat</th><th>Req ID</th></tr>
+          </thead>
+          <tbody>
+            {(list.data || []).map(u => (
+              <tr key={u.id} className="group text-[11px]">
+                <td className="text-white/40 font-mono">{new Date(u.created_at * 1000).toLocaleTimeString()}</td>
+                <td className="font-mono text-cyan-300/70">{u.key_id != null ? (keyIdToInfo[u.key_id]?.prefix || '...') : '—'}</td>
+                <td className="font-semibold text-white/80">{u.model_name}</td>
+                <td><Badge className="bg-indigo-500/5 text-indigo-300/70 border-indigo-500/10 text-[8px]">{u.task}</Badge></td>
+                <td className="font-mono text-white/60">{u.total_tokens}</td>
+                <td className="font-mono text-white/60">{u.latency_ms}ms</td>
+                <td><Badge className={u.status_code < 300 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}>{u.status_code}</Badge></td>
+                <td className="font-mono text-[9px] text-white/10 group-hover:text-white/40 truncate max-w-[80px]">{u.req_id}</td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+      </Card>
     </section>
   );
 }
 
-
+function KpiUsage({ label, value, color = 'indigo' }: { label: string; value: string | number; color: any }) {
+  const textColors = { indigo: 'text-indigo-300', purple: 'text-purple-300', blue: 'text-blue-300', cyan: 'text-cyan-300' };
+  return (
+    <Card className="p-3 border-white/5 bg-white/[0.02]">
+      <div className="text-[9px] font-black text-white/20 uppercase tracking-widest mb-1">{label}</div>
+      <div className={cn("text-lg font-mono font-bold tracking-tight", textColors[color as keyof typeof textColors])}>
+        {typeof value === 'number' ? value.toLocaleString() : value}
+      </div>
+    </Card>
+  );
+}

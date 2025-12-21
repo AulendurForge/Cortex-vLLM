@@ -252,7 +252,7 @@ Request → HTTP Server → Context Queue
 
 **Image Strategy:**
 ```
-Base: vllm/vllm-openai:latest (official)
+Base: vllm/vllm-openai:latest (official; for offline, pin to a tested tag and cache it)
 Size: ~8GB
 Update: Pull new official images
 

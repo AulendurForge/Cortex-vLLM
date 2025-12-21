@@ -24,8 +24,27 @@ def register_model_endpoint(served_name: str, url: str, task: str, engine_type: 
         engine_type: Engine type (vllm/llamacpp) for request translation
         request_defaults_json: JSON string of request defaults (Plane C)
     """
+    # IMPORTANT: this function is called from two different contexts:
+    # 1) Managed-model registration (authoritative): provides engine_type and request defaults.
+    # 2) Health poller discovery (best-effort): may only know url/task and should NOT wipe
+    #    existing richer metadata (engine_type, request_defaults_json).
+    existing = MODEL_REGISTRY.get(served_name) if served_name else None
+    is_discovery = (engine_type == "vllm" and request_defaults_json is None)
+
+    if isinstance(existing, dict) and is_discovery:
+        # Preserve richer fields; only refresh url and fill missing task.
+        merged = dict(existing)
+        if url:
+            merged["url"] = url
+        if task and (not merged.get("task") or str(merged.get("task")) == "unknown"):
+            merged["task"] = task
+        # Do NOT overwrite engine_type or request_defaults_json on discovery.
+        MODEL_REGISTRY[served_name] = merged
+        return
+
+    # Authoritative (or first-time) registration: set/overwrite all fields.
     MODEL_REGISTRY[served_name] = {
-        "url": url, 
+        "url": url,
         "task": task,
         "engine_type": engine_type,
         "request_defaults_json": request_defaults_json,

@@ -55,16 +55,22 @@ class Settings(BaseSettings):
     # Container-visible paths (mounted inside gateway)
     CORTEX_MODELS_DIR: str = "/var/cortex/models"
     HF_CACHE_DIR: str = "/var/cortex/hf-cache"
+    # Export directory for Deployment page (should be host-mounted for persistence)
+    CORTEX_EXPORT_DIR: str = "/var/cortex/exports"
     # Host paths (used when creating vLLM containers via Docker SDK)
     CORTEX_MODELS_DIR_HOST: str | None = None
     HF_CACHE_DIR_HOST: str | None = None
     # Docker image versions (pinned for reproducibility and offline compatibility)
     # Update these versions periodically, then run 'make prepare-offline' to cache
-    VLLM_IMAGE: str = "vllm/vllm-openai:latest"  # TODO: Pin to specific version (e.g., v0.6.3)
+    # IMPORTANT:
+    # - Qwen3 models require newer Transformers (the Qwen3 config.json requires >= 4.51)
+    # - Keep this pinned to the same version used by scripts/prepare-offline-deployment.sh
+    # For Qwen3 offline deployments, update the offline package to a compatible vLLM tag, then set VLLM_IMAGE accordingly.
+    VLLM_IMAGE: str = "vllm/vllm-openai:latest"
     # llama.cpp settings
     # Use official llama.cpp server with CUDA support
     # The 'server-cuda' tag includes CUDA-compiled llama-server binary
-    LLAMACPP_IMAGE: str = "ghcr.io/ggml-org/llama.cpp:server-cuda"  # TODO: Pin specific build
+    LLAMACPP_IMAGE: str = "ghcr.io/ggml-org/llama.cpp:server-cuda"  # Keep aligned with offline package tag
     
     # Offline/Air-gapped deployment settings
     OFFLINE_MODE: bool = False  # Set True to prevent internet access for image pulls

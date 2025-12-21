@@ -12,6 +12,20 @@ Cortex supports fully offline/air-gapped deployments for environments without in
 
 This guide explains how to prepare, transfer, and deploy Cortex in completely offline environments.
 
+### Using the Admin UI "Deployment" page (recommended for migrations)
+
+If you already have a running Cortex instance (online or staging) and want to migrate it to an offline machine,
+you can use the Admin UI:
+
+- **Admin UI → Deployment**: Generates an "offline migration package" directory on disk that can include:
+  - Docker images (gateway/frontend + engines + infra)
+  - Database dump (pg_dump)
+  - Manifests for models/config (with secrets redacted)
+  - Optional large archives (model weights and HF cache)
+
+This is intended for the workflow:
+online/staging instance → validate models/config → export package → transfer → import on offline instance.
+
 ---
 
 ## How Offline Operation Works
@@ -283,7 +297,7 @@ curl http://localhost:8084/admin/system/docker-images | jq .
 
 **Symptom**:
 ```
-Error: Docker image 'vllm/vllm-openai:latest' is not available locally.
+Error: Docker image 'vllm/vllm-openai:<tag>' is not available locally.
 System is in OFFLINE MODE - cannot download from internet.
 ```
 

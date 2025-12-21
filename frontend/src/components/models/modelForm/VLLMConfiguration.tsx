@@ -14,7 +14,7 @@ interface VLLMConfigurationProps {
 }
 
 export function VLLMConfiguration({ values, gpuCount, onChange }: VLLMConfigurationProps) {
-  if (values.engineType !== 'vllm') return null;
+  if (values.engine_type !== 'vllm') return null;
 
   // Fetch GPU information
   const { data: gpuInfo } = useQuery({
@@ -51,11 +51,11 @@ export function VLLMConfiguration({ values, gpuCount, onChange }: VLLMConfigurat
       </label>
 
       <GpuSelector
-        selectedGpus={values.selectedGpus ?? [0]}
+        selectedGpus={values.selected_gpus ?? [0]}
         onGpuSelectionChange={(gpuIndices) => {
-          onChange('selectedGpus', gpuIndices);
-          // Update tpSize for backward compatibility
-          onChange('tpSize', gpuIndices.length);
+          onChange('selected_gpus', gpuIndices);
+          // Keep tp_size aligned with selected GPU count
+          onChange('tp_size', gpuIndices.length);
         }}
         gpuInfo={gpuInfo}
         engineType="vllm"
@@ -69,10 +69,10 @@ export function VLLMConfiguration({ values, gpuCount, onChange }: VLLMConfigurat
           min={0.05}
           max={0.98}
           step={0.01}
-          value={values.gpuMemoryUtilization ?? 0.9}
-          onChange={(e) => onChange('gpuMemoryUtilization', Number(e.target.value))}
+          value={values.gpu_memory_utilization ?? 0.9}
+          onChange={(e) => onChange('gpu_memory_utilization', Number(e.target.value))}
         />
-        <div className="text-[11px] text-white/60">{(values.gpuMemoryUtilization ?? 0.9).toFixed(2)}</div>
+        <div className="text-[11px] text-white/60">{(values.gpu_memory_utilization ?? 0.9).toFixed(2)}</div>
         <p className="text-[11px] text-white/50 mt-1">
           How much VRAM vLLM is allowed to use (0.05–0.98). Higher allows larger KV cache and batch sizes. 
           <Tooltip text="Also called '--gpu-memory-utilization'. If you see 'not enough KV cache' errors, increase this or lower 'max_model_len'." />
@@ -86,11 +86,11 @@ export function VLLMConfiguration({ values, gpuCount, onChange }: VLLMConfigurat
           min={512}
           max={131072}
           step={512}
-          value={values.maxModelLen ?? (values.task === 'embed' ? 8192 : 8192)}
-          onChange={(e) => onChange('maxModelLen', Number(e.target.value))}
+          value={values.max_model_len ?? (values.task === 'embed' ? 8192 : 8192)}
+          onChange={(e) => onChange('max_model_len', Number(e.target.value))}
         />
         <div className="text-[11px] text-white/60">
-          {(values.maxModelLen ?? (values.task === 'embed' ? 8192 : 8192)) + ' tokens'}
+          {(values.max_model_len ?? (values.task === 'embed' ? 8192 : 8192)) + ' tokens'}
         </div>
         <p className="text-[11px] text-white/50 mt-1">
           {values.task === 'embed' ? (
@@ -103,12 +103,12 @@ export function VLLMConfiguration({ values, gpuCount, onChange }: VLLMConfigurat
       
       <div className="text-sm flex items-center gap-2 mt-6">
         <label className="inline-flex items-center gap-2">
-          <input type="checkbox" checked={!!values.trustRemoteCode} onChange={(e) => onChange('trustRemoteCode', e.target.checked)} />
+          <input type="checkbox" checked={!!values.trust_remote_code} onChange={(e) => onChange('trust_remote_code', e.target.checked)} />
           Trust remote code 
           <Tooltip text="When enabled, allows executing custom code in model repos that define custom model classes or tokenizers. Only enable for trusted sources." />
         </label>
         <label className="inline-flex items-center gap-2">
-          <input type="checkbox" checked={!!values.hfOffline} onChange={(e) => onChange('hfOffline', e.target.checked)} />
+          <input type="checkbox" checked={!!values.hf_offline} onChange={(e) => onChange('hf_offline', e.target.checked)} />
           HF offline 
           <Tooltip text="Hint to run without reaching Hugging Face. For offline installs ensure weights/tokenizer/config exist locally or in the HF cache." />
         </label>
@@ -129,17 +129,17 @@ export function VLLMConfiguration({ values, gpuCount, onChange }: VLLMConfigurat
               min={512}
               max={16384}
               step={128}
-              value={values.maxNumBatchedTokens ?? 2048}
-              onChange={(e) => onChange('maxNumBatchedTokens', Number(e.target.value))}
+              value={values.max_num_batched_tokens ?? 2048}
+              onChange={(e) => onChange('max_num_batched_tokens', Number(e.target.value))}
             />
-            <div className="text-[11px] text-white/60">{values.maxNumBatchedTokens ?? 2048} tokens</div>
+            <div className="text-[11px] text-white/60">{values.max_num_batched_tokens ?? 2048} tokens</div>
             <p className="text-[11px] text-white/50 mt-1">
               Limits total tokens processed per batch. 
               <Tooltip text="Also called '--max-num-batched-tokens'. Higher improves throughput but increases VRAM usage and latency per batch. Typical range 1024–8192." />
             </p>
           </label>
           <label className="text-sm">KV cache dtype
-            <select className="input mt-1" value={values.kvCacheDtype || ''} onChange={(e) => onChange('kvCacheDtype', e.target.value)}>
+            <select className="input mt-1" value={values.kv_cache_dtype || ''} onChange={(e) => onChange('kv_cache_dtype', e.target.value)}>
               <option value="">auto</option>
               <option value="fp8">fp8</option>
               <option value="fp8_e4m3">fp8_e4m3</option>
@@ -164,7 +164,7 @@ export function VLLMConfiguration({ values, gpuCount, onChange }: VLLMConfigurat
             </p>
           </label>
           <label className="text-sm">KV cache block size
-            <select className="input mt-1" value={(values.blockSize ?? 16)} onChange={(e) => onChange('blockSize', Number(e.target.value))}>
+            <select className="input mt-1" value={(values.block_size ?? 16)} onChange={(e) => onChange('block_size', Number(e.target.value))}>
               {[1, 8, 16, 32].map((n) => (<option key={n} value={n}>{n}</option>))}
             </select>
             <p className="text-[11px] text-white/50 mt-1">
@@ -179,10 +179,10 @@ export function VLLMConfiguration({ values, gpuCount, onChange }: VLLMConfigurat
               min={0}
               max={64}
               step={1}
-              value={values.swapSpaceGb ?? 4}
-              onChange={(e) => onChange('swapSpaceGb', Number(e.target.value))}
+              value={values.swap_space_gb ?? 4}
+              onChange={(e) => onChange('swap_space_gb', Number(e.target.value))}
             />
-            <div className="text-[11px] text-white/60">{values.swapSpaceGb ?? 4} GiB</div>
+            <div className="text-[11px] text-white/60">{values.swap_space_gb ?? 4} GiB</div>
             <p className="text-[11px] text-white/50 mt-1">
               CPU RAM spillover for KV cache. 
               <Tooltip text="Also called '--swap-space'. Helps fit longer contexts on small VRAM, at increased latency." />
@@ -190,7 +190,7 @@ export function VLLMConfiguration({ values, gpuCount, onChange }: VLLMConfigurat
           </label>
           <div className="text-sm flex items-center gap-2 mt-6">
             <label className="inline-flex items-center gap-2">
-              <input type="checkbox" checked={!!values.enforceEager} onChange={(e) => onChange('enforceEager', e.target.checked)} />
+              <input type="checkbox" checked={!!values.enforce_eager} onChange={(e) => onChange('enforce_eager', e.target.checked)} />
               Disable CUDA graphs (enforce eager)
             </label>
             <p className="text-[11px] text-white/50">
@@ -212,10 +212,10 @@ export function VLLMConfiguration({ values, gpuCount, onChange }: VLLMConfigurat
               min={0}
               max={32}
               step={1}
-              value={values.cpuOffloadGb ?? 0}
-              onChange={(e) => onChange('cpuOffloadGb', Number(e.target.value))}
+              value={values.cpu_offload_gb ?? 0}
+              onChange={(e) => onChange('cpu_offload_gb', Number(e.target.value))}
             />
-            <div className="text-[11px] text-white/60">{values.cpuOffloadGb ?? 0} GiB</div>
+            <div className="text-[11px] text-white/60">{values.cpu_offload_gb ?? 0} GiB</div>
             <p className="text-[11px] text-white/50 mt-1">
               Offload part of weights/KV to CPU RAM. 
               <Tooltip text="Also called '--cpu-offload-gb'. Requires fast PCIe/NVLink. Increases capacity at the cost of latency." />

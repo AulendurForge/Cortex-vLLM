@@ -18,7 +18,7 @@ interface RequestDefaultsSectionProps {
  * See cortexSustainmentPlan.md for architectural details.
  */
 export function RequestDefaultsSection({ values, onChange }: RequestDefaultsSectionProps) {
-  if (!values.engineType) return null;
+  if (!values.engine_type) return null;
 
   return (
     <div className="md:col-span-2 space-y-4">
@@ -61,8 +61,8 @@ export function RequestDefaultsSection({ values, onChange }: RequestDefaultsSect
             min={0.0} 
             max={1.0} 
             step={0.05} 
-            value={values.topP ?? 0.9} 
-            onChange={(e) => onChange('topP', Number(e.target.value) || 0.9)} 
+            value={values.top_p ?? 0.9} 
+            onChange={(e) => onChange('top_p', Number(e.target.value) || 0.9)} 
           />
           <p className="text-[11px] text-white/50 mt-1">
             Nucleus sampling threshold. 0.1 = conservative, 0.9 = balanced, 1.0 = all tokens. 
@@ -78,8 +78,8 @@ export function RequestDefaultsSection({ values, onChange }: RequestDefaultsSect
             min={1} 
             max={100} 
             step={1} 
-            value={values.topK ?? 40} 
-            onChange={(e) => onChange('topK', Number(e.target.value) || 40)} 
+            value={values.top_k ?? 40} 
+            onChange={(e) => onChange('top_k', Number(e.target.value) || 40)} 
           />
           <p className="text-[11px] text-white/50 mt-1">
             Limit sampling to top K tokens. 1 = greedy, 40 = balanced, 100 = diverse. 
@@ -95,8 +95,8 @@ export function RequestDefaultsSection({ values, onChange }: RequestDefaultsSect
             min={1.0} 
             max={2.0} 
             step={0.1} 
-            value={values.repetitionPenalty ?? 1.2} 
-            onChange={(e) => onChange('repetitionPenalty', Number(e.target.value) || 1.2)} 
+            value={values.repetition_penalty ?? 1.2} 
+            onChange={(e) => onChange('repetition_penalty', Number(e.target.value) || 1.2)} 
           />
           <p className="text-[11px] text-white/50 mt-1">
             Penalty for repeated tokens. 1.0 = no penalty, 1.2 = moderate penalty. 
@@ -112,8 +112,8 @@ export function RequestDefaultsSection({ values, onChange }: RequestDefaultsSect
             min={-2.0} 
             max={2.0} 
             step={0.1} 
-            value={values.frequencyPenalty ?? 0.5} 
-            onChange={(e) => onChange('frequencyPenalty', Number(e.target.value) || 0.5)} 
+            value={values.frequency_penalty ?? 0.5} 
+            onChange={(e) => onChange('frequency_penalty', Number(e.target.value) || 0.5)} 
           />
           <p className="text-[11px] text-white/50 mt-1">
             Penalty based on token frequency. 0.0 = no penalty, 0.5 = moderate penalty. 
@@ -129,8 +129,8 @@ export function RequestDefaultsSection({ values, onChange }: RequestDefaultsSect
             min={-2.0} 
             max={2.0} 
             step={0.1} 
-            value={values.presencePenalty ?? 0.5} 
-            onChange={(e) => onChange('presencePenalty', Number(e.target.value) || 0.5)} 
+            value={values.presence_penalty ?? 0.5} 
+            onChange={(e) => onChange('presence_penalty', Number(e.target.value) || 0.5)} 
           />
           <p className="text-[11px] text-white/50 mt-1">
             Penalty for tokens already present in context. 0.0 = no penalty, 0.5 = moderate penalty. 
@@ -171,8 +171,8 @@ export function RequestDefaultsSection({ values, onChange }: RequestDefaultsSect
   },
   "stop": ["###", "</s>"]
 }`}
-            value={values.customRequestJson || ''}
-            onChange={(e) => onChange('customRequestJson', e.target.value)}
+            value={values.custom_request_json || ''}
+            onChange={(e) => onChange('custom_request_json', e.target.value)}
           />
           <p className="text-[11px] text-white/50 mt-1">
             Enter valid JSON. Gateway will merge these fields into all requests.
