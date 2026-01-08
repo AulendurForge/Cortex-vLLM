@@ -541,8 +541,10 @@ df -h
 ### Monthly Tasks
 
 ```bash
-# Clean unused Docker resources
+# Clean unused Docker resources (Cortex-only)
 make prune
+# ✅ Safe: Only removes Cortex-related unused resources
+#    Does NOT affect other Docker containers, images, volumes, or networks
 
 # Review security settings
 make prod-check

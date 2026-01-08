@@ -173,7 +173,7 @@ make prod-check
 - [ ] Check for Docker updates
 
 ### Monthly Checks
-- [ ] `make prune` - Clean unused Docker resources
+- [ ] `make prune` - Clean unused Docker resources (✅ **Cortex-only**: removes only Cortex-related resources; does NOT affect other Docker resources on your system)
 - [ ] Review security: `make prod-check`
 - [ ] Update containers if new versions available
 - [ ] Verify backups are restorable

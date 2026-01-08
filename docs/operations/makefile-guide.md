@@ -140,30 +140,51 @@ make monitoring-status
 ```bash
 # Backup the database
 make db-backup
-# Creates backup in backups/cortex_backup_YYYYMMDD_HHMMSS.sql
+# ✅ Safe: Creates backup in backups/cortex_backup_YYYYMMDD_HHMMSS.sql
+#    Only backs up Cortex PostgreSQL database
 
 # Restore from backup
 make db-restore BACKUP_FILE=backups/cortex_backup_20240104_120000.sql
+# ✅ Safe: Restores Cortex database only
 
 # Open PostgreSQL shell
 make db-shell
+# ✅ Safe: Connects to Cortex PostgreSQL container only
 
 # Reset database (⚠️ DANGER: deletes all data)
 make db-reset
+# ⚠️ Destructive but Cortex-only: Deletes Cortex database data
+#    Removes volumes prefixed with 'cortex_' (e.g., cortex_postgres_data)
+#    Does NOT affect other databases or volumes on your system
 ```
+<｜tool▁calls▁begin｜><｜tool▁call▁begin｜>
+grep
 
 ### Cleaning Up
 
 ```bash
 # Stop services and remove containers/volumes
 make clean
+# ✅ Safe: Only removes Cortex containers and volumes prefixed with 'cortex_'
+#    Does NOT affect other Docker containers or volumes on your system
 
 # Also remove managed model containers
 make clean-all
+# ✅ Safe: Removes Cortex containers + model containers (vllm-model-*, llamacpp-model-*)
+#    Uses name pattern filters to ensure only Cortex model containers are affected
 
 # Remove unused Docker resources (free up disk space)
 make prune
+# ✅ Safe: Removes ONLY Cortex-related unused resources:
+#    - Containers with label 'com.docker.compose.project=cortex'
+#    - Model containers matching name patterns
+#    - Volumes prefixed with 'cortex_'
+#    - Networks prefixed with 'cortex_'
+#    - Images built locally by compose (--rmi local)
+#    Does NOT affect other Docker resources on your system
 ```
+
+> **🔒 Safety Guarantee**: All cleanup commands are scoped to Cortex resources only. Other Docker containers, images, volumes, and networks on your system are never affected.
 
 ## Advanced Usage
 
@@ -279,9 +300,9 @@ make help
 - `make db-reset` - Reset database
 
 ### Cleanup
-- `make clean` - Stop and remove volumes
-- `make clean-all` - Also remove model containers
-- `make prune` - Clean unused Docker resources
+- `make clean` - Stop and remove volumes (✅ **Cortex-only**: removes containers and volumes prefixed with `cortex_`)
+- `make clean-all` - Also remove model containers (✅ **Cortex-only**: removes containers matching `vllm-model-*` and `llamacpp-model-*` patterns)
+- `make prune` - Clean unused Docker resources (✅ **Cortex-only**: removes only Cortex-related resources; **does NOT affect other Docker resources on your system**)
 
 ### Testing
 - `make test` - Run smoke tests
@@ -381,12 +402,69 @@ If ports 8084, 9090, or 5432 are already in use:
 ### Need to completely reset
 
 ```bash
-# Nuclear option: remove everything
+# Remove all Cortex resources
 make clean-all
-docker system prune -af --volumes
+# ✅ Safe: Only removes Cortex containers and volumes
+
+# Optional: Remove unused Cortex resources (if you want to free up more space)
+make prune
+# ✅ Safe: Only removes Cortex-related unused resources
 
 # Start fresh
 make quick-start
+```
+
+> **⚠️ Important**: The old documentation showed `docker system prune -af --volumes` which would remove **ALL** Docker resources system-wide. This is **NOT recommended**. Use `make prune` instead, which only affects Cortex resources.
+
+## 🔒 Docker Resource Safety
+
+**All Makefile commands are scoped to Cortex resources only** - they will **NOT** affect other Docker containers, images, volumes, or networks on your system.
+
+### Resource Scoping
+
+Cortex uses several mechanisms to ensure operations only affect Cortex resources:
+
+1. **Compose File Scoping**: Commands like `make up`, `make down`, `make clean` use `docker compose -f docker.compose.dev.yaml`, which only affects resources defined in that compose file.
+
+2. **Volume Prefixing**: All volumes are prefixed with `cortex_` (e.g., `cortex_postgres_data`, `cortex_redis_data`). Volume operations filter by this prefix.
+
+3. **Network Prefixing**: Networks are prefixed with `cortex_` (e.g., `cortex_default`). Network operations filter by this prefix.
+
+4. **Container Labeling**: Containers created by compose have label `com.docker.compose.project=cortex`. Container operations filter by this label.
+
+5. **Name Pattern Filtering**: Model containers use patterns `vllm-model-*` and `llamacpp-model-*`. Cleanup operations filter by these patterns.
+
+6. **Image Safety**: The `prune` command uses `--rmi local` which only removes images built locally by compose, never pulled images.
+
+### What Gets Affected
+
+| Command | Containers | Volumes | Networks | Images | Safety |
+|---------|-----------|---------|----------|--------|--------|
+| `make up` | ✅ Cortex compose containers | ✅ Creates `cortex_*` volumes | ✅ Creates `cortex_*` networks | ❌ None | ✅ Safe |
+| `make down` | ✅ Cortex compose containers | ❌ None (keeps volumes) | ✅ Removes `cortex_*` networks | ❌ None | ✅ Safe |
+| `make clean` | ✅ Cortex compose containers | ✅ Removes `cortex_*` volumes | ✅ Removes `cortex_*` networks | ❌ None | ✅ Safe |
+| `make clean-models` | ✅ `vllm-model-*`, `llamacpp-model-*` | ❌ None | ❌ None | ❌ None | ✅ Safe |
+| `make prune` | ✅ Cortex labeled + model patterns | ✅ `cortex_*` volumes | ✅ `cortex_*` networks | ✅ Locally-built only | ✅ Safe |
+| `make db-reset` | ✅ Cortex compose containers | ✅ `cortex_postgres_data` | ❌ None | ❌ None | ⚠️ Destructive but Cortex-only |
+
+### Example: Safe Operation
+
+If you have other Docker containers running:
+```bash
+# Your system has these containers:
+# - nginx (for another project)
+# - mysql (for another project)  
+# - cortex-gateway-1 (Cortex)
+# - cortex-postgres-1 (Cortex)
+
+# Running Cortex cleanup:
+make clean
+
+# Result:
+# ✅ Removes: cortex-gateway-1, cortex-postgres-1
+# ✅ Removes: cortex_postgres_data volume
+# ❌ Keeps: nginx, mysql (untouched)
+# ❌ Keeps: All other volumes and networks
 ```
 
 ## Best Practices

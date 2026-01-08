@@ -358,10 +358,23 @@ clean-models: ## Stop and remove all model containers
 
 clean-all: clean clean-models ## Remove everything including model containers
 
-prune: ## Prune unused Docker resources (images, volumes, networks)
-	@echo "$(COLOR_YELLOW)This will remove unused Docker resources$(COLOR_RESET)"
-	@docker system prune -f
-	@echo "$(COLOR_GREEN)✓ Docker system pruned$(COLOR_RESET)"
+prune: ## Prune unused Cortex Docker resources (containers, images, volumes, networks)
+	@echo "$(COLOR_YELLOW)This will remove unused Cortex Docker resources$(COLOR_RESET)"
+	@echo "$(COLOR_BLUE)Pruning Cortex containers, images, volumes, and networks...$(COLOR_RESET)"
+	@# Remove stopped Cortex containers (by compose project label - safe, scoped to Cortex)
+	@docker ps -a --filter "label=com.docker.compose.project=cortex" --format "{{.ID}}" | xargs -r docker rm -f 2>/dev/null || true
+	@# Remove model containers (by name pattern - safe, only Cortex model containers)
+	@docker ps -a --filter "name=vllm-model-" --format "{{.ID}}" | xargs -r docker rm -f 2>/dev/null || true
+	@docker ps -a --filter "name=llamacpp-model-" --format "{{.ID}}" | xargs -r docker rm -f 2>/dev/null || true
+	@# Remove Cortex volumes (prefixed with cortex_ - safe, scoped to Cortex project)
+	@docker volume ls --filter "name=cortex_" --format "{{.Name}}" | xargs -r docker volume rm 2>/dev/null || true
+	@# Remove Cortex networks (prefixed with cortex_ - safe, scoped to Cortex project)
+	@docker network ls --filter "name=cortex_" --format "{{.ID}}" | xargs -r docker network rm 2>/dev/null || true
+	@# Use compose down to clean up compose-managed resources (scoped to this compose file only)
+	@# --rmi local removes only images built locally by this compose file, not pulled images
+	@$(DOCKER_COMPOSE) down --rmi local --volumes --remove-orphans 2>/dev/null || true
+	@echo "$(COLOR_GREEN)✓ Cortex Docker resources pruned$(COLOR_RESET)"
+	@echo "$(COLOR_BLUE)Note: Only Cortex-related resources were removed. Other Docker containers, images, volumes, and networks are unaffected.$(COLOR_RESET)"
 
 # ============================================================================
 # Testing and Validation
