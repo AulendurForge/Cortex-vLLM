@@ -41,6 +41,8 @@ online/staging instance → validate models/config → export package → transf
 - Uses pre-cached Docker images (loaded from tar files)
 - Serves models from local `/var/cortex/models` directory
 - Never attempts to pull images from internet registries
+- Validates GGUF tokenizer availability before model start
+- Provides startup diagnostics with actionable fixes
 - Fails gracefully with helpful error messages
 
 ### Current Limitation (Addressed in This Guide)

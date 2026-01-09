@@ -9,6 +9,39 @@
 ## Lifecycle
 - Create → Start → Apply updates (stop/start) → Stop → Archive/Delete (DB only)
 
+### State Machine
+
+```
+┌─────────┐                    ┌──────────┐                    ┌─────────┐
+│ stopped │ ─── Start Click ──→│ starting │ ─── Container Up ──→│ loading │
+└─────────┘                    └──────────┘                    └─────────┘
+     ↑                                                               │
+     │                                                               ↓
+┌──────────┐                                                   ┌─────────┐
+│ stopping │ ←────────────── Stop Click ──────────────────────│ running │
+└──────────┘                                                   └─────────┘
+     ↓                                │                              │
+     │                                ↓                              │
+┌─────────┐                      ┌────────┐                          │
+│ stopped │                      │ failed │ ←── Error at any stage ──┘
+└─────────┘                      └────────┘
+```
+
+**States:**
+| State | Description |
+|-------|-------------|
+| `stopped` | No container running, ready to start |
+| `starting` | Container creation initiated |
+| `loading` | Container running, model loading into GPU memory |
+| `running` | Model ready for inference requests |
+| `stopping` | Graceful shutdown in progress |
+| `failed` | Error occurred, check logs for diagnostics |
+
+**UI Behavior:**
+- Polling automatically updates state every few seconds
+- Toast notifications appear on state transitions
+- "Start" button triggers dry-run validation first
+
 ## File Safety Guarantee
 
 **CRITICAL: Cortex never deletes model files from `/var/cortex/models`**
@@ -45,6 +78,28 @@ rm -rf /var/cortex/models/old-model-folder
 
 ## Logs
 - `GET /admin/models/{id}/logs` returns recent container logs (for debugging)
+- `GET /admin/models/{id}/logs?diagnose=true` returns logs with startup diagnostics
 
-## Dry run
-- `POST /admin/models/{id}/dry-run` returns vLLM or llama.cpp command that would be executed
+## Dry Run & Pre-Start Validation
+
+The dry-run endpoint validates configuration before starting:
+
+- `POST /admin/models/{id}/dry-run` returns:
+  - The vLLM or llama.cpp command that would be executed
+  - VRAM estimation and warnings
+  - Configuration validation results
+  - Quantization compatibility checks
+
+**Frontend Integration:**
+When clicking "Start" in the UI, Cortex automatically runs a dry-run first. If warnings are detected (e.g., VRAM concerns, quantization mismatches), the user is prompted to confirm before proceeding.
+
+## Per-Model Metrics
+
+Running models expose metrics via the System Monitor page:
+- **Requests running/waiting/swapped** - Current queue status
+- **Prompt/generation tokens** - Throughput metrics
+- **KV cache utilization** - Memory efficiency
+- **GPU cache usage** - VRAM allocation
+
+Access via: Admin UI → System Monitor → Active Models section
+API endpoint: `GET /admin/models/metrics`

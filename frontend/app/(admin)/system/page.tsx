@@ -12,7 +12,7 @@ import { StatTable } from '../../../src/components/monitoring/StatTable';
 import { TimeRangeControls } from '../../../src/components/monitoring/TimeRangeControls';
 import apiFetch from '../../../src/lib/api-clients';
 import { z } from 'zod';
-import { ThroughputSummarySchema, GpuMetricsListSchema, HostSummarySchema, HostTrendsSchema, CapabilitiesSchema } from '../../../src/lib/validators';
+import { ThroughputSummarySchema, GpuMetricsListSchema, HostSummarySchema, HostTrendsSchema, CapabilitiesSchema, ModelMetricsListSchema } from '../../../src/lib/validators';
 import { HostIpDisplay } from '../../../src/components/HostIpDisplay';
 import { cn } from '../../../src/lib/cn';
 
@@ -21,6 +21,7 @@ type Gpu = z.infer<typeof GpuMetricsListSchema>[number];
 type HostSummary = z.infer<typeof HostSummarySchema>;
 type HostTrends = z.infer<typeof HostTrendsSchema>;
 type Capabilities = z.infer<typeof CapabilitiesSchema>;
+type ModelMetrics = z.infer<typeof ModelMetricsListSchema>[number];
 
 export default function SystemMonitoringPage() {
   const [throughput, setThroughput] = useState<Throughput | null>(null);
@@ -37,23 +38,30 @@ export default function SystemMonitoringPage() {
   const [activeCores, setActiveCores] = useState<Record<string, boolean>>({});
   const [activeDisks, setActiveDisks] = useState<Record<string, boolean>>({});
   const [activeIfaces, setActiveIfaces] = useState<Record<string, boolean>>({});
+  const [modelMetrics, setModelMetrics] = useState<ModelMetrics[] | null>(null); // Gap #16
 
   useEffect(() => {
     let stop = false;
     const load = async () => {
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
       try {
-        const [c, t, h, g] = await Promise.all([
+        const [c, t, h, g, mm] = await Promise.all([
           apiFetch('/admin/system/capabilities'),
           apiFetch('/admin/system/throughput'),
           apiFetch('/admin/system/host/summary'),
           apiFetch('/admin/system/gpus'),
+          apiFetch('/admin/models/metrics').catch(() => []), // Gap #16: model metrics
         ]);
         if (stop) return;
         setCaps(CapabilitiesSchema.parse(c));
         setThroughput(ThroughputSummarySchema.parse(t));
         setHost(HostSummarySchema.parse(h));
         const gz = GpuMetricsListSchema.parse(g);
+        // Gap #16: Parse model metrics
+        try {
+          const mmz = ModelMetricsListSchema.parse(mm);
+          setModelMetrics(mmz);
+        } catch { setModelMetrics([]); }
         setGpus(gz);
         setGpuTrends((prev) => {
           const nowTs = Date.now();
@@ -223,6 +231,103 @@ export default function SystemMonitoringPage() {
               <div className="col-span-full py-12 text-center glass rounded-3xl border border-white/5">
                 <div className="text-4xl mb-4 opacity-10">🔌</div>
                 <div className="text-white/40 text-sm font-bold uppercase tracking-widest">No Active GPU Detectors</div>
+              </div>
+            )}
+          </div>
+        </AccordionItem>
+
+        {/* Gap #16: Per-model vLLM Metrics */}
+        <AccordionItem
+          id="models"
+          title={<span className="font-bold tracking-tight text-white/90 text-sm uppercase">🤖 Active Models</span>}
+          miniKpis={[
+            { label: 'Running', value: (modelMetrics || []).filter(m => m.status === 'running').length },
+            { label: 'Loading', value: (modelMetrics || []).filter(m => m.status === 'loading').length },
+          ]}
+        >
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
+            {(modelMetrics || []).map((m) => (
+              <Card key={m.model_id} className="p-3 border-white/5 bg-white/[0.02] hover:bg-white/[0.04]">
+                <div className="flex items-center justify-between mb-2 pb-2 border-b border-white/5">
+                  <div className="flex flex-col">
+                    <div className="text-[8px] uppercase font-black text-white/20 tracking-[0.2em]">{m.served_name}</div>
+                    <div className="text-[11px] font-bold text-white/80 truncate max-w-[180px]">{m.model_name}</div>
+                  </div>
+                  <Badge variant={m.status === 'running' ? 'success' : m.status === 'loading' ? 'warning' : 'default'}>
+                    {m.status}
+                  </Badge>
+                </div>
+                {m.status === 'running' && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="p-2 bg-white/5 rounded-xl border border-white/5">
+                      <div className="text-[8px] uppercase font-black text-white/30 flex items-center gap-1">
+                        Requests
+                        <Tooltip text="Active inference requests being processed." />
+                      </div>
+                      <div className="text-sm font-mono font-bold text-purple-400">
+                        {m.num_requests_running != null ? m.num_requests_running : '—'}
+                        {m.num_requests_waiting != null && m.num_requests_waiting > 0 && (
+                          <span className="text-[10px] text-amber-400 ml-1">(+{m.num_requests_waiting} queued)</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="p-2 bg-white/5 rounded-xl border border-white/5">
+                      <div className="text-[8px] uppercase font-black text-white/30 flex items-center gap-1">
+                        KV Cache
+                        <Tooltip text="GPU KV cache utilization for this model." />
+                      </div>
+                      <div className="text-sm font-mono font-bold text-cyan-400">
+                        {m.gpu_cache_usage_pct != null ? `${(m.gpu_cache_usage_pct * 100).toFixed(1)}%` : '—'}
+                      </div>
+                    </div>
+                    <div className="p-2 bg-white/5 rounded-xl border border-white/5">
+                      <div className="text-[8px] uppercase font-black text-white/30 flex items-center gap-1">
+                        Tokens (Prompt)
+                        <Tooltip text="Total prompt tokens processed since model start." />
+                      </div>
+                      <div className="text-sm font-mono font-bold text-indigo-400">
+                        {m.prompt_tokens_total != null ? shortNum(m.prompt_tokens_total) : '—'}
+                      </div>
+                    </div>
+                    <div className="p-2 bg-white/5 rounded-xl border border-white/5">
+                      <div className="text-[8px] uppercase font-black text-white/30 flex items-center gap-1">
+                        Tokens (Gen)
+                        <Tooltip text="Total generated tokens since model start." />
+                      </div>
+                      <div className="text-sm font-mono font-bold text-emerald-400">
+                        {m.generation_tokens_total != null ? shortNum(m.generation_tokens_total) : '—'}
+                      </div>
+                    </div>
+                    {m.time_to_first_token_p50_ms != null && (
+                      <div className="p-2 bg-white/5 rounded-xl border border-white/5 col-span-2">
+                        <div className="text-[8px] uppercase font-black text-white/30 flex items-center gap-1">
+                          Avg TTFT
+                          <Tooltip text="Average time to first token in milliseconds." />
+                        </div>
+                        <div className="text-sm font-mono font-bold text-amber-400">
+                          {m.time_to_first_token_p50_ms.toFixed(0)} ms
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {m.status === 'loading' && (
+                  <div className="py-4 text-center text-white/40 text-sm">
+                    <span className="animate-pulse">⏳ Loading model...</span>
+                  </div>
+                )}
+                {m.error && (
+                  <div className="mt-2 text-[10px] text-red-400 bg-red-500/10 px-2 py-1 rounded">
+                    {m.error}
+                  </div>
+                )}
+              </Card>
+            ))}
+            {modelMetrics && modelMetrics.length === 0 && (
+              <div className="col-span-full py-12 text-center glass rounded-3xl border border-white/5">
+                <div className="text-4xl mb-4 opacity-10">🤖</div>
+                <div className="text-white/40 text-sm font-bold uppercase tracking-widest">No Active Models</div>
+                <div className="text-white/20 text-xs mt-2">Start a model from the Models page to see metrics here</div>
               </div>
             )}
           </div>

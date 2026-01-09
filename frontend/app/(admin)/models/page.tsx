@@ -227,6 +227,39 @@ export default function ModelsPage() {
     onError: () => { addToast({ title: 'Test failed', kind: 'error' }); setTestingId(null); }
   });
 
+  // Pre-start dry-run check (Gap #12 - VRAM estimation)
+  const dryRun = useMutation({
+    mutationFn: async (id: number) => apiFetch<any>(`/admin/models/${id}/dry-run`, { method: 'POST' }),
+    onSuccess: (data, id) => {
+      // Show VRAM estimate toast and proceed with start
+      if (data.vram_estimate) {
+        const est = data.vram_estimate;
+        const hasWarnings = data.warnings?.some((w: any) => w.severity === 'error');
+        if (hasWarnings) {
+          // Show warning toast with detailed message
+          const errorMsgs = data.warnings.filter((w: any) => w.severity === 'error').map((w: any) => w.title).join('; ');
+          addToast({ 
+            title: 'Configuration Warning', 
+            description: `${errorMsgs}. Est. VRAM: ${est.required_vram_gb}GB/GPU. Starting anyway...`, 
+            kind: 'warning' 
+          });
+        } else {
+          addToast({ 
+            title: 'VRAM Check Passed', 
+            description: `Est. ${est.required_vram_gb}GB/GPU (weights: ${est.model_weights_gb}GB, KV cache: ${est.kv_cache_gb}GB)`, 
+            kind: 'info' 
+          });
+        }
+      }
+      // Proceed with actual start
+      start.mutate(id);
+    },
+    onError: (_, id) => {
+      // If dry-run fails, just start anyway (best effort)
+      start.mutate(id);
+    }
+  });
+
   return (
     <section className="space-y-4">
       <PageHeader title="Models & Pools" actions={
@@ -290,10 +323,10 @@ export default function ModelsPage() {
                         <Button 
                           size="sm" 
                           variant="primary" 
-                          onClick={()=>start.mutate(m.id)} 
-                          disabled={(start.isPending && start.variables === m.id) || m.state === 'starting'}
+                          onClick={()=>dryRun.mutate(m.id)} 
+                          disabled={(start.isPending && start.variables === m.id) || (dryRun.isPending && dryRun.variables === m.id) || m.state === 'starting'}
                         >
-                          {(start.isPending && start.variables === m.id) || m.state === 'starting' ? '...' : 'Start'}
+                          {(start.isPending && start.variables === m.id) || (dryRun.isPending && dryRun.variables === m.id) || m.state === 'starting' ? '...' : 'Start'}
                         </Button>
                       ) : (
                         <Button 

@@ -150,3 +150,28 @@ class Capabilities(BaseModel):
     selectedProviders: dict
     suggestions: list[str]
 
+
+class ModelMetrics(BaseModel):
+    """Per-model vLLM inference metrics (Gap #16)."""
+    model_id: int
+    model_name: str
+    served_name: str
+    # Request metrics
+    num_requests_running: float | None = None
+    num_requests_waiting: float | None = None
+    num_requests_swapped: float | None = None
+    # Token metrics
+    prompt_tokens_total: float | None = None
+    generation_tokens_total: float | None = None
+    # Latency metrics
+    time_to_first_token_p50_ms: float | None = None
+    time_to_first_token_p95_ms: float | None = None
+    request_latency_p50_ms: float | None = None
+    request_latency_p95_ms: float | None = None
+    # System metrics
+    gpu_cache_usage_pct: float | None = None
+    cpu_cache_usage_pct: float | None = None
+    # Status
+    status: str = "unknown"  # "running", "loading", "stopped", "error"
+    error: str | None = None
+

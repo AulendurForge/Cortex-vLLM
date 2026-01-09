@@ -118,6 +118,106 @@ export function VLLMConfiguration({ values, gpuCount, onChange }: VLLMConfigurat
       {/* These are request-time parameters, not container startup parameters */}
       {/* See cortexSustainmentPlan.md for details on Phase 1 changes */}
 
+      {/* Production Settings */}
+      <details className="md:col-span-2 mt-2">
+        <summary className="cursor-pointer text-sm text-white/80">Production Settings</summary>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-2">
+          <label className="text-sm">Attention Backend
+            <select className="input mt-1" value={values.attention_backend || ''} onChange={(e) => onChange('attention_backend', e.target.value || null)}>
+              <option value="">auto (default)</option>
+              <option value="FLASH_ATTN">Flash Attention</option>
+              <option value="FLASHINFER">FlashInfer</option>
+              <option value="XFORMERS">xFormers</option>
+              <option value="TRITON_ATTN">Triton</option>
+            </select>
+            <p className="text-[11px] text-white/50 mt-1">
+              Force specific attention implementation. 
+              <Tooltip text="Also called '--attention-backend'. Auto lets vLLM choose the best. Flash Attention is fastest on most hardware. FlashInfer supports longer contexts. xFormers has broader compatibility." />
+            </p>
+          </label>
+          <div className="text-sm flex flex-col gap-2 mt-1">
+            <label className="inline-flex items-center gap-2">
+              <input type="checkbox" checked={!!values.disable_log_requests} onChange={(e) => onChange('disable_log_requests', e.target.checked)} />
+              Disable request logging 
+              <Tooltip text="Also called '--disable-log-requests'. Reduces log spam in production. Recommended for high-throughput deployments." />
+            </label>
+            <label className="inline-flex items-center gap-2">
+              <input type="checkbox" checked={!!values.disable_log_stats} onChange={(e) => onChange('disable_log_stats', e.target.checked)} />
+              Disable stats logging 
+              <Tooltip text="Also called '--disable-log-stats'. Slightly faster startup and reduced log volume. Enable when Prometheus metrics are sufficient." />
+            </label>
+          </div>
+          <div className="text-sm flex flex-col gap-2 mt-1">
+            <label className="inline-flex items-center gap-2">
+              <input type="checkbox" checked={!!values.vllm_v1_enabled} onChange={(e) => onChange('vllm_v1_enabled', e.target.checked)} />
+              <span className="text-amber-300">Enable V1 Engine (Experimental)</span>
+              <Tooltip text="Sets VLLM_USE_V1=1. V1 is a major re-architecture with significant performance improvements, but removes some features like 'best_of' sampling. Only use with vLLM 0.8+." />
+            </label>
+            {values.vllm_v1_enabled && (
+              <p className="text-[10px] text-amber-200/70 ml-6">⚠️ V1 removes: best_of, per-request logits processors, GPU↔CPU KV swap</p>
+            )}
+          </div>
+          <label className="text-sm md:col-span-3">Entrypoint Override
+            <input
+              className="input mt-1"
+              placeholder="e.g., python3,-m,vllm.entrypoints.openai.api_server"
+              value={values.entrypoint_override || ''}
+              onChange={(e) => onChange('entrypoint_override', e.target.value || null)}
+            />
+            <p className="text-[11px] text-white/50 mt-1">
+              Custom container entrypoint (comma-separated). Leave empty for auto-detection. 
+              <Tooltip text="Override the default entrypoint for compatibility with different vLLM versions. Format: comma-separated command parts, e.g., 'vllm,serve' or 'python3,-m,vllm.entrypoints.openai.api_server'. Auto-detection uses python module entrypoint for v0.6-0.12." />
+            </p>
+          </label>
+          {/* Debug Logging Settings */}
+          <div className="md:col-span-3 border-t border-white/10 pt-2 mt-2">
+            <span className="text-xs text-white/60">Debug &amp; Logging</span>
+            <div className="flex flex-wrap gap-4 mt-2">
+              <label className="inline-flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={!!values.debug_logging} onChange={(e) => onChange('debug_logging', e.target.checked)} />
+                <span>Debug Logging</span>
+                <Tooltip text="Sets VLLM_LOGGING_LEVEL=DEBUG. Enables verbose debug output for troubleshooting. May impact performance slightly." />
+              </label>
+              <label className="inline-flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={!!values.trace_mode} onChange={(e) => onChange('trace_mode', e.target.checked)} />
+                <span className="text-orange-300">Trace Mode</span>
+                <Tooltip text="Sets VLLM_TRACE_FUNCTION=1 and CUDA_LAUNCH_BLOCKING=1. Traces all function calls for deep debugging. WARNING: Significant performance impact!" />
+              </label>
+            </div>
+            {values.trace_mode && (
+              <p className="text-[10px] text-orange-200/70 mt-1">⚠️ Trace mode has significant performance impact - for debugging only!</p>
+            )}
+          </div>
+          {/* Request timeout settings (Gap #13) */}
+          <label className="text-sm">Engine Timeout (sec)
+            <input
+              className="input mt-1"
+              type="number"
+              min={0}
+              placeholder="Engine timeout (0=disabled)"
+              value={values.engine_request_timeout ?? ''}
+              onChange={(e) => onChange('engine_request_timeout', e.target.value ? Number(e.target.value) : null)}
+            />
+            <p className="text-[11px] text-white/50 mt-1">
+              <Tooltip text="Sets VLLM_ENGINE_ITERATION_TIMEOUT_S environment variable. Controls max time for engine iterations. 0 or empty uses default (300s). Useful for limiting very long generations." />
+            </p>
+          </label>
+          <label className="text-sm">Max Log Length
+            <input
+              className="input mt-1"
+              type="number"
+              min={0}
+              placeholder="Chars to log (0=disabled)"
+              value={values.max_log_len ?? ''}
+              onChange={(e) => onChange('max_log_len', e.target.value ? Number(e.target.value) : null)}
+            />
+            <p className="text-[11px] text-white/50 mt-1">
+              <Tooltip text="vLLM --max-log-len: Truncate logged prompts to this length. Useful for reducing log volume with long prompts." />
+            </p>
+          </label>
+        </div>
+      </details>
+
       {/* Advanced vLLM Tuning */}
       <details className="md:col-span-2 mt-2">
         <summary className="cursor-pointer text-sm text-white/80">Advanced vLLM Tuning</summary>
@@ -152,16 +252,41 @@ export function VLLMConfiguration({ values, gpuCount, onChange }: VLLMConfigurat
           </label>
           <label className="text-sm">Quantization
             <select className="input mt-1" value={values.quantization || ''} onChange={(e) => onChange('quantization', e.target.value)}>
-              <option value="">none</option>
-              <option value="awq">awq</option>
-              <option value="gptq">gptq</option>
-              <option value="fp8">fp8</option>
-              <option value="int8">int8</option>
+              <option value="">none (use original weights)</option>
+              <option value="awq">AWQ (requires AWQ-quantized model)</option>
+              <option value="gptq">GPTQ (requires GPTQ-quantized model)</option>
+              <option value="fp8">FP8 (dynamic, any model)</option>
+              <option value="int8">INT8 (W8A8, any model)</option>
             </select>
             <p className="text-[11px] text-white/50 mt-1">
-              Weight quantization scheme. Requires compatible weights. 
+              Weight quantization scheme. 
               <Tooltip text="Also called '--quantization'. AWQ/GPTQ need pre‑quantized repos; fp8/int8 require supported kernels. Reduces VRAM with possible quality/perf trade‑offs." />
             </p>
+            {/* Quantization validation warnings (Gap #14) */}
+            {values.quantization === 'awq' && (
+              <p className="text-[11px] text-amber-400 mt-1 bg-amber-500/10 px-2 py-1 rounded">
+                ⚠️ AWQ requires a model repo with AWQ-quantized weights (e.g., &quot;TheBloke/...-AWQ&quot;). Using AWQ with non-AWQ weights will fail.
+                <a href="https://docs.vllm.ai/en/latest/features/quantization/awq.html" target="_blank" rel="noopener noreferrer" className="text-cyan-400 ml-1 underline">Docs →</a>
+              </p>
+            )}
+            {values.quantization === 'gptq' && (
+              <p className="text-[11px] text-amber-400 mt-1 bg-amber-500/10 px-2 py-1 rounded">
+                ⚠️ GPTQ requires a model repo with GPTQ-quantized weights (e.g., &quot;TheBloke/...-GPTQ&quot;). Using GPTQ with non-GPTQ weights will fail.
+                <a href="https://docs.vllm.ai/en/latest/features/quantization/gptq.html" target="_blank" rel="noopener noreferrer" className="text-cyan-400 ml-1 underline">Docs →</a>
+              </p>
+            )}
+            {values.quantization === 'fp8' && (
+              <p className="text-[11px] text-blue-400 mt-1 bg-blue-500/10 px-2 py-1 rounded">
+                ℹ️ FP8 applies dynamic quantization at runtime. Works with any model but requires Hopper/Ada GPU (SM 8.9+).
+                <a href="https://docs.vllm.ai/en/latest/features/quantization/fp8.html" target="_blank" rel="noopener noreferrer" className="text-cyan-400 ml-1 underline">Docs →</a>
+              </p>
+            )}
+            {values.quantization === 'int8' && (
+              <p className="text-[11px] text-blue-400 mt-1 bg-blue-500/10 px-2 py-1 rounded">
+                ℹ️ INT8 (W8A8) applies activation-aware quantization. Works with any model. ~2x memory savings.
+                <a href="https://docs.vllm.ai/en/latest/features/quantization/" target="_blank" rel="noopener noreferrer" className="text-cyan-400 ml-1 underline">Docs →</a>
+              </p>
+            )}
           </label>
           <label className="text-sm">KV cache block size
             <select className="input mt-1" value={(values.block_size ?? 16)} onChange={(e) => onChange('block_size', Number(e.target.value))}>

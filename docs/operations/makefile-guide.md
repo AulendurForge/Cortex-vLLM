@@ -157,8 +157,6 @@ make db-reset
 #    Removes volumes prefixed with 'cortex_' (e.g., cortex_postgres_data)
 #    Does NOT affect other databases or volumes on your system
 ```
-<｜tool▁calls▁begin｜><｜tool▁call▁begin｜>
-grep
 
 ### Cleaning Up
 
@@ -519,11 +517,11 @@ Print this and keep it handy:
 │ Clean:         make clean                       │
 │ Help:          make help                        │
 ├─────────────────────────────────────────────────┤
-│ URLs:                                           │
-│   Gateway:     http://localhost:8084            │
-│   Admin UI:    http://localhost:3001            │
-│   Prometheus:  http://localhost:9090            │
-│   PgAdmin:     http://localhost:5050            │
+│ URLs (use IP from 'make ip', not localhost):    │
+│   Gateway:     http://YOUR_IP:8084              │
+│   Admin UI:    http://YOUR_IP:3001              │
+│   Prometheus:  http://YOUR_IP:9090              │
+│   PgAdmin:     http://YOUR_IP:5050              │
 └─────────────────────────────────────────────────┘
 ```
 

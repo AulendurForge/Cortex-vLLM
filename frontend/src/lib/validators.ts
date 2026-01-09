@@ -130,6 +130,27 @@ export const CapabilitiesSchema = z.object({
   suggestions: z.array(z.string()),
 });
 
+// Per-model vLLM metrics (Gap #16)
+export const ModelMetricsSchema = z.object({
+  model_id: z.number(),
+  model_name: z.string(),
+  served_name: z.string(),
+  num_requests_running: z.number().nullable().optional(),
+  num_requests_waiting: z.number().nullable().optional(),
+  num_requests_swapped: z.number().nullable().optional(),
+  prompt_tokens_total: z.number().nullable().optional(),
+  generation_tokens_total: z.number().nullable().optional(),
+  time_to_first_token_p50_ms: z.number().nullable().optional(),
+  time_to_first_token_p95_ms: z.number().nullable().optional(),
+  request_latency_p50_ms: z.number().nullable().optional(),
+  request_latency_p95_ms: z.number().nullable().optional(),
+  gpu_cache_usage_pct: z.number().nullable().optional(),
+  cpu_cache_usage_pct: z.number().nullable().optional(),
+  status: z.string(),
+  error: z.string().nullable().optional(),
+});
+export const ModelMetricsListSchema = z.array(ModelMetricsSchema);
+
 
 // Models (planned backend endpoints)
 export const ModelItemSchema = z.object({
@@ -161,6 +182,19 @@ export const ModelItemSchema = z.object({
   split_mode: z.string().nullable().optional(),
   cache_type_k: z.string().nullable().optional(),
   cache_type_v: z.string().nullable().optional(),
+  // vLLM advanced engine args (Gap #4)
+  attention_backend: z.string().nullable().optional(),
+  disable_log_requests: z.boolean().nullable().optional(),
+  disable_log_stats: z.boolean().nullable().optional(),
+  vllm_v1_enabled: z.boolean().nullable().optional(),
+  // Version-aware entrypoint (Gap #5)
+  entrypoint_override: z.string().nullable().optional(),
+  // Debug logging configuration (Gap #11)
+  debug_logging: z.boolean().nullable().optional(),
+  trace_mode: z.boolean().nullable().optional(),
+  // Request timeout configuration (Gap #13)
+  engine_request_timeout: z.number().nullable().optional(),
+  max_log_len: z.number().nullable().optional(),
   state: z.enum(['stopped', 'starting', 'loading', 'running', 'failed']).or(z.string()),
   port: z.number().nullable().optional(),
   container_name: z.string().nullable().optional(),

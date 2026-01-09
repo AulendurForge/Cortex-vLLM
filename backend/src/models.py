@@ -121,6 +121,19 @@ class Model(Base):
     split_mode: Mapped[str | None] = mapped_column(String(32), nullable=True)  # Layer/row split mode
     cache_type_k: Mapped[str | None] = mapped_column(String(16), nullable=True)  # KV cache type for K
     cache_type_v: Mapped[str | None] = mapped_column(String(16), nullable=True)  # KV cache type for V
+    # vLLM advanced engine args (Gap #4)
+    attention_backend: Mapped[str | None] = mapped_column(String(32), nullable=True)  # flash_attn, flashinfer, etc.
+    disable_log_requests: Mapped[bool | None] = mapped_column(Boolean, nullable=True)  # Reduce log spam
+    disable_log_stats: Mapped[bool | None] = mapped_column(Boolean, nullable=True)  # Faster startup
+    vllm_v1_enabled: Mapped[bool | None] = mapped_column(Boolean, nullable=True)  # Enable V1 engine (VLLM_USE_V1)
+    # Version-aware entrypoint (Gap #5)
+    entrypoint_override: Mapped[str | None] = mapped_column(String(256), nullable=True)  # Custom entrypoint override
+    # Debug logging configuration (Gap #11)
+    debug_logging: Mapped[bool | None] = mapped_column(Boolean, nullable=True)  # VLLM_LOGGING_LEVEL=DEBUG
+    trace_mode: Mapped[bool | None] = mapped_column(Boolean, nullable=True)  # VLLM_TRACE_FUNCTION=1 (perf impact)
+    # Request timeout configuration (Gap #13)
+    engine_request_timeout: Mapped[int | None] = mapped_column(Integer, nullable=True)  # --request-timeout (vLLM server-side)
+    max_log_len: Mapped[int | None] = mapped_column(Integer, nullable=True)  # --max-log-len (truncate logged prompts)
     # Repetition control parameters (common to both vLLM and llama.cpp)
     # NOTE: These are stored for backward compatibility but will be moved to request_defaults_json
     repetition_penalty: Mapped[float | None] = mapped_column(Float, nullable=True)  # Penalty for repeated tokens
@@ -205,6 +218,19 @@ class Recipe(Base):
     split_mode: Mapped[str | None] = mapped_column(String(32), nullable=True)
     cache_type_k: Mapped[str | None] = mapped_column(String(16), nullable=True)
     cache_type_v: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    # vLLM advanced engine args (Gap #4) - also for recipes
+    attention_backend: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    disable_log_requests: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    disable_log_stats: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    vllm_v1_enabled: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # Version-aware entrypoint (Gap #5) - also for recipes
+    entrypoint_override: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    # Debug logging configuration (Gap #11) - also for recipes
+    debug_logging: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    trace_mode: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # Request timeout configuration (Gap #13) - also for recipes
+    engine_request_timeout: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    max_log_len: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Repetition control parameters (backward compat, being moved to request_defaults_json)
     repetition_penalty: Mapped[float | None] = mapped_column(Float, nullable=True)
     frequency_penalty: Mapped[float | None] = mapped_column(Float, nullable=True)

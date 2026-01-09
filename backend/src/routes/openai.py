@@ -292,6 +292,44 @@ def _require_scope(scopes: set[str], path: str):
         raise HTTPException(status_code=403, detail="insufficient_scope")
 
 
+# V1 Engine incompatible parameters (Gap #7)
+# These features are removed or changed in vLLM V1 engine
+V1_INCOMPATIBLE_PARAMS = {
+    "best_of": "V1 engine removed best_of sampling support. Use n=1 instead.",
+    "logit_bias": "V1 engine has limited logit_bias support. Some models may not work.",
+}
+
+
+def check_v1_compatibility(model_name: str, payload: dict) -> list[str]:
+    """Check request parameters for V1 engine compatibility issues.
+    
+    Args:
+        model_name: Name of the target model
+        payload: Request payload
+        
+    Returns:
+        List of warning messages for incompatible parameters
+    """
+    warnings = []
+    
+    # Check if model has V1 enabled
+    try:
+        if model_name and model_name in _MODEL_REGISTRY:
+            entry = _MODEL_REGISTRY.get(model_name) or {}
+            if entry.get("vllm_v1_enabled"):
+                # Check for incompatible parameters
+                for param, warning_msg in V1_INCOMPATIBLE_PARAMS.items():
+                    if param in payload and payload[param] not in (None, 1):
+                        # best_of=1 is equivalent to not using best_of
+                        if param == "best_of" and payload[param] == 1:
+                            continue
+                        warnings.append(f"Parameter '{param}' may not work: {warning_msg}")
+    except Exception:
+        pass
+    
+    return warnings
+
+
 async def forward_json(request: Request, base_url: str, path: str, internal_key: str, auth_ctx: dict | None):
     try:
         payload = await request.json()
@@ -302,6 +340,8 @@ async def forward_json(request: Request, base_url: str, path: str, internal_key:
     # Phase 1: Apply request defaults and engine translation (Plane C)
     # ============================================================================
     model_name = payload.get("model", "")
+    v1_warnings: list[str] = []  # V1 compatibility warnings (Gap #7)
+    
     if model_name and model_name in _MODEL_REGISTRY:
         entry = _MODEL_REGISTRY.get(model_name) or {}
         
@@ -314,7 +354,10 @@ async def forward_json(request: Request, base_url: str, path: str, internal_key:
             except Exception:
                 pass  # Best-effort; don't fail request if defaults are malformed
         
-        # 2. Translate to engine-specific keys
+        # 2. Check V1 compatibility BEFORE translation (Gap #7)
+        v1_warnings = check_v1_compatibility(model_name, payload)
+        
+        # 3. Translate to engine-specific keys
         engine_type = entry.get("engine_type", "vllm")
         payload = translate_request_for_engine(payload, engine_type)
     # ============================================================================
@@ -536,7 +579,13 @@ async def forward_json(request: Request, base_url: str, path: str, internal_key:
                 tt = tt if tt is not None else (pt + (ct or 0))
         except Exception:
             pass
-    r = JSONResponse(status_code=200, content=data)
+    # Build response with optional V1 warnings (Gap #7)
+    response_headers = {}
+    if v1_warnings:
+        # Add warnings to response header for client visibility
+        response_headers["X-Cortex-Warnings"] = "; ".join(v1_warnings)
+    
+    r = JSONResponse(status_code=200, content=data, headers=response_headers if response_headers else None)
     await record_usage(
         request,
         r,

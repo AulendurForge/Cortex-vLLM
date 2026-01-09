@@ -59,6 +59,9 @@ backend/src/
 - `services/registry_persistence.py`: Model registry persistence to ConfigKV table
 - `services/folder_inspector.py`: Local model directory scanning and GGUF detection
 - `services/hf_inspector.py`: HuggingFace model metadata fetching
+- `services/startup_diagnostics.py`: Container log parsing and actionable error diagnosis
+- `services/config_validator.py`: Pre-start configuration validation (VRAM estimation, quantization checks)
+- `services/deployment_manager.py`: Deployment package export/import for offline migrations
 
 ### Schemas Layer (Data Validation)
 - `schemas/admin.py`: 15+ Pydantic models for admin endpoints (SystemSummary, UsageItem, HostTrends, etc.)
@@ -68,6 +71,9 @@ backend/src/
 ### Utils Layer (Shared Utilities)
 - `utils/prometheus_utils.py`: Prometheus query functions (instant, range, matrix queries)
 - `utils/gguf_utils.py`: GGUF file detection, quantization analysis, multi-part handling
+- `utils/gpu_utils.py`: GPU selection parsing and normalization across formats
+- `utils/custom_args_validator.py`: Custom startup argument and environment variable validation
+- `utils/ip_utils.py`: IP address detection and validation utilities
 
 ### Infrastructure
 - `auth.py`: API key verification, dev cookie session guards for admin routes

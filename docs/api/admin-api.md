@@ -27,12 +27,30 @@ curl -X POST "$GATEWAY/admin/keys" -H 'Content-Type: application/json' -d '{"sco
 - `POST /admin/models/{id}/start` — start model container
 - `POST /admin/models/{id}/stop` — stop model container
 - `POST /admin/models/{id}/apply` — apply configuration changes
-- `POST /admin/models/{id}/dry-run` — preview vLLM command
+- `POST /admin/models/{id}/dry-run` — validate config + preview command (also returns VRAM estimation)
 - `POST /admin/models/{id}/test` — test model inference
-- `GET /admin/models/{id}/readiness` — check model readiness
+- `GET /admin/models/{id}/readiness` — check model readiness status
 - `GET /admin/models/{id}/logs` — recent container logs
+- `GET /admin/models/{id}/logs?diagnose=true` — logs with startup diagnostics
 - `DELETE /admin/models/{id}` — delete model (database entry only; files preserved)
 - Registry: `GET/POST/DELETE /admin/models/registry` — manage model routing registry
+
+### Model States
+Models transition through these states: `stopped` → `starting` → `loading` → `running`
+
+Error states: `failed` (check logs for diagnostics)
+
+### Dry-Run Response
+The dry-run endpoint returns:
+```json
+{
+  "command": ["vllm", "serve", "--model", "/models/..."],
+  "warnings": [
+    {"severity": "warning", "category": "vram", "title": "VRAM Warning", "message": "..."}
+  ],
+  "vram_estimate_gb": 4.5
+}
+```
 
 ## Usage
 - `GET /admin/usage` — recent requests (filters, pagination)
@@ -49,6 +67,7 @@ curl -X POST "$GATEWAY/admin/keys" -H 'Content-Type: application/json' -d '{"sco
 - `GET /admin/system/host/summary` — real-time host metrics (Prometheus node-exporter with psutil fallback)
 - `GET /admin/system/host/trends` — time-series host metrics (CPU, memory, disk, network)
 - `GET /admin/system/capabilities` — environment detection (OS, container, WSL, monitoring providers)
+- `GET /admin/models/metrics` — per-model vLLM inference metrics (requests, tokens, latency, cache)
 
 ## Upstreams Health
 - `GET /admin/upstreams` — health snapshots and model registry

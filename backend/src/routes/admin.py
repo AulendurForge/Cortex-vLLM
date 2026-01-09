@@ -1,23 +1,36 @@
+from __future__ import annotations
+
+import logging
+import os
+import json
+import re
+import time
+
+import httpx
+import httpx as _httpx
 from fastapi import APIRouter, HTTPException, Depends, Response, Request
 from pydantic import BaseModel
 from sqlalchemy import select, func
 from typing import Optional
-import os
-import json
+from passlib.context import CryptContext
+
 from ..models import User, Organization
 from ..config import get_settings
 from ..auth import require_admin
-import httpx as _httpx
-from passlib.context import CryptContext
 from ..state import snapshot_states, HEALTH_META, register_model_endpoint, unregister_model_endpoint, get_model_registry
 from ..schemas.admin import (
     SystemSummary, ThroughputSummary, GpuMetrics, BootstrapRequest, RegistryEntry,
     UsageItem, UsageAggItem, UsageSeriesItem, LatencySummary, TtftSummary,
-    HealthRefreshRequest, HostSummary, TimePoint, HostTrends, PromTargets, Capabilities
+    HealthRefreshRequest, HostSummary, TimePoint, HostTrends, PromTargets, Capabilities,
+    ModelMetrics,
 )
 from ..utils.prometheus_utils import prom_query, prom_range, prom_range_matrix, prom_instant_matrix
 from ..services.usage_analytics import get_usage_records, get_usage_aggregate, get_usage_series, get_usage_latency
 from ..services.system_monitoring import get_host_summary, get_host_trends, get_system_capabilities
+
+logger = logging.getLogger(__name__)
+
+
 def _get_session() -> Optional[object]:
     try:
         from ..main import SessionLocal  # type: ignore
@@ -25,14 +38,13 @@ def _get_session() -> Optional[object]:
     except Exception:
         return None
 
+
 def _get_http_client():
     try:
         from ..main import http_client  # type: ignore
         return http_client
     except Exception:
         return None
-import httpx
-import time
 
 router = APIRouter()
 
@@ -786,3 +798,136 @@ def _get_offline_recommendations(vllm_cached: bool, llamacpp_cached: bool, infra
         )
     
     return recs
+
+
+# ---------------------------
+# Per-model vLLM Metrics (Gap #16)
+# ---------------------------
+
+async def _scrape_vllm_metrics(container_name: str) -> dict:
+    """Scrape Prometheus metrics from a vLLM container.
+    
+    vLLM exposes metrics on /metrics endpoint in Prometheus format.
+    
+    Args:
+        container_name: Docker container name
+        
+    Returns:
+        Dict with parsed metric values
+    """
+    metrics = {}
+    try:
+        client = _get_http_client()
+        if not client:
+            return metrics
+        
+        # vLLM containers expose metrics on port 8000
+        resp = await client.get(f"http://{container_name}:8000/metrics", timeout=5.0)
+        if resp.status_code != 200:
+            return metrics
+        
+        text = resp.text
+        
+        # Parse Prometheus format metrics
+        
+        # Parse gauge metrics (single values)
+        gauge_patterns = {
+            'num_requests_running': r'vllm:num_requests_running\{[^}]*\}\s+([\d.]+)',
+            'num_requests_waiting': r'vllm:num_requests_waiting\{[^}]*\}\s+([\d.]+)',
+            'num_requests_swapped': r'vllm:num_requests_swapped\{[^}]*\}\s+([\d.]+)',
+            'gpu_cache_usage_pct': r'vllm:gpu_cache_usage_perc\{[^}]*\}\s+([\d.]+)',
+            'cpu_cache_usage_pct': r'vllm:cpu_cache_usage_perc\{[^}]*\}\s+([\d.]+)',
+        }
+        
+        for key, pattern in gauge_patterns.items():
+            match = re.search(pattern, text)
+            if match:
+                metrics[key] = float(match.group(1))
+        
+        # Parse counter metrics (cumulative totals)
+        counter_patterns = {
+            'prompt_tokens_total': r'vllm:prompt_tokens_total\{[^}]*\}\s+([\d.]+)',
+            'generation_tokens_total': r'vllm:generation_tokens_total\{[^}]*\}\s+([\d.]+)',
+        }
+        
+        for key, pattern in counter_patterns.items():
+            match = re.search(pattern, text)
+            if match:
+                metrics[key] = float(match.group(1))
+        
+        # Parse histogram metrics for TTFT (time to first token)
+        # Look for p50 and p95 quantiles
+        ttft_sum_match = re.search(r'vllm:time_to_first_token_seconds_sum\{[^}]*\}\s+([\d.]+)', text)
+        ttft_count_match = re.search(r'vllm:time_to_first_token_seconds_count\{[^}]*\}\s+([\d.]+)', text)
+        if ttft_sum_match and ttft_count_match:
+            ttft_sum = float(ttft_sum_match.group(1))
+            ttft_count = float(ttft_count_match.group(1))
+            if ttft_count > 0:
+                # Approximate average TTFT (not exact p50, but useful)
+                metrics['time_to_first_token_p50_ms'] = (ttft_sum / ttft_count) * 1000
+        
+        # Parse request latency histogram
+        latency_sum_match = re.search(r'vllm:e2e_request_latency_seconds_sum\{[^}]*\}\s+([\d.]+)', text)
+        latency_count_match = re.search(r'vllm:e2e_request_latency_seconds_count\{[^}]*\}\s+([\d.]+)', text)
+        if latency_sum_match and latency_count_match:
+            lat_sum = float(latency_sum_match.group(1))
+            lat_count = float(latency_count_match.group(1))
+            if lat_count > 0:
+                metrics['request_latency_p50_ms'] = (lat_sum / lat_count) * 1000
+        
+    except Exception as e:
+        logger.debug(f"Failed to scrape metrics from {container_name}: {e}")
+    
+    return metrics
+
+
+@router.get("/models/metrics", response_model=list[ModelMetrics])
+async def get_model_metrics(_: dict = Depends(require_admin)):
+    """Get vLLM metrics for all running models (Gap #16).
+    
+    Scrapes the /metrics endpoint from each running vLLM container
+    and returns parsed metrics for display in System Monitor.
+    """
+    from ..models import Model
+    
+    SessionLocal = _get_session()
+    if SessionLocal is None:
+        return []
+    
+    results = []
+    
+    async with SessionLocal() as session:
+        res = await session.execute(
+            select(Model).where(Model.state.in_(['running', 'loading']))
+        )
+        models = res.scalars().all()
+        
+        for m in models:
+            entry = ModelMetrics(
+                model_id=m.id,
+                model_name=m.name,
+                served_name=m.served_model_name or m.name,
+                status=m.state or "unknown",
+            )
+            
+            # Only scrape metrics for running vLLM models
+            if m.state == 'running' and m.container_name and m.engine_type == 'vllm':
+                try:
+                    metrics = await _scrape_vllm_metrics(m.container_name)
+                    entry.num_requests_running = metrics.get('num_requests_running')
+                    entry.num_requests_waiting = metrics.get('num_requests_waiting')
+                    entry.num_requests_swapped = metrics.get('num_requests_swapped')
+                    entry.prompt_tokens_total = metrics.get('prompt_tokens_total')
+                    entry.generation_tokens_total = metrics.get('generation_tokens_total')
+                    entry.time_to_first_token_p50_ms = metrics.get('time_to_first_token_p50_ms')
+                    entry.request_latency_p50_ms = metrics.get('request_latency_p50_ms')
+                    entry.gpu_cache_usage_pct = metrics.get('gpu_cache_usage_pct')
+                    entry.cpu_cache_usage_pct = metrics.get('cpu_cache_usage_pct')
+                except Exception as e:
+                    entry.error = str(e)
+            elif m.state == 'loading':
+                entry.status = 'loading'
+            
+            results.append(entry)
+    
+    return results

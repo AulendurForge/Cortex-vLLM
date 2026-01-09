@@ -14,7 +14,14 @@ LB_INDEX: Dict[str, int] = {}
 # Dynamic model registry: served name -> { url, task, engine_type, request_defaults_json }
 MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {}
 
-def register_model_endpoint(served_name: str, url: str, task: str, engine_type: str = "vllm", request_defaults_json: str | None = None) -> None:
+def register_model_endpoint(
+    served_name: str, 
+    url: str, 
+    task: str, 
+    engine_type: str = "vllm", 
+    request_defaults_json: str | None = None,
+    vllm_v1_enabled: bool | None = None,
+) -> None:
     """Register a model endpoint in the runtime registry.
     
     Args:
@@ -23,13 +30,14 @@ def register_model_endpoint(served_name: str, url: str, task: str, engine_type: 
         task: Model task (generate/embed)
         engine_type: Engine type (vllm/llamacpp) for request translation
         request_defaults_json: JSON string of request defaults (Plane C)
+        vllm_v1_enabled: Whether V1 engine is enabled (Gap #7)
     """
     # IMPORTANT: this function is called from two different contexts:
     # 1) Managed-model registration (authoritative): provides engine_type and request defaults.
     # 2) Health poller discovery (best-effort): may only know url/task and should NOT wipe
     #    existing richer metadata (engine_type, request_defaults_json).
     existing = MODEL_REGISTRY.get(served_name) if served_name else None
-    is_discovery = (engine_type == "vllm" and request_defaults_json is None)
+    is_discovery = (engine_type == "vllm" and request_defaults_json is None and vllm_v1_enabled is None)
 
     if isinstance(existing, dict) and is_discovery:
         # Preserve richer fields; only refresh url and fill missing task.
@@ -38,7 +46,7 @@ def register_model_endpoint(served_name: str, url: str, task: str, engine_type: 
             merged["url"] = url
         if task and (not merged.get("task") or str(merged.get("task")) == "unknown"):
             merged["task"] = task
-        # Do NOT overwrite engine_type or request_defaults_json on discovery.
+        # Do NOT overwrite engine_type, request_defaults_json, or vllm_v1_enabled on discovery.
         MODEL_REGISTRY[served_name] = merged
         return
 
@@ -48,6 +56,7 @@ def register_model_endpoint(served_name: str, url: str, task: str, engine_type: 
         "task": task,
         "engine_type": engine_type,
         "request_defaults_json": request_defaults_json,
+        "vllm_v1_enabled": vllm_v1_enabled,
     }
 
 def unregister_model_endpoint(served_name: str) -> None:
@@ -68,12 +77,14 @@ def set_model_registry(entries: Dict[str, Dict[str, Any]]) -> None:
             task = str(v.get("task", "generate")) if isinstance(v, dict) else "generate"
             engine_type = str(v.get("engine_type", "vllm")) if isinstance(v, dict) else "vllm"
             request_defaults_json = v.get("request_defaults_json") if isinstance(v, dict) else None
+            vllm_v1_enabled = v.get("vllm_v1_enabled") if isinstance(v, dict) else None
             if url:
                 MODEL_REGISTRY[str(k)] = {
                     "url": url, 
                     "task": task,
                     "engine_type": engine_type,
                     "request_defaults_json": request_defaults_json,
+                    "vllm_v1_enabled": vllm_v1_enabled,
                 }
     except Exception:
         # Best-effort load; ignore malformed entries

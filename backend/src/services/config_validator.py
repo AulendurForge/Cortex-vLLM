@@ -225,6 +225,49 @@ def validate_model_config(m: Model, available_gpus: List[Dict] = None) -> List[V
             fix='Consider reducing to 32K-64K unless you specifically need larger context'
         ))
     
+    # 5. Quantization Validation (Gap #14)
+    quant = (m.quantization or '').lower()
+    model_path = (m.local_path or m.repo_id or m.name or '').lower()
+    
+    if quant == 'awq':
+        # AWQ requires pre-quantized weights
+        if 'awq' not in model_path:
+            warnings.append(ValidationWarning(
+                severity='warning',
+                category='config',
+                title='AWQ Quantization Mismatch',
+                message='AWQ quantization selected but model name/path does not indicate AWQ weights',
+                fix='AWQ requires a model pre-quantized with AWQ (e.g., "TheBloke/...-AWQ"). Using AWQ with non-AWQ weights will fail.'
+            ))
+    elif quant == 'gptq':
+        # GPTQ requires pre-quantized weights
+        if 'gptq' not in model_path:
+            warnings.append(ValidationWarning(
+                severity='warning',
+                category='config',
+                title='GPTQ Quantization Mismatch',
+                message='GPTQ quantization selected but model name/path does not indicate GPTQ weights',
+                fix='GPTQ requires a model pre-quantized with GPTQ (e.g., "TheBloke/...-GPTQ"). Using GPTQ with non-GPTQ weights will fail.'
+            ))
+    elif quant == 'fp8':
+        # FP8 requires Hopper/Ada GPU (SM 8.9+)
+        warnings.append(ValidationWarning(
+            severity='info',
+            category='config',
+            title='FP8 Quantization Note',
+            message='FP8 quantization requires Hopper (H100) or Ada (RTX 40xx) GPU with SM 8.9+',
+            fix='FP8 will work on any model but may fail on older GPUs. If startup fails, try INT8 instead.'
+        ))
+    elif quant == 'int8':
+        # INT8 is generally compatible
+        warnings.append(ValidationWarning(
+            severity='info',
+            category='config',
+            title='INT8 Quantization',
+            message='INT8 W8A8 quantization selected - provides ~2x memory savings',
+            fix=None
+        ))
+    
     return warnings
 
 

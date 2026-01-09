@@ -39,7 +39,8 @@ docker compose -f docker.compose.dev.yaml up -d --build
 **Recommendation**: Use `make up` instead - it auto-enables monitoring on Linux!
 
 Services exposed:
-- Gateway (FastAPI): `http://localhost:8084`
+- **Admin UI** (Next.js): `http://localhost:3001`
+- **Gateway** (FastAPI): `http://localhost:8084`
 - Prometheus: `http://localhost:9090`
 - PgAdmin: `http://localhost:5050` (admin@local / admin)
 
@@ -116,7 +117,10 @@ curl http://localhost:8084/admin/system/gpus
 curl http://localhost:8084/admin/system/summary
 ```
 
-All metrics are visible in the Admin UI → System Monitor page.
+All metrics are visible in the Admin UI → System Monitor page, including:
+- Per-model inference metrics (requests, tokens, latency)
+- GPU utilization and memory
+- Host CPU, memory, disk, network
 
 ## Smoke test script
 You can also run `scripts/smoke.sh` after bringing the stack up.

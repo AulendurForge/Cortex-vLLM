@@ -45,6 +45,23 @@ CORTEX is configured primarily via environment variables. Defaults are defined i
 | `HF_CACHE_DIR_HOST` | same as `HF_CACHE_DIR` | Host path for HF cache (Docker bind) |
 | `VLLM_IMAGE` | `vllm/vllm-openai:latest` | Image used for managed model containers (for offline reproducibility, pin to a tested tag and cache it via `make prepare-offline`) |
 
+## vLLM Container Environment Variables
+
+These are automatically set by Cortex when starting vLLM containers based on model configuration:
+
+| Variable | Description |
+|---|---|
+| `CUDA_VISIBLE_DEVICES` | GPU selection (set from model's `selected_gpus`) |
+| `HF_HUB_OFFLINE` | Set to `1` when `offline_mode` is enabled |
+| `VLLM_USE_V1` | Set to `1` when V1 engine is enabled |
+| `VLLM_LOGGING_LEVEL` | Set to `DEBUG` when debug logging is enabled |
+| `VLLM_TRACE_FUNCTION` | Set to `1` when trace mode is enabled |
+| `VLLM_ENGINE_ITERATION_TIMEOUT_S` | Request timeout in seconds (if configured) |
+| `NCCL_TIMEOUT` | Multi-GPU communication timeout (default: 1800) |
+| `NCCL_DEBUG` | Set to `WARN` for multi-GPU setups |
+| `NCCL_BLOCKING_WAIT` | Set to `1` for blocking NCCL operations |
+| `NCCL_LAUNCH_MODE` | Set to `PARALLEL` for optimal multi-GPU performance |
+
 ## Security guidance
 - In production, set `GATEWAY_DEV_ALLOW_ALL_KEYS=false` and configure API keys.
 - Restrict `CORS_ALLOW_ORIGINS` to the actual frontend origins; avoid `*` with credentials.

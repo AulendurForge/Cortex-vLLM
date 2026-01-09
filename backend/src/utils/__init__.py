@@ -9,6 +9,10 @@ from .custom_args_validator import (
     REQUEST_TIME_PARAMS,
     PROTECTED_ENV_VARS,
 )
+from .gpu_utils import (
+    parse_gpu_selection,
+    normalize_gpu_selection,
+)
 
 __all__ = [
     "validate_custom_startup_args",
@@ -18,4 +22,6 @@ __all__ = [
     "FORBIDDEN_CUSTOM_ARGS",
     "REQUEST_TIME_PARAMS",
     "PROTECTED_ENV_VARS",
+    "parse_gpu_selection",
+    "normalize_gpu_selection",
 ]

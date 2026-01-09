@@ -37,12 +37,22 @@ llamacpp-model-{id}
 
 **Sequence**:
 1. Admin clicks "Start" on model
-2. Backend creates/recreates container
-3. Container starts and loads model
-4. Health check begins polling
-5. Model registered in gateway registry
-6. State updated to "running" in database
-7. Registry persisted to database
+2. **Pre-start validation** (dry-run) checks VRAM, configuration
+3. If warnings exist, user confirms to proceed
+4. Backend creates/recreates container
+5. State set to `starting` → `loading`
+6. Container starts and loads model
+7. Health check begins polling (frontend polls readiness)
+8. Model registered in gateway registry
+9. State updated to `running` in database
+10. Frontend shows success toast: "Model is now running!"
+
+**State Transitions**:
+```
+stopped → starting → loading → running
+                          ↓
+                       failed (on error)
+```
 
 **Container Configuration**:
 - Restart policy: `no` (manual start only)

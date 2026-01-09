@@ -66,6 +66,19 @@ export type ModelFormValues = {
   split_mode?: string;
   cache_type_k?: string;
   cache_type_v?: string;
+  // vLLM advanced engine args (Gap #4)
+  attention_backend?: string;
+  disable_log_requests?: boolean;
+  disable_log_stats?: boolean;
+  vllm_v1_enabled?: boolean;
+  // Version-aware entrypoint (Gap #5)
+  entrypoint_override?: string;
+  // Debug logging configuration (Gap #11)
+  debug_logging?: boolean;
+  trace_mode?: boolean;
+  // Request timeout configuration (Gap #13)
+  engine_request_timeout?: number;
+  max_log_len?: number;
   // Repetition control parameters
   repetition_penalty?: number;
   frequency_penalty?: number;

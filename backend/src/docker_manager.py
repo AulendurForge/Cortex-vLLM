@@ -3,14 +3,99 @@ from __future__ import annotations
 import docker
 import os
 import re
+import json
 import logging
 from docker.models.containers import Container
 from docker.types import DeviceRequest
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 from .config import get_settings
 from .models import Model
+from .utils.gpu_utils import parse_gpu_selection
 
 logger = logging.getLogger(__name__)
+
+
+# Legacy alias for backward compatibility - use parse_gpu_selection from utils.gpu_utils
+_parse_gpu_selection = parse_gpu_selection
+
+
+def _parse_vllm_version(image_tag: str) -> tuple[int, int, int] | None:
+    """Parse vLLM version from Docker image tag.
+    
+    Args:
+        image_tag: Docker image tag like "vllm/vllm-openai:v0.6.3" or "v0.8.0"
+        
+    Returns:
+        Tuple of (major, minor, patch) or None if parsing fails
+    """
+    # Extract version from tag (handles both full image names and just tags)
+    # Examples: "vllm/vllm-openai:v0.6.3", "v0.6.3", "0.6.3", "latest"
+    version_patterns = [
+        r'v?(\d+)\.(\d+)\.(\d+)',  # v0.6.3 or 0.6.3
+        r'v?(\d+)\.(\d+)',          # v0.6 or 0.6
+    ]
+    
+    for pattern in version_patterns:
+        match = re.search(pattern, image_tag)
+        if match:
+            groups = match.groups()
+            major = int(groups[0])
+            minor = int(groups[1])
+            patch = int(groups[2]) if len(groups) > 2 else 0
+            return (major, minor, patch)
+    
+    return None
+
+
+def _get_vllm_entrypoint(image: str, entrypoint_override: str | None = None) -> list[str]:
+    """Get the appropriate vLLM entrypoint based on image version.
+    
+    vLLM entrypoints by version:
+    - v0.6.x and earlier: python3 -m vllm.entrypoints.openai.api_server
+    - v0.7.x to v0.12.x: Same module, but `vllm serve` CLI also available
+    - v0.13.x+: May require `vllm serve` or different entrypoint
+    
+    Args:
+        image: Full Docker image name with tag
+        entrypoint_override: Optional custom entrypoint string (comma-separated)
+        
+    Returns:
+        List of entrypoint command components
+    """
+    # If user provided an override, use it
+    if entrypoint_override:
+        # Support comma-separated format for complex entrypoints
+        # e.g., "vllm,serve" or "python3,-m,vllm.entrypoints.openai.api_server"
+        parts = [p.strip() for p in entrypoint_override.split(',') if p.strip()]
+        if parts:
+            logger.info(f"Using custom entrypoint override: {parts}")
+            return parts
+    
+    # Parse version from image tag
+    version = _parse_vllm_version(image)
+    
+    if version is None:
+        # Can't determine version (e.g., "latest" tag) - use conservative default
+        logger.warning(f"Cannot determine vLLM version from image '{image}', using module entrypoint")
+        return ["python3", "-m", "vllm.entrypoints.openai.api_server"]
+    
+    major, minor, patch = version
+    logger.info(f"Detected vLLM version: {major}.{minor}.{patch} from image '{image}'")
+    
+    # Version-specific entrypoint selection
+    # v0.6.x and below: Use module entrypoint (most compatible)
+    # v0.7.x - v0.12.x: Module still works, but vllm serve also available
+    # v0.13.x+: May change - we'll use module for now and add support as needed
+    
+    if major == 0 and minor >= 13:
+        # vLLM 0.13+ might use different entrypoint
+        # For now, still use module entrypoint as it should work
+        # TODO: Update when v0.13 release is finalized
+        logger.info("vLLM 0.13+ detected - using module entrypoint (monitor for changes)")
+        return ["python3", "-m", "vllm.entrypoints.openai.api_server"]
+    
+    # Default: Use module entrypoint (works for all current versions)
+    return ["python3", "-m", "vllm.entrypoints.openai.api_server"]
 
 
 class OfflineImageUnavailableError(Exception):
@@ -327,6 +412,32 @@ def _build_command(m: Model) -> list[str]:
                 cmd += ["--cuda-graph-sizes", *parts]
     except Exception:
         pass
+    # Advanced vLLM engine args (Gap #4)
+    try:
+        attention_backend = getattr(m, "attention_backend", None)
+        if attention_backend:
+            cmd += ["--attention-backend", str(attention_backend)]
+    except Exception:
+        pass
+    try:
+        if getattr(m, "disable_log_requests", None):
+            cmd += ["--disable-log-requests"]
+    except Exception:
+        pass
+    try:
+        if getattr(m, "disable_log_stats", None):
+            cmd += ["--disable-log-stats"]
+    except Exception:
+        pass
+    # Max log len (Gap #13) - valid vLLM CLI argument
+    try:
+        max_log_len = getattr(m, "max_log_len", None)
+        if max_log_len and int(max_log_len) > 0:
+            cmd += ["--max-log-len", str(int(max_log_len))]
+    except Exception:
+        pass
+    # Note: engine_request_timeout is handled via environment variables, not CLI args
+    # See _build_environment() for VLLM_ENGINE_ITERATION_TIMEOUT_S
     # Use internal API key so gateway can authenticate to this upstream
     try:
         from .config import get_settings as _gs  # local import to avoid cycles
@@ -625,34 +736,16 @@ def start_llamacpp_container_for_model(m: Model) -> Tuple[str, int]:
     # GPU configuration for Docker API (used with nvidia runtime)
     device_requests = None
     if ngl > 0:
-        # Use selected_gpus if available, otherwise use all GPUs
-        selected_gpus = getattr(m, 'selected_gpus', None)
-        if selected_gpus:
-            try:
-                import json
-                # Handle both string and list types
-                if isinstance(selected_gpus, str):
-                    gpu_indices = json.loads(selected_gpus)
-                    # If the result is still a string, parse it again
-                    if isinstance(gpu_indices, str):
-                        gpu_indices = json.loads(gpu_indices)
-                else:
-                    gpu_indices = selected_gpus
-                if gpu_indices:
-                    # Create device request for specific GPUs
-                    device_ids = [str(gpu_id) for gpu_id in gpu_indices]
-                    device_requests = [DeviceRequest(device_ids=device_ids, capabilities=[["gpu"]])]
-                    # Update NVIDIA_VISIBLE_DEVICES to only show selected GPUs
-                    environment["NVIDIA_VISIBLE_DEVICES"] = ",".join(map(str, gpu_indices))
-                else:
-                    # No GPUs selected, use CPU mode
-                    ngl = 0
-            except Exception as e:
-                print(f"[docker_manager] DEBUG: Exception in GPU parsing: {e}", flush=True)
-                # Fallback to all GPUs if parsing fails
-                device_requests = [DeviceRequest(count=-1, capabilities=[["gpu"]])]
+        # Use selected_gpus if available, otherwise use all GPUs (Gap #15 fix)
+        gpu_indices = _parse_gpu_selection(getattr(m, 'selected_gpus', None))
+        if gpu_indices:
+            # Create device request for specific GPUs
+            device_ids = [str(gpu_id) for gpu_id in gpu_indices]
+            device_requests = [DeviceRequest(device_ids=device_ids, capabilities=[["gpu"]])]
+            # Update NVIDIA_VISIBLE_DEVICES to only show selected GPUs
+            environment["NVIDIA_VISIBLE_DEVICES"] = ",".join(device_ids)
         else:
-            # No selected_gpus, use all available GPUs
+            # No specific GPUs selected, use all available GPUs
             device_requests = [DeviceRequest(count=-1, capabilities=[["gpu"]])]
     
     # Health check - llama.cpp server responds to /v1/models endpoint
@@ -769,30 +862,13 @@ def start_vllm_container_for_model(m: Model, hf_token: Optional[str] | None = No
     device_mode = (getattr(m, "device", None) or "cuda").lower()
     device_requests = None
     if device_mode != "cpu":
-        # Use selected_gpus if available, otherwise use all GPUs
-        selected_gpus = getattr(m, 'selected_gpus', None)
-        if selected_gpus:
-            try:
-                import json
-                # Handle both string and list types
-                if isinstance(selected_gpus, str):
-                    gpu_indices = json.loads(selected_gpus)
-                    # If the result is still a string, parse it again
-                    if isinstance(gpu_indices, str):
-                        gpu_indices = json.loads(gpu_indices)
-                else:
-                    gpu_indices = selected_gpus
-                if gpu_indices:
-                    # Create device request for specific GPUs
-                    device_requests = [DeviceRequest(device_ids=[str(gpu_id) for gpu_id in gpu_indices], capabilities=[["gpu"]])]
-                else:
-                    # No GPUs selected, use CPU mode
-                    device_mode = "cpu"
-            except (json.JSONDecodeError, ValueError):
-                # Fallback to all GPUs if parsing fails
-                device_requests = [DeviceRequest(count=-1, capabilities=[["gpu"]])]
+        # Use selected_gpus if available, otherwise use all GPUs (Gap #15 fix)
+        gpu_indices = _parse_gpu_selection(getattr(m, 'selected_gpus', None))
+        if gpu_indices:
+            # Create device request for specific GPUs
+            device_requests = [DeviceRequest(device_ids=[str(gpu_id) for gpu_id in gpu_indices], capabilities=[["gpu"]])]
         else:
-            # No selected_gpus, use all available GPUs
+            # No specific GPUs selected, use all available GPUs
             device_requests = [DeviceRequest(count=-1, capabilities=[["gpu"]])]
 
     # NCCL/SHM defaults to improve multi-GPU stability inside containers
@@ -808,6 +884,36 @@ def start_vllm_container_for_model(m: Model, hf_token: Optional[str] | None = No
         environment.setdefault("NCCL_LAUNCH_MODE", "GROUP")  # Recommended for deterministic behavior
         # Reduce CUDA memory fragmentation in PyTorch allocator
         environment.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+    except Exception:
+        pass
+    
+    # vLLM V1 engine selection (Gap #4 / #9)
+    try:
+        if getattr(m, "vllm_v1_enabled", None):
+            environment["VLLM_USE_V1"] = "1"
+            logger.info(f"Model {m.id}: Enabling vLLM V1 engine")
+    except Exception:
+        pass
+    
+    # Debug logging configuration (Gap #11)
+    try:
+        if getattr(m, "debug_logging", None):
+            environment["VLLM_LOGGING_LEVEL"] = "DEBUG"
+            logger.info(f"Model {m.id}: Enabling debug logging")
+        if getattr(m, "trace_mode", None):
+            environment["VLLM_TRACE_FUNCTION"] = "1"
+            environment["CUDA_LAUNCH_BLOCKING"] = "1"  # Sync CUDA for debugging
+            logger.warning(f"Model {m.id}: Trace mode enabled - significant performance impact!")
+    except Exception:
+        pass
+    
+    # Request timeout configuration (Gap #13) - via environment variables
+    try:
+        engine_request_timeout = getattr(m, "engine_request_timeout", None)
+        if engine_request_timeout and int(engine_request_timeout) > 0:
+            # VLLM_ENGINE_ITERATION_TIMEOUT_S is the correct env var for server timeout
+            environment["VLLM_ENGINE_ITERATION_TIMEOUT_S"] = str(int(engine_request_timeout))
+            logger.info(f"Model {m.id}: Setting engine timeout to {engine_request_timeout}s")
     except Exception:
         pass
     
@@ -861,18 +967,21 @@ def start_vllm_container_for_model(m: Model, hf_token: Optional[str] | None = No
         pass
 
     # Build final command and log for troubleshooting.
-    # IMPORTANT: Newer vLLM Docker images use a `vllm` CLI entrypoint, while older ones used
-    # python api_server entrypoints. To make Cortex compatible across versions, we explicitly
-    # set the container ENTRYPOINT to the OpenAI API server module and pass only flags as CMD.
+    # Version-aware entrypoint selection (Gap #5):
+    # Different vLLM versions may require different entrypoints. We detect the version
+    # from the image tag and select the appropriate entrypoint, or use a custom override.
+    entrypoint_override = getattr(m, 'entrypoint_override', None)
+    entrypoint = _get_vllm_entrypoint(image, entrypoint_override)
+    
     preview_cmd = _build_command(m)
     try:
-        print("[docker_manager] starting model", m.id, "cmd:", preview_cmd, flush=True)
+        print(f"[docker_manager] starting model {m.id} with entrypoint: {entrypoint}, cmd: {preview_cmd}", flush=True)
     except Exception:
         pass
     container: Container = cli.containers.run(
         image=image,
         name=name,
-        entrypoint=["python3", "-m", "vllm.entrypoints.openai.api_server"],
+        entrypoint=entrypoint,
         command=preview_cmd,
         detach=True,
         environment=environment,

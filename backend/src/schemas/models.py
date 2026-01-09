@@ -57,6 +57,19 @@ class ModelItem(BaseModel):
     split_mode: Optional[str] = None
     cache_type_k: Optional[str] = None
     cache_type_v: Optional[str] = None
+    # vLLM advanced engine args (Gap #4)
+    attention_backend: Optional[str] = None
+    disable_log_requests: Optional[bool] = None
+    disable_log_stats: Optional[bool] = None
+    vllm_v1_enabled: Optional[bool] = None
+    # Version-aware entrypoint (Gap #5)
+    entrypoint_override: Optional[str] = None
+    # Debug logging configuration (Gap #11)
+    debug_logging: Optional[bool] = None
+    trace_mode: Optional[bool] = None
+    # Request timeout configuration (Gap #13)
+    engine_request_timeout: Optional[int] = None
+    max_log_len: Optional[int] = None
     # Request defaults (Plane C - Phase 1)
     request_defaults_json: Optional[str] = None
     request_timeout_sec: Optional[int] = None
@@ -127,6 +140,19 @@ class CreateModelRequest(BaseModel):
     split_mode: Optional[str] = None
     cache_type_k: Optional[str] = None
     cache_type_v: Optional[str] = None
+    # vLLM advanced engine args (Gap #4)
+    attention_backend: Optional[str] = None
+    disable_log_requests: Optional[bool] = None
+    disable_log_stats: Optional[bool] = None
+    vllm_v1_enabled: Optional[bool] = None
+    # Version-aware entrypoint (Gap #5)
+    entrypoint_override: Optional[str] = None
+    # Debug logging configuration (Gap #11)
+    debug_logging: Optional[bool] = None
+    trace_mode: Optional[bool] = None
+    # Request timeout configuration (Gap #13)
+    engine_request_timeout: Optional[int] = None
+    max_log_len: Optional[int] = None
     # Repetition control parameters (stored in both old columns and request_defaults_json)
     repetition_penalty: Optional[float] = None
     frequency_penalty: Optional[float] = None
@@ -194,6 +220,19 @@ class UpdateModelRequest(BaseModel):
     split_mode: Optional[str] = None
     cache_type_k: Optional[str] = None
     cache_type_v: Optional[str] = None
+    # vLLM advanced engine args (Gap #4)
+    attention_backend: Optional[str] = None
+    disable_log_requests: Optional[bool] = None
+    disable_log_stats: Optional[bool] = None
+    vllm_v1_enabled: Optional[bool] = None
+    # Version-aware entrypoint (Gap #5)
+    entrypoint_override: Optional[str] = None
+    # Debug logging configuration (Gap #11)
+    debug_logging: Optional[bool] = None
+    trace_mode: Optional[bool] = None
+    # Request timeout configuration (Gap #13)
+    engine_request_timeout: Optional[int] = None
+    max_log_len: Optional[int] = None
     # Repetition control parameters (stored in both old columns and request_defaults_json)
     repetition_penalty: Optional[float] = None
     frequency_penalty: Optional[float] = None

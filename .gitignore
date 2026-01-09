@@ -5,6 +5,7 @@ node_modules/
 out/
 dist/
 *.log
+.next-dev.pid
 .env.local
 .env*.local
 .env
@@ -53,3 +54,8 @@ cortexUpgrade*.md
 *_ENHANCEMENTS.md
 
 # Note: security_review/ is now tracked in version control for compliance
+
+# API keys and secrets (never commit these)
+key.json
+*.key.json
+secrets.json

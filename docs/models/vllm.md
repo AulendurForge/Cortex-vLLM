@@ -183,7 +183,7 @@ kv_cache_dtype: "fp8_e5m2"     # 5-bit exponent, 2-bit mantissa
 Host Machine
 ├─ Docker Network: cortex_default
 └─ vLLM Container: vllm-model-{id}
-   ├─ Image: vllm/vllm-openai:latest
+   ├─ Image: vllm/vllm-openai:latest (or pinned version)
    ├─ Port: 8000 (internal) → Ephemeral host port
    ├─ Network: Service-to-service via container name
    ├─ Volumes:
@@ -192,12 +192,24 @@ Host Machine
    ├─ Environment:
    │  ├─ CUDA_VISIBLE_DEVICES=all
    │  ├─ NCCL_* (multi-GPU config)
-   │  └─ HF_HUB_TOKEN (for gated models)
+   │  ├─ HF_HUB_TOKEN (for gated models)
+   │  ├─ VLLM_USE_V1 (if V1 engine enabled)
+   │  ├─ VLLM_ENGINE_ITERATION_TIMEOUT_S (request timeout)
+   │  └─ VLLM_LOGGING_LEVEL (if debug enabled)
    └─ Resources:
       ├─ GPU: All available (via DeviceRequest)
       ├─ SHM: 2GB
       └─ IPC: host mode
 ```
+
+### Version-Aware Entrypoint
+
+Cortex automatically selects the correct entrypoint based on vLLM version:
+
+- **vLLM ≥ 0.4.0**: Uses `vllm serve` command
+- **vLLM < 0.4.0**: Uses `python3 -m vllm.entrypoints.openai.api_server`
+
+You can also override the entrypoint manually via the `entrypoint_override` field in the Model Form for custom deployment scenarios.
 
 ### Startup Command Example
 
@@ -296,6 +308,51 @@ swap_space_gb: 16  # Allow 16GB CPU RAM for KV cache
 
 # Use when: Long contexts, tight VRAM
 # Impact: Latency increases, but prevents OOM
+```
+
+### Production Settings (New in 2025)
+
+**1. Attention Backend** (Performance tuning):
+```python
+attention_backend: "FLASH_ATTN"  # Force specific attention implementation
+
+# Options: AUTO (default), FLASH_ATTN, XFORMERS, etc.
+# Use to optimize for specific GPU architectures
+```
+
+**2. Log Control** (Production cleanliness):
+```python
+disable_log_requests: True   # Suppress per-request logging
+disable_log_stats: True      # Suppress periodic stats logging
+
+# Reduces log volume significantly in production
+# Recommended for high-throughput deployments
+```
+
+**3. V1 Engine** (Experimental):
+```python
+vllm_v1_enabled: True  # Enable experimental vLLM V1 engine
+
+# ⚠️ Breaking changes: best_of>1 not supported in V1
+# Cortex will warn via X-Cortex-Warnings header if incompatible params detected
+```
+
+**4. Request Timeout** (Long inference protection):
+```python
+request_timeout_sec: 600  # 10 minutes
+
+# Sets VLLM_ENGINE_ITERATION_TIMEOUT_S environment variable
+# NOTE: This is NOT a CLI argument (--request-timeout is invalid)
+# Prevents hung requests from blocking resources
+```
+
+**5. Debug Logging** (Troubleshooting):
+```python
+debug_logging: True   # Sets VLLM_LOGGING_LEVEL=DEBUG
+trace_mode: True      # Sets VLLM_TRACE_FUNCTION=1
+
+# Use for debugging startup/inference issues
+# Disable in production (verbose output)
 ```
 
 ### Throughput Optimization
@@ -623,9 +680,30 @@ Results:
 
 ---
 
-## Resource Calculator
+## Resource Calculator & Pre-Start Validation
 
-Cortex includes a built-in calculator (Models page → Resource Calculator):
+### VRAM Estimation (Dry-Run)
+
+Before starting a model, Cortex validates the configuration:
+
+```
+Click "Start" → Dry-Run Validation → Warnings Shown → Confirm → Container Starts
+```
+
+**What gets validated:**
+- Estimated VRAM usage vs available GPU memory
+- Quantization method compatibility with model type
+- Path existence for offline models
+- GGUF tokenizer availability in offline mode
+
+**Example warning:**
+```
+⚠️ Potential Issues Detected
+- Quantization 'awq' may not work: model path doesn't contain 'awq'
+- Ensure you're using a pre-quantized AWQ model checkpoint
+```
+
+### Resource Calculator (Models page → Resource Calculator)
 
 **Inputs:**
 - Model parameters (7B, 70B, etc.)

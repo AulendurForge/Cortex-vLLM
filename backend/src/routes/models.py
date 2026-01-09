@@ -1,11 +1,20 @@
+from __future__ import annotations
+
+import logging
+import os
+import time
+import re
+import json
+
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from typing import Optional, List, Any
-import json
+from sqlalchemy import select, update, delete
+
 from ..auth import require_admin
 from ..config import get_settings
 from ..models import Model, ConfigKV
-from sqlalchemy import select, update, delete
 from ..docker_manager import start_container_for_model, stop_container_for_model, tail_logs_for_model, OfflineImageUnavailableError
 from ..services.registry_persistence import persist_model_registry
 from ..services.model_testing import ModelTestResult, ReadinessResp, test_chat_model, test_embedding_model, check_model_readiness
@@ -13,15 +22,12 @@ from ..services.folder_inspector import inspect_model_folder
 from ..services.hf_inspector import fetch_hf_config
 from ..schemas.models import ModelItem, CreateModelRequest, UpdateModelRequest, BaseDirCfg, InspectFolderResp, HfConfigResp
 from ..utils.gguf_utils import GGUFGroup, detect_quantization_from_filename, find_gguf_files_recursive, analyze_gguf_files
-import httpx
-import os
-import time
-import re
-import logging
+from ..utils.gpu_utils import normalize_gpu_selection as _normalize_gpu_selection
 from ..state import register_model_endpoint, unregister_model_endpoint
 from ..state import get_model_registry as _get_registry
 
 logger = logging.getLogger(__name__)
+
 
 def _get_session():
     try:
@@ -76,7 +82,7 @@ async def list_models(_: dict = Depends(require_admin)):
                 engine_image=getattr(r, 'engine_image', None),
                 engine_version=getattr(r, 'engine_version', None),
                 engine_digest=getattr(r, 'engine_digest', None),
-                selected_gpus=json.loads(getattr(r, 'selected_gpus', None) or '[]') if getattr(r, 'selected_gpus', None) else None,
+                selected_gpus=_normalize_gpu_selection(getattr(r, 'selected_gpus', None)),
                 ngl=getattr(r, 'ngl', None),
                 tensor_split=getattr(r, 'tensor_split', None),
                 batch_size=getattr(r, 'batch_size', None),
@@ -93,6 +99,19 @@ async def list_models(_: dict = Depends(require_admin)):
                 split_mode=getattr(r, 'split_mode', None),
                 cache_type_k=getattr(r, 'cache_type_k', None),
                 cache_type_v=getattr(r, 'cache_type_v', None),
+                # vLLM advanced engine args (Gap #4)
+                attention_backend=getattr(r, 'attention_backend', None),
+                disable_log_requests=getattr(r, 'disable_log_requests', None),
+                disable_log_stats=getattr(r, 'disable_log_stats', None),
+                vllm_v1_enabled=getattr(r, 'vllm_v1_enabled', None),
+                # Version-aware entrypoint (Gap #5)
+                entrypoint_override=getattr(r, 'entrypoint_override', None),
+                # Debug logging configuration (Gap #11)
+                debug_logging=getattr(r, 'debug_logging', None),
+                trace_mode=getattr(r, 'trace_mode', None),
+                # Request timeout configuration (Gap #13)
+                engine_request_timeout=getattr(r, 'engine_request_timeout', None),
+                max_log_len=getattr(r, 'max_log_len', None),
                 # Request defaults (Plane C - Phase 1)
                 request_defaults_json=getattr(r, 'request_defaults_json', None),
                 request_timeout_sec=getattr(r, 'request_timeout_sec', None),
@@ -273,6 +292,19 @@ async def create_model(body: CreateModelRequest, _: dict = Depends(require_admin
             split_mode=body.split_mode,
             cache_type_k=body.cache_type_k,
             cache_type_v=body.cache_type_v,
+            # vLLM advanced engine args (Gap #4)
+            attention_backend=getattr(body, 'attention_backend', None),
+            disable_log_requests=getattr(body, 'disable_log_requests', None),
+            disable_log_stats=getattr(body, 'disable_log_stats', None),
+            vllm_v1_enabled=getattr(body, 'vllm_v1_enabled', None),
+            # Version-aware entrypoint (Gap #5)
+            entrypoint_override=getattr(body, 'entrypoint_override', None),
+            # Debug logging configuration (Gap #11)
+            debug_logging=getattr(body, 'debug_logging', None),
+            trace_mode=getattr(body, 'trace_mode', None),
+            # Request timeout configuration (Gap #13)
+            engine_request_timeout=getattr(body, 'engine_request_timeout', None),
+            max_log_len=getattr(body, 'max_log_len', None),
             # Keep old columns for backward compat (Phase 1)
             repetition_penalty=body.repetition_penalty,
             frequency_penalty=body.frequency_penalty,
@@ -611,7 +643,8 @@ async def start_model(model_id: int, _: dict = Depends(require_admin)):
                         f"http://{name}:8000", 
                         m.task or "generate",
                         engine_type=getattr(m, 'engine_type', 'vllm'),
-                        request_defaults_json=getattr(m, 'request_defaults_json', None)
+                        request_defaults_json=getattr(m, 'request_defaults_json', None),
+                        vllm_v1_enabled=getattr(m, 'vllm_v1_enabled', None),
                     )
                     # Persist registry after register
                     await persist_model_registry()
@@ -737,7 +770,8 @@ async def apply_model_changes(model_id: int, _: dict = Depends(require_admin)):
                     f"http://{name}:8000", 
                     m.task or "generate",
                     engine_type=getattr(m, 'engine_type', 'vllm'),
-                    request_defaults_json=getattr(m, 'request_defaults_json', None)
+                    request_defaults_json=getattr(m, 'request_defaults_json', None),
+                    vllm_v1_enabled=getattr(m, 'vllm_v1_enabled', None),
                 )
                 # Persist registry after register
                 await persist_model_registry()
@@ -972,7 +1006,30 @@ async def model_readiness(model_id: int, _: dict = Depends(require_admin)):
             # Model is loading - check actual container health
             if not m.container_name:
                 return ReadinessResp(status="loading", detail="container_starting")
-            # Container exists, check if health endpoint responds
+            
+            # CRITICAL: Check if container is still running before checking health endpoint
+            # This catches cases where container exited due to startup errors
+            try:
+                import docker
+                cli = docker.from_env()
+                container = cli.containers.get(m.container_name)
+                container_status = container.status
+                
+                if container_status not in ('running', 'created', 'restarting'):
+                    # Container exited - mark as failed
+                    await session.execute(update(Model).where(Model.id == model_id).values(state="failed"))
+                    await session.commit()
+                    logger.warning(f"Model {model_id} container exited with status: {container_status}")
+                    return ReadinessResp(status="error", detail=f"container_exited_{container_status}")
+            except docker.errors.NotFound:
+                # Container disappeared - mark as failed
+                await session.execute(update(Model).where(Model.id == model_id).values(state="failed"))
+                await session.commit()
+                return ReadinessResp(status="error", detail="container_not_found")
+            except Exception as e:
+                logger.debug(f"Container status check for {m.container_name}: {e}")
+            
+            # Container exists and running, check if health endpoint responds
             result = await check_model_readiness(m.container_name, m.served_model_name)
             if result.status == "ready":
                 # Model is now ready - update state to running
@@ -982,7 +1039,12 @@ async def model_readiness(model_id: int, _: dict = Depends(require_admin)):
             # Still loading (or error)
             if result.status == "loading":
                 return ReadinessResp(status="loading", detail=result.detail or "model_initializing")
-            # For errors, still return loading status (model might be initializing)
+            # For errors, check if it's a terminal error
+            if result.status == "error" and "engine_dead" in (result.detail or ""):
+                await session.execute(update(Model).where(Model.id == model_id).values(state="failed"))
+                await session.commit()
+                return result
+            # For other errors, still return loading status (model might be initializing)
             return ReadinessResp(status="loading", detail="model_initializing")
         if m.state != "running":
             return ReadinessResp(status="error", detail=f"unknown_state_{m.state}")
