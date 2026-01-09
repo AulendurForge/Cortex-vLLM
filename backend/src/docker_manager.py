@@ -796,10 +796,16 @@ def start_vllm_container_for_model(m: Model, hf_token: Optional[str] | None = No
             device_requests = [DeviceRequest(count=-1, capabilities=[["gpu"]])]
 
     # NCCL/SHM defaults to improve multi-GPU stability inside containers
+    # These settings prevent indefinite hangs and improve error reporting
     try:
         environment.setdefault("NCCL_P2P_DISABLE", "1")  # safer default across docker hosts
         environment.setdefault("NCCL_IB_DISABLE", "1")   # disable InfiniBand when not present
         environment.setdefault("NCCL_SHM_DISABLE", "0")  # allow SHM for intra-node comms
+        # Critical: Prevent indefinite hangs on NCCL errors
+        environment.setdefault("NCCL_TIMEOUT", "1800")   # 30 minute timeout (in seconds)
+        environment.setdefault("NCCL_DEBUG", "WARN")     # Production default: warnings only
+        environment.setdefault("NCCL_BLOCKING_WAIT", "0")  # Non-blocking wait for better responsiveness
+        environment.setdefault("NCCL_LAUNCH_MODE", "GROUP")  # Recommended for deterministic behavior
         # Reduce CUDA memory fragmentation in PyTorch allocator
         environment.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
     except Exception:
@@ -818,16 +824,27 @@ def start_vllm_container_for_model(m: Model, hf_token: Optional[str] | None = No
         logger.warning(f"Failed to parse custom env vars for model {m.id}: {e}")
 
     # Healthcheck: hit local /health.
-    # Use python instead of wget/curl to avoid depending on extra packages inside the vLLM image.
+    # Health check using curl with fallback to Python for compatibility.
+    # Distinguishes between:
+    #   - 200: healthy (engine running and ready)
+    #   - 503: unhealthy (EngineDeadError - engine crashed)
+    #   - No response: starting (engine not yet listening)
+    # 
+    # The vLLM /health endpoint returns:
+    #   - 200 OK when engine is healthy
+    #   - 503 Service Unavailable when engine is dead (EngineDeadError)
     healthcheck = {
         "Test": [
             "CMD-SHELL",
-            "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3).read(); print('ok')\" >/dev/null 2>&1 || exit 1",
+            # Try curl first (faster, more robust), fallback to Python
+            "(curl -sf http://localhost:8000/health -o /dev/null 2>/dev/null && exit 0) || "
+            "(python3 -c \"import urllib.request; r=urllib.request.urlopen('http://localhost:8000/health', timeout=3); exit(0 if r.status==200 else 1)\" 2>/dev/null && exit 0) || "
+            "exit 1",
         ],
         "Interval": 10_000_000_000,  # 10s ns
         "Timeout": 5_000_000_000,    # 5s ns
         "Retries": 3,
-        "StartPeriod": 30_000_000_000,
+        "StartPeriod": 60_000_000_000,  # 60s for larger models (was 30s)
     }
 
     # publish container port 8000 to an ephemeral host port (still useful for logs/debug),

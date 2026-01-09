@@ -161,7 +161,7 @@ export const ModelItemSchema = z.object({
   split_mode: z.string().nullable().optional(),
   cache_type_k: z.string().nullable().optional(),
   cache_type_v: z.string().nullable().optional(),
-  state: z.enum(['stopped', 'starting', 'running', 'failed']).or(z.string()),
+  state: z.enum(['stopped', 'starting', 'loading', 'running', 'failed']).or(z.string()),
   port: z.number().nullable().optional(),
   container_name: z.string().nullable().optional(),
   archived: z.boolean().optional().default(false),

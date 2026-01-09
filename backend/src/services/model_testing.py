@@ -205,10 +205,17 @@ async def check_model_readiness(container_name: str, served_model_name: str) -> 
     
     try:
         from ..main import http_client  # type: ignore
+        from ..config import get_settings
+        settings = get_settings()
+        api_key = settings.INTERNAL_VLLM_API_KEY or "dev-internal-token"
+        
         r = await http_client.post(
             f"{base_url}/v1/chat/completions",
             json=request_data,
-            headers={"Content-Type": "application/json"},
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}",
+            },
             timeout=httpx.Timeout(connect=2.0, read=2.0, write=2.0, pool=5.0),
         )
         

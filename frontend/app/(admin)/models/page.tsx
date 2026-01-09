@@ -38,6 +38,9 @@ export default function ModelsPage() {
   const [saveRecipeOpen, setSaveRecipeOpen] = React.useState(false);
   const [saveRecipeModelId, setSaveRecipeModelId] = React.useState<number | null>(null);
   const [myRecipesOpen, setMyRecipesOpen] = React.useState(false);
+  
+  // Track previous model states to detect transitions (loading → running)
+  const prevStatesRef = React.useRef<Record<number, string>>({});
 
   const list = useQuery({
     queryKey: ['models', isAdmin],
@@ -45,7 +48,23 @@ export default function ModelsPage() {
       try {
         if (isAdmin) {
           const raw = await apiFetch<any>('/admin/models');
-          return ModelListSchema.parse(raw);
+          const models = ModelListSchema.parse(raw);
+          
+          // For models in 'loading' state, poll their readiness to trigger state updates
+          // The readiness endpoint auto-updates state to 'running' when model becomes ready
+          for (const m of models) {
+            if ((m as any).state === 'loading') {
+              try {
+                await apiFetch(`/admin/models/${(m as any).id}/readiness`);
+              } catch {
+                // Ignore errors - model may still be loading
+              }
+            }
+          }
+          
+          // Re-fetch to get updated states after readiness checks
+          const updated = await apiFetch<any>('/admin/models');
+          return ModelListSchema.parse(updated);
         }
         const raw = await apiFetch<any>('/v1/models/status');
         const arr = Array.isArray(raw?.data) ? raw.data : [];
@@ -60,7 +79,47 @@ export default function ModelsPage() {
       } catch { return [] as any[]; }
     },
     staleTime: 5000,
+    // Poll more frequently when models are in loading state to update UI
+    refetchInterval: (query) => {
+      const data = query.state.data as any[];
+      const hasLoading = data?.some((m: any) => m.state === 'loading' || m.state === 'starting');
+      return hasLoading ? 3000 : 15000; // 3s when loading, 15s otherwise
+    },
   });
+
+  // Detect state transitions and show appropriate toasts
+  React.useEffect(() => {
+    if (!list.data) return;
+    
+    const models = list.data as any[];
+    const prevStates = prevStatesRef.current;
+    
+    for (const m of models) {
+      const prevState = prevStates[m.id];
+      const currState = m.state;
+      
+      // Show success toast when model transitions from loading → running
+      if (prevState === 'loading' && currState === 'running') {
+        addToast({ 
+          title: `${m.name} is now running!`, 
+          description: 'Model ready for inference requests',
+          kind: 'success' 
+        });
+      }
+      
+      // Show error toast when model transitions from loading → failed
+      if (prevState === 'loading' && currState === 'failed') {
+        addToast({ 
+          title: `${m.name} failed to start`, 
+          description: "Check 'Logs' for error details",
+          kind: 'error' 
+        });
+      }
+      
+      // Update tracked state
+      prevStates[m.id] = currState;
+    }
+  }, [list.data, addToast]);
 
   const create = useMutation({
     mutationFn: async (payload: ModelFormValues) => {
@@ -78,7 +137,7 @@ export default function ModelsPage() {
     mutationFn: async (id: number) => apiFetch(`/admin/models/${id}/start`, { method: 'POST' }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['models'] });
-      addToast({ title: 'Model started successfully', kind: 'success' });
+      addToast({ title: 'Container initialization started', description: "Select 'Logs' to monitor progress", kind: 'info' });
     },
     onError: (e: any) => {
       // Parse error message to provide actionable feedback
@@ -220,14 +279,14 @@ export default function ModelsPage() {
                 </td>
                 {isAdmin && (<td className="text-[11px]">{m.engine_type === 'llamacpp' && m.tensor_split ? (m.tensor_split.split(',').length) : (m.tp_size ?? '-')}</td>)}
                 {isAdmin && (<td className="text-[11px]">{m.dtype ?? '-'}</td>)}
-                <td><Badge className={cn("text-[9px]", m.state === 'running' ? 'bg-green-500/20 text-green-200' : m.state === 'starting' ? 'bg-amber-500/20 text-amber-200' : m.state === 'failed' ? 'bg-red-500/20 text-red-200' : 'bg-white/10 text-white/40')}>{m.state}</Badge></td>
+                <td><Badge className={cn("text-[9px]", m.state === 'running' ? 'bg-green-500/20 text-green-200' : m.state === 'loading' ? 'bg-cyan-500/20 text-cyan-200 animate-pulse' : m.state === 'starting' ? 'bg-amber-500/20 text-amber-200' : m.state === 'failed' ? 'bg-red-500/20 text-red-200' : 'bg-white/10 text-white/40')}>{m.state?.toUpperCase()}</Badge></td>
                 {isAdmin && (
                   <td className="text-right">
                     <div className="flex items-center justify-end gap-1.5">
                       <Button size="sm" onClick={()=>setLogsFor(m.id)}>Logs</Button>
                       <Button size="sm" variant="purple" onClick={()=>{ setSaveRecipeModelId(m.id); setSaveRecipeOpen(true); }}>Recipe</Button>
-                      {m.state === 'running' && (<Button size="sm" variant="cyan" onClick={()=>testModel.mutate(m.id)} disabled={testingId === m.id}>Test</Button>)}
-                      {m.state !== 'running' ? (
+                      {(m.state === 'running' || m.state === 'loading') && (<Button size="sm" variant="cyan" onClick={()=>testModel.mutate(m.id)} disabled={testingId === m.id || m.state === 'loading'}>Test</Button>)}
+                      {m.state !== 'running' && m.state !== 'loading' ? (
                         <Button 
                           size="sm" 
                           variant="primary" 
@@ -239,11 +298,11 @@ export default function ModelsPage() {
                       ) : (
                         <Button 
                           size="sm" 
-                          variant="danger" 
+                          variant={m.state === 'loading' ? 'default' : 'danger'} 
                           onClick={()=>stop.mutate(m.id)} 
                           disabled={stop.isPending && stop.variables === m.id}
                         >
-                          {stop.isPending && stop.variables === m.id ? '...' : 'Stop'}
+                          {stop.isPending && stop.variables === m.id ? '...' : m.state === 'loading' ? 'Cancel' : 'Stop'}
                         </Button>
                       )}
                       <Button size="sm" onClick={()=>setConfigId(m.id)}>Config</Button>

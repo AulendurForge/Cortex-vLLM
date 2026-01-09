@@ -223,13 +223,13 @@ export function VLLMConfiguration({ values, gpuCount, onChange }: VLLMConfigurat
           </label>
           <div className="text-sm flex items-center gap-2 mt-6">
             <label className="inline-flex items-center gap-2">
-              <input type="checkbox" checked={!!values.enablePrefixCaching} onChange={(e) => onChange('enablePrefixCaching', e.target.checked)} />
+              <input type="checkbox" checked={!!values.enable_prefix_caching} onChange={(e) => onChange('enable_prefix_caching', e.target.checked)} />
               Enable prefix caching 
               <Tooltip text="Also called '--enable-prefix-caching'. Speeds up repeated prefixes across requests." />
             </label>
           </div>
           <label className="text-sm">Prefix cache hash
-            <select className="input mt-1" value={values.prefixCachingHashAlgo || ''} onChange={(e) => onChange('prefixCachingHashAlgo', e.target.value)}>
+            <select className="input mt-1" value={values.prefix_caching_hash_algo || ''} onChange={(e) => onChange('prefix_caching_hash_algo', e.target.value)}>
               <option value="">builtin</option>
               <option value="sha256">sha256</option>
               <option value="sha256_cbor_64bit">sha256_cbor_64bit</option>
@@ -240,7 +240,7 @@ export function VLLMConfiguration({ values, gpuCount, onChange }: VLLMConfigurat
           </label>
           <div className="text-sm flex items-center gap-2 mt-6">
             <label className="inline-flex items-center gap-2">
-              <input type="checkbox" checked={!!values.enableChunkedPrefill} onChange={(e) => onChange('enableChunkedPrefill', e.target.checked)} />
+              <input type="checkbox" checked={!!values.enable_chunked_prefill} onChange={(e) => onChange('enable_chunked_prefill', e.target.checked)} />
               Enable chunked prefill 
               <Tooltip text="Also called '--enable-chunked-prefill'. Improves prefill throughput for long prompts." />
             </label>
@@ -252,10 +252,10 @@ export function VLLMConfiguration({ values, gpuCount, onChange }: VLLMConfigurat
               min={1}
               max={2048}
               step={1}
-              value={values.maxNumSeqs ?? 256}
-              onChange={(e) => onChange('maxNumSeqs', Number(e.target.value))}
+              value={values.max_num_seqs ?? 256}
+              onChange={(e) => onChange('max_num_seqs', Number(e.target.value))}
             />
-            <div className="text-[11px] text-white/60">{values.maxNumSeqs ?? 256}</div>
+            <div className="text-[11px] text-white/60">{values.max_num_seqs ?? 256}</div>
             <p className="text-[11px] text-white/50 mt-1">
               Upper bound for concurrently active sequences. 
               <Tooltip text="Also called '--max-num-seqs'. Higher values increase concurrency and can improve throughput for many small requests, but consume more VRAM and may raise latency. Start 128–512; increase only if VRAM headroom allows." />
@@ -265,10 +265,10 @@ export function VLLMConfiguration({ values, gpuCount, onChange }: VLLMConfigurat
             <input 
               className="input mt-1" 
               placeholder="e.g., 4096, 8192" 
-              value={values.cudaGraphSizes || ''}
+              value={values.cuda_graph_sizes || ''}
               onChange={(e) => {
                 const cleaned = (e.target.value || '').replace(/[^0-9,\s]/g, '');
-                onChange('cudaGraphSizes', cleaned);
+                onChange('cuda_graph_sizes', cleaned);
               }} 
             />
             <p className="text-[11px] text-white/50 mt-1">
@@ -286,8 +286,8 @@ export function VLLMConfiguration({ values, gpuCount, onChange }: VLLMConfigurat
           <label className="text-sm">Pipeline parallel size
             <select 
               className="input mt-1" 
-              value={(values.pipelineParallelSize ?? 1)} 
-              onChange={(e) => onChange('pipelineParallelSize', Number(e.target.value))} 
+              value={(values.pipeline_parallel_size ?? 1)} 
+              onChange={(e) => onChange('pipeline_parallel_size', Number(e.target.value))} 
               disabled={(values.device || 'cuda') === 'cpu'}
             >
               {Array.from({ length: Math.max(1, (gpuCount && gpuCount > 0) ? Math.min(8, gpuCount) : 8) }, (_, i) => i + 1).map((n) => (

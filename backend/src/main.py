@@ -261,8 +261,9 @@ async def on_shutdown():
             from .docker_manager import stop_container_for_model
             
             async with SessionLocal() as session:
-                # Get all running models
-                result = await session.execute(_sel(Model).where(Model.state == "running"))
+                # Get all running or loading models
+                from sqlalchemy import or_
+                result = await session.execute(_sel(Model).where(or_(Model.state == "running", Model.state == "loading")))
                 running_models = result.scalars().all()
                 
                 for m in running_models:
@@ -272,9 +273,9 @@ async def on_shutdown():
                     except Exception as e:
                         print(f"[shutdown] Failed to stop model {m.id}: {e}", flush=True)
                 
-                # Update all to stopped state
+                # Update all running/loading to stopped state
                 from sqlalchemy import update as _upd
-                await session.execute(_upd(Model).where(Model.state == "running").values(state="stopped", container_name=None, port=None))
+                await session.execute(_upd(Model).where(or_(Model.state == "running", Model.state == "loading")).values(state="stopped", container_name=None, port=None))
                 await session.commit()
                 print(f"[shutdown] Stopped {len(running_models)} model container(s)", flush=True)
     except Exception as e:

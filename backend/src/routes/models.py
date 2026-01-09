@@ -117,6 +117,43 @@ async def create_model(body: CreateModelRequest, _: dict = Depends(require_admin
     if body.mode == "offline" and not body.local_path:
         raise HTTPException(status_code=400, detail="local_path_required")
     
+    # Validate GGUF tokenizer availability in offline mode
+    # This catches the common issue where users specify a HuggingFace tokenizer 
+    # for GGUF models in offline mode, which will fail at container start time
+    if body.mode == "offline" and body.engine_type == "vllm":
+        is_gguf = body.local_path and str(body.local_path).lower().endswith('.gguf')
+        if is_gguf and body.tokenizer:
+            tokenizer = str(body.tokenizer).strip()
+            # Check if tokenizer looks like a HuggingFace repo ID (contains "/")
+            # and not a local path (doesn't start with "/" or "./" or contain "\\")
+            is_hf_tokenizer = (
+                "/" in tokenizer and 
+                not tokenizer.startswith("/") and 
+                not tokenizer.startswith("./") and
+                "\\" not in tokenizer
+            )
+            if is_hf_tokenizer:
+                # In offline mode with HF tokenizer, check if it's in HF cache
+                from ..config import get_settings
+                settings = get_settings()
+                hf_cache = settings.HF_CACHE_DIR or "/var/cortex/hf-cache"
+                
+                # HuggingFace cache stores repos as models--org--repo format
+                cache_folder_name = f"models--{tokenizer.replace('/', '--')}"
+                tokenizer_cache_path = os.path.join(hf_cache, "hub", cache_folder_name)
+                
+                if not os.path.isdir(tokenizer_cache_path):
+                    # Tokenizer not cached - provide actionable error
+                    raise HTTPException(
+                        status_code=400, 
+                        detail=f"gguf_tokenizer_not_cached: The tokenizer '{tokenizer}' is not available in "
+                               f"the HuggingFace cache. In offline mode, vLLM cannot download tokenizers. "
+                               f"Options: 1) Use hf_config_path to point to a local directory containing "
+                               f"tokenizer files (tokenizer.json, tokenizer_config.json, etc.). "
+                               f"2) Pre-cache the tokenizer by running 'huggingface-cli download {tokenizer}' "
+                               f"while online, then restart the model."
+                    )
+    
     # Engine-specific validation
     if body.engine_type == "llamacpp":
         if body.mode != "offline":
@@ -496,29 +533,73 @@ async def start_model(model_id: int, _: dict = Depends(require_admin)):
                 await session.commit()
             
             name, host_port = start_container_for_model(m, hf_token=getattr(m, 'hf_token', None))
-            await session.execute(update(Model).where(Model.id == model_id).values(state="running", container_name=name, port=host_port))
+            # Initially set to "loading" state - we'll verify actual health below
+            await session.execute(update(Model).where(Model.id == model_id).values(state="loading", container_name=name, port=host_port))
             await session.commit()
             
-            # Phase 3: Verify container is actually running (not immediately exited)
-            # Wait a moment for container to initialize, then check status
+            # Phase 3: Progressive startup verification with health polling
+            # This handles both immediate container failures AND slow model loading
             import asyncio
-            await asyncio.sleep(2)
+            import docker
+            import urllib.request
             
-            try:
-                import docker
-                client = docker.from_env()
-                container = client.containers.get(name)
-                container.reload()
-                
-                # Check if container exited
-                if container.status not in ('running', 'created'):
-                    # Container failed - update state
+            client = docker.from_env()
+            container = client.containers.get(name)
+            
+            # Quick check for immediate container death (e.g., invalid args, missing model)
+            # Poll every 0.5s for the first 5 seconds
+            for i in range(10):
+                await asyncio.sleep(0.5)
+                try:
+                    container.reload()
+                    if container.status not in ('running', 'created', 'restarting'):
+                        # Container exited - immediate failure
+                        await session.execute(update(Model).where(Model.id == model_id).values(state="failed"))
+                        await session.commit()
+                        logger.warning(f"Model {model_id} container {name} exited with status: {container.status}")
+                        return {"status": "failed", "container": name, "port": host_port, "error": f"Container exited: {container.status}"}
+                except docker.errors.NotFound:
                     await session.execute(update(Model).where(Model.id == model_id).values(state="failed"))
                     await session.commit()
-                    logger.warning(f"Model {model_id} container {name} exited with status: {container.status}")
-                    return {"status": "failed", "container": name, "port": host_port, "error": f"Container exited: {container.status}"}
-            except Exception as verify_error:
-                logger.warning(f"Could not verify container status for model {model_id}: {verify_error}")
+                    return {"status": "failed", "container": name, "port": host_port, "error": "Container not found"}
+                except Exception as e:
+                    logger.debug(f"Startup check iteration {i}: {e}")
+            
+            # Container is running - now check if vLLM health endpoint responds
+            # Do a few quick checks (non-blocking) to see if model is ready fast
+            health_url = f"http://{name}:8000/health"
+            is_ready = False
+            
+            for attempt in range(6):  # Check every 2 seconds for 12 seconds
+                try:
+                    req = urllib.request.Request(health_url, method='GET')
+                    with urllib.request.urlopen(req, timeout=2) as resp:
+                        if resp.status == 200:
+                            is_ready = True
+                            break
+                        elif resp.status == 503:
+                            # Engine dead - update state
+                            await session.execute(update(Model).where(Model.id == model_id).values(state="failed"))
+                            await session.commit()
+                            return {"status": "failed", "container": name, "port": host_port, "error": "Engine dead (503)"}
+                except urllib.error.HTTPError as e:
+                    if e.code == 503:
+                        await session.execute(update(Model).where(Model.id == model_id).values(state="failed"))
+                        await session.commit()
+                        return {"status": "failed", "container": name, "port": host_port, "error": "Engine dead (503)"}
+                except Exception:
+                    pass  # Health endpoint not ready yet - expected during loading
+                await asyncio.sleep(2)
+            
+            # Update state based on health check result
+            if is_ready:
+                await session.execute(update(Model).where(Model.id == model_id).values(state="running"))
+                await session.commit()
+            else:
+                # Model still loading - leave in "loading" state
+                # Note: For large models, this is normal - they may take 10+ minutes
+                # The frontend should poll readiness endpoint to track actual ready state
+                logger.info(f"Model {model_id} container started but not yet ready - still loading")
             
             # Register served name → URL so gateway can route by model
             # Include request defaults and engine type for Plane C (Phase 1)
@@ -883,8 +964,28 @@ async def model_readiness(model_id: int, _: dict = Depends(require_admin)):
         m = res.scalar_one_or_none()
         if not m:
             return ReadinessResp(status="error", detail="model_not_found")
-        if m.state != "running":
+        if m.state == "stopped":
             return ReadinessResp(status="stopped")
+        if m.state == "failed":
+            return ReadinessResp(status="error", detail="model_failed")
+        if m.state == "loading":
+            # Model is loading - check actual container health
+            if not m.container_name:
+                return ReadinessResp(status="loading", detail="container_starting")
+            # Container exists, check if health endpoint responds
+            result = await check_model_readiness(m.container_name, m.served_model_name)
+            if result.status == "ready":
+                # Model is now ready - update state to running
+                await session.execute(update(Model).where(Model.id == model_id).values(state="running"))
+                await session.commit()
+                return result
+            # Still loading (or error)
+            if result.status == "loading":
+                return ReadinessResp(status="loading", detail=result.detail or "model_initializing")
+            # For errors, still return loading status (model might be initializing)
+            return ReadinessResp(status="loading", detail="model_initializing")
+        if m.state != "running":
+            return ReadinessResp(status="error", detail=f"unknown_state_{m.state}")
         if not m.container_name:
             return ReadinessResp(status="error", detail="no_container")
         
