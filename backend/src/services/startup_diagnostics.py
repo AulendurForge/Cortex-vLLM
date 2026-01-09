@@ -169,6 +169,46 @@ ERROR_PATTERNS = [
         "error_type": "info",
         "severity": "info",
     },
+    {
+        "pattern": r"nvidia-container-cli.*requirement error.*unsatisfied condition.*cuda[>=]*([\d.]+)",
+        "title": "NVIDIA Driver Version Incompatible",
+        "message": "The Docker container requires CUDA {cuda_version}+, but your NVIDIA driver version is too old.",
+        "fixes": [
+            "Update your NVIDIA drivers to support CUDA {cuda_version}+",
+            "For CUDA 12.9+: Requires driver 575.51.03+ (Linux) or 576.02+ (Windows)",
+            "For CUDA 12.8: Requires driver 525.60.13+ (Linux) or 528.33+ (Windows)",
+            "See documentation: docs/operations/UPDATE_NVIDIA_DRIVERS.md",
+            "After updating drivers, reboot your system and restart Cortex",
+        ],
+        "error_type": "system",
+        "severity": "error",
+    },
+    {
+        "pattern": r"unsatisfied condition.*cuda[>=]*([\d.]+).*please update your driver",
+        "title": "NVIDIA Driver Update Required",
+        "message": "Container requires CUDA {cuda_version}+ but host driver is incompatible. Update your NVIDIA drivers.",
+        "fixes": [
+            "Check current driver: `nvidia-smi --query-gpu=driver_version --format=csv,noheader`",
+            "Update drivers to support CUDA {cuda_version}+ (see UPDATE_NVIDIA_DRIVERS.md)",
+            "Reboot after driver update, then restart the model",
+            "Verify driver update: `nvidia-smi` should show compatible version",
+        ],
+        "error_type": "system",
+        "severity": "error",
+    },
+    {
+        "pattern": r"CUDA.*driver.*version.*insufficient|driver.*too.*old|cuda.*not.*supported.*driver",
+        "title": "CUDA Driver Compatibility Issue",
+        "message": "Your NVIDIA driver version is not compatible with the CUDA version required by the container.",
+        "fixes": [
+            "Update NVIDIA drivers to match container CUDA requirements",
+            "Check driver version: `nvidia-smi`",
+            "See UPDATE_NVIDIA_DRIVERS.md for update instructions",
+            "After updating, reboot and restart Cortex",
+        ],
+        "error_type": "system",
+        "severity": "error",
+    },
 ]
 
 
@@ -199,6 +239,7 @@ def diagnose_startup_failure(logs: str, tail_lines: int = 100) -> DiagnosisResul
             
             # Format message with captured groups
             message = pattern_def["message"]
+            fixes = pattern_def["fixes"]
             try:
                 if "{available}" in message and len(groups) >= 2:
                     message = message.format(available=groups[0], required=groups[3] if len(groups) > 3 else groups[1])
@@ -210,6 +251,11 @@ def diagnose_startup_failure(logs: str, tail_lines: int = 100) -> DiagnosisResul
                     message = message.format(module=groups[0] if groups else "unknown")
                 elif "{tp_size}" in message and len(groups) >= 2:
                     message = message.format(tp_size=groups[0], gpu_count=groups[1])
+                elif "{cuda_version}" in message:
+                    cuda_version = groups[0] if groups else "unknown"
+                    message = message.format(cuda_version=cuda_version)
+                    # Also format fixes that contain {cuda_version}
+                    fixes = [fix.format(cuda_version=cuda_version) if "{cuda_version}" in fix else fix for fix in fixes]
             except Exception:
                 # Fallback to original message if formatting fails
                 pass
@@ -218,7 +264,7 @@ def diagnose_startup_failure(logs: str, tail_lines: int = 100) -> DiagnosisResul
                 detected=True,
                 title=pattern_def["title"],
                 message=message,
-                fixes=pattern_def["fixes"],
+                fixes=fixes,
                 severity=pattern_def["severity"],
                 error_type=pattern_def["error_type"],
             )

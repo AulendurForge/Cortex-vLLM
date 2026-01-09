@@ -2,6 +2,8 @@
 
 import React from 'react';
 import { Button } from '../UI';
+import { useToast } from '../../providers/ToastProvider';
+import { safeCopyToClipboard } from '../../lib/clipboard';
 
 type Diagnosis = {
   detected: boolean;
@@ -26,6 +28,7 @@ interface DiagnosticBannerProps {
 export function DiagnosticBanner({ modelId, modelState }: DiagnosticBannerProps) {
   const [diagnosis, setDiagnosis] = React.useState<Diagnosis | null>(null);
   const [loading, setLoading] = React.useState(false);
+  const { addToast } = useToast();
 
   React.useEffect(() => {
     // Always try to diagnose when logs are opened
@@ -74,13 +77,49 @@ export function DiagnosticBanner({ modelId, modelState }: DiagnosticBannerProps)
   const icon = diagnosis.severity === 'error' ? '❌' :
                diagnosis.severity === 'warning' ? '⚠️' : 'ℹ️';
 
+  const copyDiagnosis = async () => {
+    // Format diagnosis for copying
+    const diagnosisText = [
+      `Diagnosis: ${diagnosis.title}`,
+      `Severity: ${diagnosis.severity.toUpperCase()}`,
+      `Error Type: ${diagnosis.error_type}`,
+      '',
+      `Message:`,
+      diagnosis.message,
+      '',
+      diagnosis.fixes && diagnosis.fixes.length > 0 ? 'Suggested Fixes:' : '',
+      diagnosis.fixes && diagnosis.fixes.length > 0 
+        ? diagnosis.fixes.map((fix, idx) => `${idx + 1}. ${fix}`).join('\n')
+        : '',
+    ].filter(Boolean).join('\n');
+
+    const ok = await safeCopyToClipboard(diagnosisText);
+    if (ok) {
+      addToast({ title: 'Diagnosis copied to clipboard', kind: 'success' });
+    } else {
+      addToast({ title: 'Failed to copy diagnosis', kind: 'error' });
+    }
+  };
+
   return (
     <div className={`mb-3 p-4 ${bgColor} border rounded-lg`}>
       <div className="flex items-start gap-3">
         <span className="text-2xl">{icon}</span>
         <div className="flex-1">
-          <div className={`font-semibold text-lg ${textColor} mb-1`}>
-            {diagnosis.title}
+          <div className="flex items-start justify-between gap-2 mb-1">
+            <div className={`font-semibold text-lg ${textColor}`}>
+              {diagnosis.title}
+            </div>
+            <button
+              onClick={copyDiagnosis}
+              className="px-2 py-1 text-xs bg-white/10 hover:bg-white/20 border border-white/20 rounded transition-colors flex items-center gap-1.5 text-white/80 hover:text-white"
+              title="Copy diagnosis to clipboard"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+              Copy
+            </button>
           </div>
           <div className="text-sm text-white/80 mb-3">
             {diagnosis.message}

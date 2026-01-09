@@ -148,6 +148,14 @@ else
 	$(DOCKER_COMPOSE) logs -f
 endif
 
+logs-follow: ## Follow logs for all services (or specific SERVICE=name) - same as logs
+	@echo "$(COLOR_BOLD)Following logs...$(COLOR_RESET)"
+ifdef SERVICE
+	$(DOCKER_COMPOSE) logs -f $(SERVICE)
+else
+	$(DOCKER_COMPOSE) logs -f
+endif
+
 logs-gateway: ## Show gateway logs only
 	@$(DOCKER_COMPOSE) logs -f gateway
 

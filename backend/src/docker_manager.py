@@ -188,9 +188,8 @@ def _build_command(m: Model) -> list[str]:
     """Build args for the vllm/vllm-openai image (api_server.py flags).
     Note: This image expects only flags, not a `vllm serve` prefix.
     """
-    model_arg = m.repo_id if (m.repo_id and not m.local_path) else (f"/models/{m.local_path}" if m.local_path else (m.repo_id or ""))
-    if not model_arg:
-        raise ValueError("model path or repo_id required")
+    # Validate and resolve model path (raises ValueError if invalid)
+    model_arg = _resolve_vllm_model_path(m)
     cmd: list[str] = [
         "--model", model_arg,
         "--host", "0.0.0.0",
@@ -446,6 +445,61 @@ def _build_llamacpp_command(m: Model) -> list[str]:
         logger.warning(f"Failed to parse custom startup args for llama.cpp model {m.id}: {e}")
     
     return cmd
+
+
+def _resolve_vllm_model_path(m: Model) -> str:
+    """Resolve and validate vLLM model path (directory or repo_id).
+    
+    Args:
+        m: Model database object with local_path or repo_id set
+        
+    Returns:
+        str: Validated model path (container path for local_path, or repo_id)
+        
+    Raises:
+        ValueError: If local_path invalid or not found
+    """
+    # Online mode: use repo_id
+    if m.repo_id and not m.local_path:
+        return m.repo_id
+    
+    # Offline mode: validate local_path exists
+    if not m.local_path:
+        raise ValueError("vLLM offline model requires local_path to be set")
+    
+    settings = get_settings()
+    host_base = settings.CORTEX_MODELS_DIR
+    host_path = os.path.join(host_base, m.local_path)
+    
+    # Check if path exists
+    if not os.path.exists(host_path):
+        raise ValueError(
+            f"Model path not found: {m.local_path}\n"
+            f"Checked host path: {host_path}\n"
+            f"Models directory: {host_base}\n"
+            f"Please verify:\n"
+            f"  1. Path exists in {host_base}\n"
+            f"  2. CORTEX_MODELS_DIR is correctly configured\n"
+            f"  3. Model files are in the expected location"
+        )
+    
+    # For directories, check if it contains expected files (safetensors, bin, etc.)
+    if os.path.isdir(host_path):
+        files = os.listdir(host_path)
+        has_model_files = any(
+            f.endswith(('.safetensors', '.bin', '.pt', '.pth', '.gguf'))
+            for f in files
+        )
+        if not has_model_files:
+            logger.warning(
+                f"Directory {m.local_path} exists but contains no recognized model files. "
+                f"vLLM may still load if config.json is present."
+            )
+    
+    # Return container path
+    container_path = f"/models/{m.local_path}"
+    logger.info(f"Resolved vLLM model path: {host_path} -> {container_path}")
+    return container_path
 
 
 def _resolve_llamacpp_model_path(m: Model) -> str:

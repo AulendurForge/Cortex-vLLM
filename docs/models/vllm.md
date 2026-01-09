@@ -17,6 +17,38 @@ vLLM (Very Large Language Model) is Cortex's primary inference engine for servin
 - ❌ Models requiring `trust_remote_code` with unsupported architectures
 - ❌ CPU-only inference (llama.cpp is better)
 
+## System Requirements
+
+### GPU Requirements
+
+- **Compute Capability**: 7.0 or higher
+  - Supported GPUs: V100, T4, RTX 20xx/30xx/40xx series, A100, L4, H100, etc.
+  - Check your GPU: `nvidia-smi` (look for compute capability in GPU details)
+
+### NVIDIA Driver Requirements
+
+vLLM Docker images are built with specific CUDA versions that require compatible NVIDIA drivers:
+
+- **CUDA 12.9+ (latest images)**: Requires NVIDIA driver **575.51.03** or newer (Linux) / **576.02** or newer (Windows)
+- **CUDA 12.8**: Requires NVIDIA driver **525.60.13** or newer (Linux) / **528.33** or newer (Windows)
+
+**Common Issue**: If containers fail to start with errors like `nvidia-container-cli: requirement error: unsatisfied condition: cuda>=12.9`, you need to update your NVIDIA drivers.
+
+**See**: [Updating NVIDIA Drivers](../operations/UPDATE_NVIDIA_DRIVERS.md) for detailed instructions.
+
+### Verifying Compatibility
+
+```bash
+# Check driver version
+nvidia-smi --query-gpu=driver_version --format=csv,noheader
+
+# Check maximum CUDA version supported
+nvidia-smi --query-gpu=cuda_version --format=csv,noheader
+
+# Test GPU access in Docker (should work without errors)
+docker run --rm --gpus all nvidia/cuda:12.9.0-base-ubuntu22.04 nvidia-smi
+```
+
 ---
 
 ## Core Technologies

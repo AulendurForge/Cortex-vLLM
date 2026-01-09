@@ -17,8 +17,11 @@ import httpx
 import os
 import time
 import re
+import logging
 from ..state import register_model_endpoint, unregister_model_endpoint
 from ..state import get_model_registry as _get_registry
+
+logger = logging.getLogger(__name__)
 
 def _get_session():
     try:
@@ -467,6 +470,23 @@ async def start_model(model_id: int, _: dict = Depends(require_admin)):
         if not m:
             raise HTTPException(status_code=404, detail="not_found")
         try:
+            # Pre-flight validation: check path exists before container creation
+            if m.local_path and m.engine_type != 'llamacpp':
+                # For vLLM, validate path exists
+                from ..config import get_settings
+                settings = get_settings()
+                host_path = os.path.join(settings.CORTEX_MODELS_DIR, m.local_path)
+                if not os.path.exists(host_path):
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            f"Model path not found: {m.local_path}\n"
+                            f"Checked: {host_path}\n"
+                            f"Models directory: {settings.CORTEX_MODELS_DIR}\n"
+                            f"Please verify the path exists and try again."
+                        )
+                    )
+            
             # Auto-merge multi-part GGUF files if needed
             _handle_multipart_gguf_merge(m)
             
@@ -522,10 +542,20 @@ async def start_model(model_id: int, _: dict = Depends(require_admin)):
             await session.commit()
             # Make this actionable for the UI/user; this often indicates "image not cached and no internet"
             raise HTTPException(status_code=503, detail=str(e))
+        except ValueError as e:
+            # Path validation errors - provide actionable feedback
+            await session.execute(update(Model).where(Model.id == model_id).values(state="failed"))
+            await session.commit()
+            logger.error(f"Model {model_id} path validation failed: {e}")
+            raise HTTPException(status_code=400, detail=str(e))
         except Exception as e:
             await session.execute(update(Model).where(Model.id == model_id).values(state="failed"))
             await session.commit()
-            raise HTTPException(status_code=500, detail=f"start_failed: {e}")
+            # Capture full exception details for debugging
+            import traceback
+            error_detail = f"start_failed: {str(e)}\n\nFull error:\n{traceback.format_exc()}"
+            logger.error(f"Model {model_id} startup failed: {error_detail}")
+            raise HTTPException(status_code=500, detail=f"start_failed: {str(e)}")
 
 @router.post("/models/{model_id}/stop")
 async def stop_model(model_id: int, _: dict = Depends(require_admin)):

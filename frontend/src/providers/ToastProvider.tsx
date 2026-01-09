@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useMemo, useRef, useState, ReactNode } from 'react';
 
-type Toast = { id: string; title: string; kind?: 'success' | 'error' | 'info' };
+type Toast = { id: string; title: string; description?: string; kind?: 'success' | 'error' | 'info' };
 
 type ToastContextValue = {
   addToast: (t: Omit<Toast, 'id'>) => void;
@@ -50,10 +50,15 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastCtx.Provider value={value}>
       {children}
-      <div className="fixed bottom-4 right-4 z-50 space-y-2">
+      <div className="fixed bottom-4 right-4 z-50 space-y-2 max-w-md">
         {toasts.map((t) => (
-          <div key={t.id} className={`px-3 py-2 rounded shadow-lg text-sm ${t.kind === 'error' ? 'bg-red-600/90' : t.kind === 'success' ? 'bg-emerald-600/90' : 'bg-gray-700/90'}`}>
-            {t.title}
+          <div key={t.id} className={`px-4 py-3 rounded-lg shadow-lg text-sm border ${t.kind === 'error' ? 'bg-red-600/90 border-red-500/50' : t.kind === 'success' ? 'bg-emerald-600/90 border-emerald-500/50' : 'bg-gray-700/90 border-gray-500/50'}`}>
+            <div className="font-semibold text-white">{t.title}</div>
+            {t.description && (
+              <div className={`mt-1 text-xs ${t.kind === 'error' ? 'text-red-100' : t.kind === 'success' ? 'text-emerald-100' : 'text-gray-200'}`}>
+                {t.description}
+              </div>
+            )}
           </div>
         ))}
       </div>

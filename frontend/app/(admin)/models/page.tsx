@@ -76,11 +76,68 @@ export default function ModelsPage() {
 
   const start = useMutation({
     mutationFn: async (id: number) => apiFetch(`/admin/models/${id}/start`, { method: 'POST' }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['models'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['models'] });
+      addToast({ title: 'Model started successfully', kind: 'success' });
+    },
+    onError: (e: any) => {
+      // Parse error message to provide actionable feedback
+      const errorMsg = e?.message || String(e) || 'Unknown error';
+      let title = 'Failed to start model';
+      let description = errorMsg;
+      
+      // Detect CUDA/driver errors (check for common CUDA error patterns)
+      const lowerMsg = errorMsg.toLowerCase();
+      if (lowerMsg.includes('nvidia-container-cli') || 
+          lowerMsg.includes('unsatisfied condition') && lowerMsg.includes('cuda') ||
+          lowerMsg.includes('cuda') && (lowerMsg.includes('driver') || lowerMsg.includes('version'))) {
+        title = 'NVIDIA Driver Incompatible';
+        // Extract CUDA version if present
+        const cudaMatch = errorMsg.match(/cuda[>=]*\s*([\d.]+)/i);
+        const cudaVersion = cudaMatch ? cudaMatch[1] : 'required version';
+        description = `Container requires CUDA ${cudaVersion}+, but your NVIDIA driver is too old. Update your drivers and reboot.`;
+        addToast({ 
+          title, 
+          kind: 'error',
+          description: description + ' See docs/operations/UPDATE_NVIDIA_DRIVERS.md for instructions.'
+        });
+      } else if (errorMsg.includes('model_path_invalid') || errorMsg.includes('path not found') || errorMsg.includes('Model path not found')) {
+        title = 'Model Path Invalid';
+        // Clean up the error message
+        description = errorMsg.replace(/^model_path_invalid:\s*/i, '').split('\n')[0];
+        addToast({ title, kind: 'error', description });
+      } else if (errorMsg.includes('start_failed')) {
+        title = 'Model Startup Failed';
+        // Extract the actual error, removing the "start_failed:" prefix
+        description = errorMsg.replace(/^start_failed:\s*/i, '').split('\n')[0];
+        // Truncate very long error messages
+        if (description.length > 200) {
+          description = description.substring(0, 200) + '...';
+        }
+        addToast({ 
+          title, 
+          kind: 'error',
+          description: description + ' Check logs for detailed error information.'
+        });
+      } else {
+        // Generic error - truncate if too long
+        if (description.length > 150) {
+          description = description.substring(0, 150) + '...';
+        }
+        addToast({ title, kind: 'error', description });
+      }
+    },
   });
   const stop = useMutation({
     mutationFn: async (id: number) => apiFetch(`/admin/models/${id}/stop`, { method: 'POST' }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['models'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['models'] });
+      addToast({ title: 'Model stopped', kind: 'success' });
+    },
+    onError: (e: any) => {
+      const errorMsg = e?.message || String(e) || 'Unknown error';
+      addToast({ title: 'Failed to stop model', kind: 'error', description: errorMsg });
+    },
   });
   const archive = useMutation({
     mutationFn: async (id: number) => apiFetch(`/admin/models/${id}/archive`, { method: 'POST' }),

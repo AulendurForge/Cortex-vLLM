@@ -19,6 +19,43 @@ llama.cpp is Cortex's secondary inference engine, specifically added to support 
 
 ---
 
+## System Requirements
+
+### GPU Requirements (Optional)
+
+llama.cpp can run on CPU-only, but GPU acceleration requires:
+
+- **CUDA Support**: llama.cpp server-cuda Docker image includes CUDA libraries
+- **NVIDIA GPU**: Any NVIDIA GPU with CUDA support
+- **GPU Layers**: Configure `ngl` (number of GPU layers) - set to 0 for CPU-only
+
+### NVIDIA Driver Requirements
+
+The llama.cpp `server-cuda` Docker image requires compatible NVIDIA drivers:
+
+- **CUDA 12.9+ (latest images)**: Requires NVIDIA driver **575.51.03** or newer (Linux) / **576.02** or newer (Windows)
+- **CUDA 12.8**: Requires NVIDIA driver **525.60.13** or newer (Linux) / **528.33** or newer (Windows)
+
+**Common Issue**: If containers fail to start with CUDA version errors, you need to update your NVIDIA drivers.
+
+**See**: [Updating NVIDIA Drivers](../operations/UPDATE_NVIDIA_DRIVERS.md) for detailed instructions.
+
+### CPU-Only Mode
+
+llama.cpp can run entirely on CPU by setting `ngl=0` (no GPU layers). This doesn't require NVIDIA drivers but will be slower.
+
+### Verifying Compatibility
+
+```bash
+# Check driver version (if using GPU)
+nvidia-smi --query-gpu=driver_version --format=csv,noheader
+
+# Test GPU access in Docker (if using GPU)
+docker run --rm --gpus all ghcr.io/ggml-org/llama.cpp:server-cuda nvidia-smi
+```
+
+---
+
 ## Why llama.cpp Was Added to Cortex
 
 ### The GPT-OSS Problem

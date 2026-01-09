@@ -20,8 +20,9 @@
 
 ### Optional (for GPU features)
 - [ ] NVIDIA GPU installed - `nvidia-smi`
-- [ ] NVIDIA drivers installed (v470+)
+- [ ] NVIDIA drivers installed (v470+ for basic CUDA, 575.51.03+ for CUDA 12.9+)
 - [ ] NVIDIA Container Toolkit installed
+- [ ] **If containers fail to start**: See [Updating NVIDIA Drivers](../operations/UPDATE_NVIDIA_DRIVERS.md) for driver update instructions
 
 ---
 
