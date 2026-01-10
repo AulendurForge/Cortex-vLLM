@@ -66,11 +66,17 @@ export type ModelFormValues = {
   split_mode?: string;
   cache_type_k?: string;
   cache_type_v?: string;
+  // Speculative decoding for llama.cpp (Gap #6)
+  draft_model_path?: string;
+  draft_n?: number;
+  draft_p_min?: number;
   // vLLM advanced engine args (Gap #4)
   attention_backend?: string;
   disable_log_requests?: boolean;
   disable_log_stats?: boolean;
   vllm_v1_enabled?: boolean;
+  // vLLM GGUF weight format (Gap #7)
+  gguf_weight_format?: string;
   // Version-aware entrypoint (Gap #5)
   entrypoint_override?: string;
   // Debug logging configuration (Gap #11)
@@ -152,6 +158,10 @@ export function ModelForm({ onSubmit, onCancel, defaults, fetchBaseDir, saveBase
     split_mode: defaults?.split_mode ?? undefined,
     cache_type_k: defaults?.cache_type_k ?? 'q8_0',
     cache_type_v: defaults?.cache_type_v ?? 'q8_0',
+    // Speculative decoding for llama.cpp (Gap #6)
+    draft_model_path: defaults?.draft_model_path ?? '',
+    draft_n: defaults?.draft_n ?? 16,
+    draft_p_min: defaults?.draft_p_min ?? 0.5,
     repetition_penalty: defaults?.repetition_penalty ?? 1.2,
     frequency_penalty: defaults?.frequency_penalty ?? 0.5,
     presence_penalty: defaults?.presence_penalty ?? 0.5,
@@ -175,6 +185,7 @@ export function ModelForm({ onSubmit, onCancel, defaults, fetchBaseDir, saveBase
   const [savingBase, setSavingBase] = React.useState<boolean>(false);
   const [gpuCount, setGpuCount] = React.useState<number>(1);
   const [inspect, setInspect] = React.useState<any>(null);
+  const [loadingInspect, setLoadingInspect] = React.useState<boolean>(false);
   const [useGguf, setUseGguf] = React.useState<boolean>(false);
   const [selectedGguf, setSelectedGguf] = React.useState<string>('');
   const [selectedGgufGroup, setSelectedGgufGroup] = React.useState<string>('');
@@ -211,6 +222,7 @@ export function ModelForm({ onSubmit, onCancel, defaults, fetchBaseDir, saveBase
 
   const runInspect = React.useCallback(async (folder: string) => {
     setInspect(null);
+    setLoadingInspect(true);
     setUseGguf(false);
     setSelectedGguf('');
     setSelectedGgufGroup('');
@@ -237,6 +249,7 @@ export function ModelForm({ onSubmit, onCancel, defaults, fetchBaseDir, saveBase
         }
       }
     } catch {}
+    finally { setLoadingInspect(false); }
   }, [baseDir]);
 
   React.useEffect(() => {
@@ -373,13 +386,14 @@ export function ModelForm({ onSubmit, onCancel, defaults, fetchBaseDir, saveBase
           mode={values.mode}
           onModeChange={(mode) => set('mode', mode)}
           modeLocked={modeLocked}
+          engineRecommendation={inspect?.engine_recommendation}
         />
 
         {/* Engine Metadata (Advanced) */}
         {values.engine_type && (
-          <details className="md:col-span-2">
-            <summary className="cursor-pointer text-sm text-white/70 hover:text-white">
-              ⚙️ Advanced: Engine Image/Version (for reproducibility)
+          <details className="md:col-span-2 border-l-2 border-slate-500 pl-4">
+            <summary className="cursor-pointer text-sm text-slate-400 hover:text-slate-300 flex items-center gap-2">
+              <span>⚙️</span> Advanced: Engine Image/Version (for reproducibility)
             </summary>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2 p-3 bg-white/5 rounded border border-white/10">
               <label className="text-sm">
@@ -446,6 +460,7 @@ export function ModelForm({ onSubmit, onCancel, defaults, fetchBaseDir, saveBase
             tokenizer={values.tokenizer || ''}
             hfConfigPath={values.hf_config_path || ''}
             loadingFolders={loadingFolders}
+            loadingInspect={loadingInspect}
             savingBase={savingBase}
             inspect={inspect}
             useGguf={useGguf}
@@ -454,6 +469,8 @@ export function ModelForm({ onSubmit, onCancel, defaults, fetchBaseDir, saveBase
             useLocalTokenizer={useLocalTokenizer}
             showGgufHelp={showGgufHelp}
             modeLocked={modeLocked}
+            engineType={values.engine_type}
+            onSwitchEngine={(engine) => set('engine_type', engine)}
             onBaseDirChange={setBaseDir}
             onFolderSelect={handleFolderSelect}
             onRefreshFolders={refreshFolders}
@@ -486,6 +503,7 @@ export function ModelForm({ onSubmit, onCancel, defaults, fetchBaseDir, saveBase
           values={values}
           gpuCount={gpuCount}
           onChange={set}
+          useGguf={useGguf}
         />
 
         <LlamaCppConfiguration

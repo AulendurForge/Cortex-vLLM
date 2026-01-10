@@ -35,6 +35,10 @@ class GpuMetrics(BaseModel):
     mem_used_mb: float | None = None
     mem_total_mb: float | None = None
     temperature_c: float | None = None
+    # Flash Attention compatibility (Gap #8)
+    compute_capability: str | None = None  # e.g., "8.6" for SM 86
+    architecture: str | None = None  # e.g., "Ampere", "Ada", "Hopper"
+    flash_attention_supported: bool | None = None  # True if SM >= 80
 
 
 class BootstrapRequest(BaseModel):

@@ -126,6 +126,10 @@ export function ModelWorkflowForm({
     split_mode: (defaults as any)?.split_mode ?? undefined,
     cache_type_k: (defaults as any)?.cache_type_k ?? 'q8_0',
     cache_type_v: (defaults as any)?.cache_type_v ?? 'q8_0',
+    // Speculative decoding for llama.cpp (Gap #6)
+    draft_model_path: (defaults as any)?.draft_model_path ?? '',
+    draft_n: (defaults as any)?.draft_n ?? 16,
+    draft_p_min: (defaults as any)?.draft_p_min ?? 0.5,
     repetition_penalty: (defaults as any)?.repetition_penalty ?? 1.2,
     frequency_penalty: (defaults as any)?.frequency_penalty ?? 0.5,
     presence_penalty: (defaults as any)?.presence_penalty ?? 0.5,
@@ -140,6 +144,7 @@ export function ModelWorkflowForm({
   const [baseDir, setBaseDir] = useState<string>('');
   const [folders, setFolders] = useState<string[]>([]);
   const [loadingFolders, setLoadingFolders] = useState<boolean>(false);
+  const [loadingInspect, setLoadingInspect] = useState<boolean>(false);
   const [savingBase, setSavingBase] = useState<boolean>(false);
   const [gpuCount, setGpuCount] = useState<number>(1);
   const [inspect, setInspect] = useState<any>(null);
@@ -183,6 +188,7 @@ export function ModelWorkflowForm({
 
   const runInspect = React.useCallback(async (folder: string) => {
     setInspect(null);
+    setLoadingInspect(true);
     setUseGguf(false);
     setSelectedGguf('');
     setSelectedGgufGroup('');
@@ -201,6 +207,7 @@ export function ModelWorkflowForm({
         }
       }
     } catch {}
+    finally { setLoadingInspect(false); }
   }, [baseDir]);
 
   useEffect(() => {
@@ -369,6 +376,7 @@ export function ModelWorkflowForm({
                             tokenizer={values.tokenizer || ''}
                             hfConfigPath={values.hf_config_path || ''}
                             loadingFolders={loadingFolders}
+                            loadingInspect={loadingInspect}
                             savingBase={savingBase}
                             inspect={inspect}
                             useGguf={useGguf}
@@ -408,7 +416,7 @@ export function ModelWorkflowForm({
                         />
                         <div className="md:col-span-2 space-y-3 mt-2 border-t border-white/5 pt-3">
                           {values.engine_type === 'vllm' ? (
-                            <VLLMConfiguration values={values} gpuCount={gpuCount} onChange={set} />
+                            <VLLMConfiguration values={values} gpuCount={gpuCount} onChange={set} useGguf={useGguf} />
                           ) : (
                             <LlamaCppConfiguration values={values} onChange={set} />
                           )}

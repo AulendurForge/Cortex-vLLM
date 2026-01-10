@@ -1,5 +1,5 @@
 site_name: CORTEX
-site_description: OpenAI-compatible gateway and admin UI for operating vLLM engines. Built by Aulendur LLC.
+site_description: OpenAI-compatible gateway and admin UI for operating vLLM engines. Built by Aulendur Labs.
 theme:
   name: material
   features:

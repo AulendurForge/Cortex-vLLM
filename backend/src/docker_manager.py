@@ -419,6 +419,13 @@ def _build_command(m: Model) -> list[str]:
             cmd += ["--attention-backend", str(attention_backend)]
     except Exception:
         pass
+    # GGUF weight format (Gap #7)
+    try:
+        gguf_weight_format = getattr(m, "gguf_weight_format", None)
+        if gguf_weight_format and gguf_weight_format != "auto":
+            cmd += ["--gguf-weight-format", str(gguf_weight_format)]
+    except Exception:
+        pass
     try:
         if getattr(m, "disable_log_requests", None):
             cmd += ["--disable-log-requests"]
@@ -523,6 +530,24 @@ def _build_llamacpp_command(m: Model) -> list[str]:
         cmd += ["--rope-freq-base", str(m.rope_freq_base)]
     if getattr(m, 'rope_freq_scale', None):
         cmd += ["--rope-freq-scale", str(m.rope_freq_scale)]
+    
+    # Speculative decoding (Gap #6)
+    # Uses a smaller draft model to predict tokens for faster inference
+    draft_model_path = getattr(m, 'draft_model_path', None)
+    if draft_model_path:
+        # Draft model path should be relative to the container's model directory
+        # e.g., /models/alamios_Mistral-Small-3.1-DRAFT-0.5B-GGUF/model.gguf
+        cmd += ["--model-draft", draft_model_path]
+        
+        # Number of tokens to draft (default: 16)
+        draft_n = getattr(m, 'draft_n', None)
+        if draft_n:
+            cmd += ["--draft", str(draft_n)]
+        
+        # Minimum probability for draft acceptance (default: 0.5)
+        draft_p_min = getattr(m, 'draft_p_min', None)
+        if draft_p_min:
+            cmd += ["--draft-p-min", str(draft_p_min)]
     
     # Server-side timeout controls for multi-user stability
     cmd += ["--timeout", str(settings.LLAMACPP_SERVER_TIMEOUT)]

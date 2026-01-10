@@ -11,12 +11,13 @@ interface VLLMConfigurationProps {
   values: ModelFormValues;
   gpuCount: number;
   onChange: (field: keyof ModelFormValues, value: any) => void;
+  useGguf?: boolean;  // Gap #7: Whether GGUF format is selected
 }
 
-export function VLLMConfiguration({ values, gpuCount, onChange }: VLLMConfigurationProps) {
+export function VLLMConfiguration({ values, gpuCount, onChange, useGguf }: VLLMConfigurationProps) {
   if (values.engine_type !== 'vllm') return null;
 
-  // Fetch GPU information
+  // Fetch GPU information including Flash Attention compatibility (Gap #8)
   const { data: gpuInfo } = useQuery({
     queryKey: ['gpu-info'],
     queryFn: async () => {
@@ -26,7 +27,10 @@ export function VLLMConfiguration({ values, gpuCount, onChange }: VLLMConfigurat
           index: g.index, 
           name: g.name, 
           mem_total_mb: g.mem_total_mb, 
-          mem_used_mb: g.mem_used_mb 
+          mem_used_mb: g.mem_used_mb,
+          compute_capability: g.compute_capability,
+          architecture: g.architecture,
+          flash_attention_supported: g.flash_attention_supported
         }));
       } catch {
         return [];
@@ -101,11 +105,21 @@ export function VLLMConfiguration({ values, gpuCount, onChange }: VLLMConfigurat
         </p>
       </label>
       
-      <div className="text-sm flex items-center gap-2 mt-6">
-        <label className="inline-flex items-center gap-2">
-          <input type="checkbox" checked={!!values.trust_remote_code} onChange={(e) => onChange('trust_remote_code', e.target.checked)} />
+      <div className="text-sm flex items-center gap-2 mt-6 flex-wrap">
+        {/* Trust remote code - primarily for SafeTensors with custom model code */}
+        <label className={`inline-flex items-center gap-2 ${useGguf ? 'opacity-50' : ''}`}>
+          <input 
+            type="checkbox" 
+            checked={!!values.trust_remote_code} 
+            onChange={(e) => onChange('trust_remote_code', e.target.checked)} 
+            disabled={useGguf}
+          />
           Trust remote code 
-          <Tooltip text="When enabled, allows executing custom code in model repos that define custom model classes or tokenizers. Only enable for trusted sources." />
+          <Tooltip text={useGguf 
+            ? "Not applicable for GGUF models. GGUF files don't contain custom Python code."
+            : "When enabled, allows executing custom code in model repos that define custom model classes or tokenizers. Only enable for trusted sources."
+          } />
+          {useGguf && <span className="text-[9px] text-white/40">(N/A for GGUF)</span>}
         </label>
         <label className="inline-flex items-center gap-2">
           <input type="checkbox" checked={!!values.hf_offline} onChange={(e) => onChange('hf_offline', e.target.checked)} />
@@ -119,21 +133,48 @@ export function VLLMConfiguration({ values, gpuCount, onChange }: VLLMConfigurat
       {/* See cortexSustainmentPlan.md for details on Phase 1 changes */}
 
       {/* Production Settings */}
-      <details className="md:col-span-2 mt-2">
-        <summary className="cursor-pointer text-sm text-white/80">Production Settings</summary>
+      <details className="md:col-span-2 mt-2 border-l-2 border-orange-500 pl-4">
+        <summary className="cursor-pointer text-sm text-orange-400 flex items-center gap-2">
+          <span>🚀</span> Production Settings
+        </summary>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-2">
           <label className="text-sm">Attention Backend
-            <select className="input mt-1" value={values.attention_backend || ''} onChange={(e) => onChange('attention_backend', e.target.value || null)}>
-              <option value="">auto (default)</option>
-              <option value="FLASH_ATTN">Flash Attention</option>
-              <option value="FLASHINFER">FlashInfer</option>
-              <option value="XFORMERS">xFormers</option>
-              <option value="TRITON_ATTN">Triton</option>
-            </select>
+            <div className="flex items-center gap-2 mt-1">
+              <select className="input flex-1" value={values.attention_backend || ''} onChange={(e) => onChange('attention_backend', e.target.value || null)}>
+                <option value="">auto (default)</option>
+                <option value="FLASH_ATTN">Flash Attention</option>
+                <option value="FLASHINFER">FlashInfer</option>
+                <option value="XFORMERS">xFormers</option>
+                <option value="TRITON_ATTN">Triton</option>
+              </select>
+              {/* Flash Attention compatibility badge (Gap #8) */}
+              {gpuInfo && gpuInfo.length > 0 && (
+                gpuInfo[0].flash_attention_supported === true ? (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-300 border border-green-500/30 whitespace-nowrap">
+                    FA2 ✓
+                  </span>
+                ) : gpuInfo[0].flash_attention_supported === false ? (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 whitespace-nowrap">
+                    FA2 ⚠️
+                  </span>
+                ) : (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-500/20 text-gray-300 border border-gray-500/30 whitespace-nowrap" title="FA2 requires SM 80+ (Ampere/Ada/Hopper)">
+                    FA2 ?
+                  </span>
+                )
+              )}
+            </div>
             <p className="text-[11px] text-white/50 mt-1">
               Force specific attention implementation. 
               <Tooltip text="Also called '--attention-backend'. Auto lets vLLM choose the best. Flash Attention is fastest on most hardware. FlashInfer supports longer contexts. xFormers has broader compatibility." />
             </p>
+            {/* Flash Attention warning for incompatible GPUs */}
+            {values.attention_backend === 'FLASH_ATTN' && gpuInfo && gpuInfo.length > 0 && gpuInfo[0].flash_attention_supported === false && (
+              <div className="text-[11px] text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded px-2 py-1 mt-1">
+                ⚠️ Your GPU ({gpuInfo[0].name || gpuInfo[0].architecture}) is {gpuInfo[0].architecture || 'older than Ampere'}. 
+                Flash Attention 2 requires SM 80+ (Ampere/Ada/Hopper). Consider using "auto" or "XFORMERS" instead.
+              </div>
+            )}
           </label>
           <div className="text-sm flex flex-col gap-2 mt-1">
             <label className="inline-flex items-center gap-2">
@@ -157,6 +198,20 @@ export function VLLMConfiguration({ values, gpuCount, onChange }: VLLMConfigurat
               <p className="text-[10px] text-amber-200/70 ml-6">⚠️ V1 removes: best_of, per-request logits processors, GPU↔CPU KV swap</p>
             )}
           </div>
+          {/* GGUF Weight Format (Gap #7) - only show when using GGUF files */}
+          {useGguf && (
+            <label className="text-sm">GGUF Weight Format
+              <select className="input mt-1" value={values.gguf_weight_format || 'auto'} onChange={(e) => onChange('gguf_weight_format', e.target.value === 'auto' ? null : e.target.value)}>
+                <option value="auto">auto (default)</option>
+                <option value="gguf">gguf</option>
+                <option value="ggml">ggml (legacy)</option>
+              </select>
+              <p className="text-[11px] text-white/50 mt-1">
+                GGUF file format type. 
+                <Tooltip text="vLLM's --gguf-weight-format flag. 'auto' auto-detects the format. 'gguf' for modern GGUF files. 'ggml' for older GGML legacy files. Most users should leave this as 'auto'." />
+              </p>
+            </label>
+          )}
           <label className="text-sm md:col-span-3">Entrypoint Override
             <input
               className="input mt-1"
@@ -219,8 +274,10 @@ export function VLLMConfiguration({ values, gpuCount, onChange }: VLLMConfigurat
       </details>
 
       {/* Advanced vLLM Tuning */}
-      <details className="md:col-span-2 mt-2">
-        <summary className="cursor-pointer text-sm text-white/80">Advanced vLLM Tuning</summary>
+      <details className="md:col-span-2 mt-2 border-l-2 border-blue-500 pl-4">
+        <summary className="cursor-pointer text-sm text-blue-400 flex items-center gap-2">
+          <span>🔧</span> Advanced vLLM Tuning
+        </summary>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-2">
           <label className="text-sm">Max batched tokens
             <input
@@ -250,44 +307,57 @@ export function VLLMConfiguration({ values, gpuCount, onChange }: VLLMConfigurat
               <Tooltip text="Also called '--kv-cache-dtype'. 'fp8' variants reduce KV memory significantly with minor quality impact; 'auto' lets vLLM pick." />
             </p>
           </label>
-          <label className="text-sm">Quantization
-            <select className="input mt-1" value={values.quantization || ''} onChange={(e) => onChange('quantization', e.target.value)}>
-              <option value="">none (use original weights)</option>
-              <option value="awq">AWQ (requires AWQ-quantized model)</option>
-              <option value="gptq">GPTQ (requires GPTQ-quantized model)</option>
-              <option value="fp8">FP8 (dynamic, any model)</option>
-              <option value="int8">INT8 (W8A8, any model)</option>
-            </select>
-            <p className="text-[11px] text-white/50 mt-1">
-              Weight quantization scheme. 
-              <Tooltip text="Also called '--quantization'. AWQ/GPTQ need pre‑quantized repos; fp8/int8 require supported kernels. Reduces VRAM with possible quality/perf trade‑offs." />
-            </p>
-            {/* Quantization validation warnings (Gap #14) */}
-            {values.quantization === 'awq' && (
-              <p className="text-[11px] text-amber-400 mt-1 bg-amber-500/10 px-2 py-1 rounded">
-                ⚠️ AWQ requires a model repo with AWQ-quantized weights (e.g., &quot;TheBloke/...-AWQ&quot;). Using AWQ with non-AWQ weights will fail.
-                <a href="https://docs.vllm.ai/en/latest/features/quantization/awq.html" target="_blank" rel="noopener noreferrer" className="text-cyan-400 ml-1 underline">Docs →</a>
+          {/* Quantization - only show for SafeTensors, not GGUF (GGUF files are already quantized) */}
+          {!useGguf && (
+            <label className="text-sm">Quantization
+              <select className="input mt-1" value={values.quantization || ''} onChange={(e) => onChange('quantization', e.target.value)}>
+                <option value="">none (use original weights)</option>
+                <option value="awq">AWQ (requires AWQ-quantized model)</option>
+                <option value="gptq">GPTQ (requires GPTQ-quantized model)</option>
+                <option value="fp8">FP8 (dynamic, any model)</option>
+                <option value="int8">INT8 (W8A8, any model)</option>
+              </select>
+              <p className="text-[11px] text-white/50 mt-1">
+                Weight quantization scheme. 
+                <Tooltip text="Also called '--quantization'. AWQ/GPTQ need pre‑quantized repos; fp8/int8 require supported kernels. Reduces VRAM with possible quality/perf trade‑offs." />
               </p>
-            )}
-            {values.quantization === 'gptq' && (
-              <p className="text-[11px] text-amber-400 mt-1 bg-amber-500/10 px-2 py-1 rounded">
-                ⚠️ GPTQ requires a model repo with GPTQ-quantized weights (e.g., &quot;TheBloke/...-GPTQ&quot;). Using GPTQ with non-GPTQ weights will fail.
-                <a href="https://docs.vllm.ai/en/latest/features/quantization/gptq.html" target="_blank" rel="noopener noreferrer" className="text-cyan-400 ml-1 underline">Docs →</a>
+              {/* Quantization validation warnings (Gap #14) */}
+              {values.quantization === 'awq' && (
+                <p className="text-[11px] text-amber-400 mt-1 bg-amber-500/10 px-2 py-1 rounded">
+                  ⚠️ AWQ requires a model repo with AWQ-quantized weights (e.g., &quot;TheBloke/...-AWQ&quot;). Using AWQ with non-AWQ weights will fail.
+                  <a href="https://docs.vllm.ai/en/latest/features/quantization/awq.html" target="_blank" rel="noopener noreferrer" className="text-cyan-400 ml-1 underline">Docs →</a>
+                </p>
+              )}
+              {values.quantization === 'gptq' && (
+                <p className="text-[11px] text-amber-400 mt-1 bg-amber-500/10 px-2 py-1 rounded">
+                  ⚠️ GPTQ requires a model repo with GPTQ-quantized weights (e.g., &quot;TheBloke/...-GPTQ&quot;). Using GPTQ with non-GPTQ weights will fail.
+                  <a href="https://docs.vllm.ai/en/latest/features/quantization/gptq.html" target="_blank" rel="noopener noreferrer" className="text-cyan-400 ml-1 underline">Docs →</a>
+                </p>
+              )}
+              {values.quantization === 'fp8' && (
+                <p className="text-[11px] text-blue-400 mt-1 bg-blue-500/10 px-2 py-1 rounded">
+                  ℹ️ FP8 applies dynamic quantization at runtime. Works with any model but requires Hopper/Ada GPU (SM 8.9+).
+                  <a href="https://docs.vllm.ai/en/latest/features/quantization/fp8.html" target="_blank" rel="noopener noreferrer" className="text-cyan-400 ml-1 underline">Docs →</a>
+                </p>
+              )}
+              {values.quantization === 'int8' && (
+                <p className="text-[11px] text-blue-400 mt-1 bg-blue-500/10 px-2 py-1 rounded">
+                  ℹ️ INT8 (W8A8) applies activation-aware quantization. Works with any model. ~2x memory savings.
+                  <a href="https://docs.vllm.ai/en/latest/features/quantization/" target="_blank" rel="noopener noreferrer" className="text-cyan-400 ml-1 underline">Docs →</a>
+                </p>
+              )}
+            </label>
+          )}
+          {/* Show GGUF quantization info when using GGUF */}
+          {useGguf && (
+            <div className="text-sm p-2 bg-purple-500/10 border border-purple-500/20 rounded">
+              <div className="text-purple-300 font-medium text-xs mb-1">📦 GGUF Quantization</div>
+              <p className="text-[11px] text-white/60">
+                Your GGUF file is already quantized (e.g., Q4_K_M, Q8_0). vLLM will use the quantization baked into the file.
+                Weight quantization settings (AWQ/GPTQ/FP8) don't apply to GGUF models.
               </p>
-            )}
-            {values.quantization === 'fp8' && (
-              <p className="text-[11px] text-blue-400 mt-1 bg-blue-500/10 px-2 py-1 rounded">
-                ℹ️ FP8 applies dynamic quantization at runtime. Works with any model but requires Hopper/Ada GPU (SM 8.9+).
-                <a href="https://docs.vllm.ai/en/latest/features/quantization/fp8.html" target="_blank" rel="noopener noreferrer" className="text-cyan-400 ml-1 underline">Docs →</a>
-              </p>
-            )}
-            {values.quantization === 'int8' && (
-              <p className="text-[11px] text-blue-400 mt-1 bg-blue-500/10 px-2 py-1 rounded">
-                ℹ️ INT8 (W8A8) applies activation-aware quantization. Works with any model. ~2x memory savings.
-                <a href="https://docs.vllm.ai/en/latest/features/quantization/" target="_blank" rel="noopener noreferrer" className="text-cyan-400 ml-1 underline">Docs →</a>
-              </p>
-            )}
-          </label>
+            </div>
+          )}
           <label className="text-sm">KV cache block size
             <select className="input mt-1" value={(values.block_size ?? 16)} onChange={(e) => onChange('block_size', Number(e.target.value))}>
               {[1, 8, 16, 32].map((n) => (<option key={n} value={n}>{n}</option>))}
@@ -327,8 +397,10 @@ export function VLLMConfiguration({ values, gpuCount, onChange }: VLLMConfigurat
       </details>
 
       {/* Advanced cache/offload and scheduling */}
-      <details className="md:col-span-2 mt-2">
-        <summary className="cursor-pointer text-sm text-white/80">Advanced cache/offload and scheduling</summary>
+      <details className="md:col-span-2 mt-2 border-l-2 border-cyan-500 pl-4">
+        <summary className="cursor-pointer text-sm text-cyan-400 flex items-center gap-2">
+          <span>💾</span> Advanced Cache/Offload &amp; Scheduling
+        </summary>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-2">
           <label className="text-sm">CPU offload (GiB per GPU)
             <input
@@ -405,8 +477,10 @@ export function VLLMConfiguration({ values, gpuCount, onChange }: VLLMConfigurat
       </details>
 
       {/* Distributed / device */}
-      <details className="md:col-span-2 mt-2">
-        <summary className="cursor-pointer text-sm text-white/80">Distributed / device</summary>
+      <details className="md:col-span-2 mt-2 border-l-2 border-amber-500 pl-4">
+        <summary className="cursor-pointer text-sm text-amber-400 flex items-center gap-2">
+          <span>🖥️</span> Distributed / Device
+        </summary>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-2">
           <label className="text-sm">Pipeline parallel size
             <select 

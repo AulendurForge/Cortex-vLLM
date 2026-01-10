@@ -3,10 +3,366 @@
 import React from 'react';
 import { Tooltip } from '../../Tooltip';
 import { GGUFGroupSelector } from './GGUFGroupSelector';
+import { SafeTensorDisplay } from './SafeTensorDisplay';
+import { EngineGuidance } from './EngineGuidance';
 import { safeCopyToClipboard } from '../../../lib/clipboard';
+
+/**
+ * Common tokenizer patterns for auto-suggestions (Gap #4)
+ * Maps model name patterns to likely HuggingFace tokenizer repos
+ */
+const TOKENIZER_SUGGESTIONS: Array<{
+  pattern: RegExp;
+  repos: string[];
+  label: string;
+}> = [
+  { 
+    pattern: /llama.*3.*70b/i, 
+    repos: ['meta-llama/Llama-3.1-70B-Instruct', 'meta-llama/Meta-Llama-3-70B-Instruct'],
+    label: 'Llama 3 70B'
+  },
+  { 
+    pattern: /llama.*3.*8b/i, 
+    repos: ['meta-llama/Llama-3.1-8B-Instruct', 'meta-llama/Meta-Llama-3-8B-Instruct'],
+    label: 'Llama 3 8B'
+  },
+  { 
+    pattern: /llama.*3/i, 
+    repos: ['meta-llama/Llama-3.1-8B-Instruct', 'meta-llama/Meta-Llama-3-8B-Instruct'],
+    label: 'Llama 3'
+  },
+  { 
+    pattern: /llama.*2/i, 
+    repos: ['meta-llama/Llama-2-7b-chat-hf', 'meta-llama/Llama-2-13b-chat-hf'],
+    label: 'Llama 2'
+  },
+  { 
+    pattern: /mistral.*small/i, 
+    repos: ['mistralai/Mistral-Small-24B-Instruct-2501', 'mistralai/Mistral-Small-Instruct-2409'],
+    label: 'Mistral Small'
+  },
+  { 
+    pattern: /mistral.*large/i, 
+    repos: ['mistralai/Mistral-Large-Instruct-2407'],
+    label: 'Mistral Large'
+  },
+  { 
+    pattern: /mistral/i, 
+    repos: ['mistralai/Mistral-7B-Instruct-v0.3', 'mistralai/Mistral-7B-Instruct-v0.2'],
+    label: 'Mistral'
+  },
+  { 
+    pattern: /qwen.*2.*72b/i, 
+    repos: ['Qwen/Qwen2.5-72B-Instruct', 'Qwen/Qwen2-72B-Instruct'],
+    label: 'Qwen 2 72B'
+  },
+  { 
+    pattern: /qwen.*3/i, 
+    repos: ['Qwen/Qwen3-8B', 'Qwen/Qwen3-14B', 'Qwen/Qwen3-32B'],
+    label: 'Qwen 3'
+  },
+  { 
+    pattern: /qwen.*2/i, 
+    repos: ['Qwen/Qwen2.5-7B-Instruct', 'Qwen/Qwen2.5-14B-Instruct'],
+    label: 'Qwen 2'
+  },
+  { 
+    pattern: /qwen/i, 
+    repos: ['Qwen/Qwen2.5-7B-Instruct', 'Qwen/Qwen-7B-Chat'],
+    label: 'Qwen'
+  },
+  { 
+    pattern: /phi.*3/i, 
+    repos: ['microsoft/Phi-3-mini-4k-instruct', 'microsoft/Phi-3-medium-4k-instruct'],
+    label: 'Phi 3'
+  },
+  { 
+    pattern: /phi/i, 
+    repos: ['microsoft/phi-2', 'microsoft/Phi-3-mini-4k-instruct'],
+    label: 'Phi'
+  },
+  { 
+    pattern: /gemma.*2/i, 
+    repos: ['google/gemma-2-9b-it', 'google/gemma-2-27b-it'],
+    label: 'Gemma 2'
+  },
+  { 
+    pattern: /gemma/i, 
+    repos: ['google/gemma-7b-it', 'google/gemma-2b-it'],
+    label: 'Gemma'
+  },
+  { 
+    pattern: /yi.*1\.5/i, 
+    repos: ['01-ai/Yi-1.5-34B-Chat', '01-ai/Yi-1.5-9B-Chat'],
+    label: 'Yi 1.5'
+  },
+  { 
+    pattern: /yi/i, 
+    repos: ['01-ai/Yi-34B-Chat', '01-ai/Yi-6B-Chat'],
+    label: 'Yi'
+  },
+  { 
+    pattern: /deepseek.*v3/i, 
+    repos: ['deepseek-ai/DeepSeek-V3'],
+    label: 'DeepSeek V3'
+  },
+  { 
+    pattern: /deepseek.*coder/i, 
+    repos: ['deepseek-ai/deepseek-coder-33b-instruct', 'deepseek-ai/deepseek-coder-6.7b-instruct'],
+    label: 'DeepSeek Coder'
+  },
+  { 
+    pattern: /deepseek/i, 
+    repos: ['deepseek-ai/DeepSeek-V2-Lite', 'deepseek-ai/deepseek-llm-7b-chat'],
+    label: 'DeepSeek'
+  },
+  { 
+    pattern: /codellama/i, 
+    repos: ['codellama/CodeLlama-34b-Instruct-hf', 'codellama/CodeLlama-7b-Instruct-hf'],
+    label: 'CodeLlama'
+  },
+  { 
+    pattern: /tinyllama/i, 
+    repos: ['TinyLlama/TinyLlama-1.1B-Chat-v1.0'],
+    label: 'TinyLlama'
+  },
+  { 
+    pattern: /falcon/i, 
+    repos: ['tiiuae/falcon-7b-instruct', 'tiiuae/falcon-40b-instruct'],
+    label: 'Falcon'
+  },
+  { 
+    pattern: /vicuna/i, 
+    repos: ['lmsys/vicuna-7b-v1.5', 'lmsys/vicuna-13b-v1.5'],
+    label: 'Vicuna'
+  },
+  { 
+    pattern: /wizard/i, 
+    repos: ['WizardLM/WizardLM-7B-V1.0', 'WizardLM/WizardCoder-15B-V1.0'],
+    label: 'WizardLM'
+  },
+];
+
+/**
+ * Get tokenizer suggestions based on model/folder name
+ */
+function getTokenizerSuggestions(modelName: string): string[] {
+  if (!modelName) return [];
+  
+  const suggestions: string[] = [];
+  const seen = new Set<string>();
+  
+  for (const entry of TOKENIZER_SUGGESTIONS) {
+    if (entry.pattern.test(modelName)) {
+      for (const repo of entry.repos) {
+        if (!seen.has(repo)) {
+          seen.add(repo);
+          suggestions.push(repo);
+        }
+      }
+    }
+  }
+  
+  return suggestions.slice(0, 5); // Limit to top 5 suggestions
+}
+
+/**
+ * Tokenizer input with smart suggestions dropdown (Gap #4)
+ */
+function TokenizerInput({ 
+  value, 
+  onChange, 
+  modelName 
+}: { 
+  value: string; 
+  onChange: (value: string) => void; 
+  modelName: string;
+}) {
+  const [showSuggestions, setShowSuggestions] = React.useState(false);
+  const suggestions = React.useMemo(() => getTokenizerSuggestions(modelName), [modelName]);
+  
+  return (
+    <div className="relative">
+      <input 
+        className="input mt-1 w-full" 
+        placeholder="e.g., meta-llama/Llama-3.1-8B-Instruct" 
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onFocus={() => setShowSuggestions(true)}
+        onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+      />
+      
+      {/* Suggestions dropdown */}
+      {suggestions.length > 0 && (
+        <div className="mt-1">
+          {showSuggestions && !value && (
+            <div className="absolute z-10 w-full bg-zinc-900 border border-white/20 rounded-lg shadow-xl overflow-hidden">
+              <div className="px-3 py-1.5 text-[10px] text-white/50 bg-white/5 border-b border-white/10">
+                💡 Suggested tokenizers for "{modelName}"
+              </div>
+              {suggestions.map((repo) => (
+                <button
+                  key={repo}
+                  type="button"
+                  className="w-full px-3 py-2 text-left text-sm text-white/80 hover:bg-white/10 transition-colors flex items-center gap-2"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    onChange(repo);
+                    setShowSuggestions(false);
+                  }}
+                >
+                  <span className="text-cyan-400">🤗</span>
+                  <span className="font-mono text-xs">{repo}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          
+          {/* Inline suggestion pills (always visible when not focused on input) */}
+          {!showSuggestions && !value && (
+            <div className="flex flex-wrap gap-1 mt-1">
+              <span className="text-[10px] text-white/40">Suggestions:</span>
+              {suggestions.slice(0, 3).map((repo) => (
+                <button
+                  key={repo}
+                  type="button"
+                  className="px-2 py-0.5 text-[10px] bg-cyan-500/10 text-cyan-300 rounded border border-cyan-500/20 hover:bg-cyan-500/20 transition-colors"
+                  onClick={() => onChange(repo)}
+                >
+                  {repo.split('/')[1] || repo}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      
+      {/* No suggestions helper */}
+      {suggestions.length === 0 && !value && (
+        <p className="text-[10px] text-white/40 mt-1">
+          Enter the HuggingFace repo ID (e.g., meta-llama/Llama-3.1-8B-Instruct)
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Engine recommendation option from backend
+ */
+interface EngineOption {
+  engine: 'vllm' | 'llamacpp';
+  format: 'safetensors' | 'gguf';
+  label: string;
+  description: string;
+  is_recommended: boolean;
+  requires_merge?: boolean;
+}
+
+/**
+ * Engine recommendation from backend inspect-folder endpoint
+ */
+interface EngineRecommendation {
+  recommended: string;
+  reason: string;
+  has_multipart_gguf: boolean;
+  has_safetensors: boolean;
+  has_gguf: boolean;
+  vllm_gguf_compatible: boolean;
+  options: EngineOption[];
+}
+
+/**
+ * GGUF validation summary (Gap #5)
+ */
+interface GGUFValidationSummary {
+  total_files: number;
+  valid_files: number;
+  invalid_files: number;
+  warnings: string[];
+  errors: string[];
+}
+
+/**
+ * Component to display GGUF validation results (Gap #5)
+ */
+function GGUFValidationBadge({ validation }: { validation: GGUFValidationSummary | null | undefined }) {
+  if (!validation) return null;
+  
+  const { total_files, valid_files, invalid_files, warnings, errors } = validation;
+  
+  // All files valid - show success badge
+  if (invalid_files === 0 && errors.length === 0) {
+    return (
+      <div className="flex items-center gap-2 text-[11px]">
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-300">
+          ✓ {valid_files} GGUF file{valid_files !== 1 ? 's' : ''} validated
+        </span>
+        {warnings.length > 0 && (
+          <span className="text-amber-300/70" title={warnings.join('\n')}>
+            ⚠ {warnings.length} warning{warnings.length !== 1 ? 's' : ''}
+          </span>
+        )}
+      </div>
+    );
+  }
+  
+  // Some files invalid - show error
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center gap-2 text-[11px]">
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-red-500/10 border border-red-500/20 text-red-300">
+          ❌ {invalid_files} of {total_files} GGUF file{total_files !== 1 ? 's' : ''} failed validation
+        </span>
+      </div>
+      {errors.length > 0 && (
+        <details className="text-[11px]">
+          <summary className="cursor-pointer text-red-300/80 hover:text-red-300">
+            View validation errors
+          </summary>
+          <ul className="mt-1 space-y-0.5 pl-2 text-red-300/70 max-h-32 overflow-y-auto">
+            {errors.map((err, i) => (
+              <li key={i} className="break-all">• {err}</li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </div>
+  );
+}
+
+/**
+ * GGUF metadata extracted from file headers (Gap #3)
+ */
+interface GGUFMetadata {
+  architecture: string | null;
+  model_name: string | null;
+  context_length: number | null;
+  embedding_length: number | null;
+  block_count: number | null;
+  attention_head_count: number | null;
+  attention_head_count_kv: number | null;
+  vocab_size: number | null;
+  file_type: number | null;
+  quantization_version: number | null;
+  file_type_name: string | null;
+}
+
+interface SafeTensorInfo {
+  files: string[];
+  total_size_gb: number;
+  file_count: number;
+  architecture: string | null;
+  model_type: string | null;
+  vocab_size: number | null;
+  max_position_embeddings: number | null;
+  torch_dtype: string | null;
+  tie_word_embeddings: boolean | null;
+}
 
 interface InspectResult {
   has_safetensors: boolean;
+  safetensor_info?: SafeTensorInfo | null;  // Detailed SafeTensor info
   gguf_files: string[];
   gguf_groups: Array<{
     quant_type: string;
@@ -21,10 +377,20 @@ interface InspectResult {
     can_use: boolean;
     warning: string | null;
     is_recommended: boolean;
+    // Gap #3: GGUF metadata
+    metadata?: GGUFMetadata | null;
   }>;
   tokenizer_files: string[];
   config_files: string[];
   warnings: string[];
+  // Additional config data
+  hidden_size?: number | null;
+  num_hidden_layers?: number | null;
+  num_attention_heads?: number | null;
+  // Smart engine recommendation (Gap #2)
+  engine_recommendation?: EngineRecommendation | null;
+  // GGUF validation summary (Gap #5)
+  gguf_validation?: GGUFValidationSummary | null;
 }
 
 interface OfflineModeFieldsProps {
@@ -34,6 +400,7 @@ interface OfflineModeFieldsProps {
   tokenizer: string;
   hfConfigPath: string;
   loadingFolders: boolean;
+  loadingInspect?: boolean;  // Loading state for folder inspection
   savingBase: boolean;
   inspect: InspectResult | null;
   useGguf: boolean;
@@ -42,6 +409,9 @@ interface OfflineModeFieldsProps {
   useLocalTokenizer: boolean;
   showGgufHelp: boolean;
   modeLocked?: boolean;
+  // Engine context for smart guidance (Gap #2)
+  engineType?: 'vllm' | 'llamacpp';
+  onSwitchEngine?: (engine: 'vllm' | 'llamacpp') => void;
   onBaseDirChange: (value: string) => void;
   onFolderSelect: (folder: string) => void;
   onRefreshFolders: () => void;
@@ -63,6 +433,7 @@ export function OfflineModeFields({
   tokenizer,
   hfConfigPath,
   loadingFolders,
+  loadingInspect,
   savingBase,
   inspect,
   useGguf,
@@ -71,6 +442,8 @@ export function OfflineModeFields({
   useLocalTokenizer,
   showGgufHelp,
   modeLocked,
+  engineType,
+  onSwitchEngine,
   onBaseDirChange,
   onFolderSelect,
   onRefreshFolders,
@@ -157,9 +530,24 @@ export function OfflineModeFields({
         </p>
       </label>
       
+      {/* Loading indicator while scanning folder */}
+      {loadingInspect && (
+        <div className="md:col-span-2 p-4 rounded-lg border border-cyan-500/20 bg-cyan-500/5 animate-pulse">
+          <div className="flex items-center gap-3">
+            <div className="animate-spin h-5 w-5 border-2 border-cyan-400 border-t-transparent rounded-full" />
+            <div>
+              <div className="text-cyan-300 font-medium">Scanning model folder…</div>
+              <div className="text-[11px] text-cyan-300/60 mt-0.5">
+                Detecting available model formats, validating GGUF files, and extracting metadata
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
       {/* Folder inspection and GGUF/SafeTensors choice */}
-      {!!inspect && (
-        <div className="md:col-span-2 space-y-2 text-sm">
+      {!loadingInspect && !!inspect && (
+        <div className="md:col-span-2 space-y-3 text-sm">
           {(inspect.has_safetensors && ((inspect.gguf_files||[]).length>0 || (inspect.gguf_groups||[]).length>0)) && (
             <div className="inline-flex items-center gap-4">
               <label className="inline-flex items-center gap-2">
@@ -175,6 +563,43 @@ export function OfflineModeFields({
           {(!inspect.has_safetensors && ((inspect.gguf_files||[]).length>0 || (inspect.gguf_groups||[]).length>0)) && (
             <div className="inline-flex items-center gap-2">
               <input type="radio" checked readOnly /> GGUF detected
+            </div>
+          )}
+          {(inspect.has_safetensors && !((inspect.gguf_files||[]).length>0 || (inspect.gguf_groups||[]).length>0)) && (
+            <div className="inline-flex items-center gap-2 text-emerald-300">
+              <span className="w-4 h-4 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-[10px]">✓</span>
+              SafeTensors model detected
+            </div>
+          )}
+          
+          {/* Smart Engine Guidance (Gap #1 + #2) */}
+          <EngineGuidance
+            engineType={engineType}
+            recommendation={inspect.engine_recommendation}
+            useGguf={useGguf || (!inspect.has_safetensors && ((inspect.gguf_files||[]).length>0 || (inspect.gguf_groups||[]).length>0))}
+            onSwitchEngine={(engine) => onSwitchEngine?.(engine)}
+            onSwitchToSafeTensors={() => onUseGgufChange(false)}
+            onShowMergeHelp={onShowMergeHelp}
+          />
+          
+          {/* SafeTensor Model Info Display */}
+          {!useGguf && inspect.has_safetensors && inspect.safetensor_info && (
+            <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-4">
+              <SafeTensorDisplay 
+                info={inspect.safetensor_info}
+                hiddenSize={inspect.hidden_size}
+                numLayers={inspect.num_hidden_layers}
+                numHeads={inspect.num_attention_heads}
+              />
+              {/* Tokenizer and config files */}
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-white/50 mt-3 pt-3 border-t border-white/5">
+                {(inspect.tokenizer_files || []).length > 0 && (
+                  <span>✓ Tokenizer: {inspect.tokenizer_files.join(', ')}</span>
+                )}
+                {(inspect.config_files || []).length > 0 && (
+                  <span>✓ Config: {inspect.config_files.join(', ')}</span>
+                )}
+              </div>
             </div>
           )}
           
@@ -202,6 +627,14 @@ export function OfflineModeFields({
               {!!(inspect.gguf_files||[]).length && (
                 <div className="text-[11px] text-white/60 mt-2">Detected GGUF files: {(inspect.gguf_files||[]).join(', ')}</div>
               )}
+              
+              {/* GGUF Validation Badge (Gap #5) */}
+              {inspect.gguf_validation && (
+                <div className="mt-2">
+                  <GGUFValidationBadge validation={inspect.gguf_validation} />
+                </div>
+              )}
+              
               {!!(inspect.tokenizer_files||[]).length && (
                 <div className="text-[11px] text-white/60">Detected tokenizer files: {(inspect.tokenizer_files||[]).join(', ')}</div>
               )}
@@ -251,11 +684,11 @@ export function OfflineModeFields({
             </label>
             {!useLocalTokenizer && (
               <>
-                <input 
-                  className="input mt-1" 
-                  placeholder="e.g., TinyLlama/TinyLlama-1.1B-Chat-v1.0" 
+                {/* Tokenizer input with suggestions (Gap #4) */}
+                <TokenizerInput
                   value={tokenizer || ''}
-                  onChange={(e) => onTokenizerChange(e.target.value)} 
+                  onChange={onTokenizerChange}
+                  modelName={localPath}
                 />
                 <p className="text-[11px] text-white/50">
                   The HF repo id of the base Transformers model this GGUF came from (find it on Hugging Face). 
@@ -263,7 +696,7 @@ export function OfflineModeFields({
                 </p>
                 <p className="text-[11px] text-amber-300/90">
                   Note: in offline mode, vLLM will not download this tokenizer. It will only work if the tokenizer is already present in the shared HF cache,
-                  or if you switch to “Use tokenizer.json in this folder”.
+                  or if you switch to "Use tokenizer.json in this folder".
                 </p>
               </>
             )}

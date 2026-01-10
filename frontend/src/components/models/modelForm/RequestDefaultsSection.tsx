@@ -150,9 +150,9 @@ export function RequestDefaultsSection({ values, onChange }: RequestDefaultsSect
       </div>
 
       {/* Advanced: Custom Request Extensions */}
-      <details className="mt-3 p-3 bg-cyan-500/10 border border-cyan-500/30 rounded">
-        <summary className="cursor-pointer text-sm font-medium text-cyan-300 mb-2">
-          ⚙️ Advanced: Custom Request Extensions
+      <details className="mt-3 p-3 bg-cyan-500/10 border border-cyan-500/30 rounded border-l-2 border-l-cyan-500">
+        <summary className="cursor-pointer text-sm font-medium text-cyan-300 mb-2 flex items-center gap-2">
+          <span>⚙️</span> Advanced: Custom Request Extensions
         </summary>
         
         <div className="mt-3 text-xs text-white/80 mb-2">

@@ -103,6 +103,7 @@ async def list_models(_: dict = Depends(require_admin)):
                 attention_backend=getattr(r, 'attention_backend', None),
                 disable_log_requests=getattr(r, 'disable_log_requests', None),
                 disable_log_stats=getattr(r, 'disable_log_stats', None),
+                gguf_weight_format=getattr(r, 'gguf_weight_format', None),
                 vllm_v1_enabled=getattr(r, 'vllm_v1_enabled', None),
                 # Version-aware entrypoint (Gap #5)
                 entrypoint_override=getattr(r, 'entrypoint_override', None),
@@ -119,6 +120,10 @@ async def list_models(_: dict = Depends(require_admin)):
                 # Custom startup args (Plane B - Phase 2)
                 engine_startup_args_json=getattr(r, 'engine_startup_args_json', None),
                 engine_startup_env_json=getattr(r, 'engine_startup_env_json', None),
+                # Speculative decoding for llama.cpp (Gap #6)
+                draft_model_path=getattr(r, 'draft_model_path', None),
+                draft_n=getattr(r, 'draft_n', None),
+                draft_p_min=getattr(r, 'draft_p_min', None),
                 state=r.state,
                 archived=bool(getattr(r, 'archived', False)),
                 port=r.port,
@@ -296,6 +301,7 @@ async def create_model(body: CreateModelRequest, _: dict = Depends(require_admin
             attention_backend=getattr(body, 'attention_backend', None),
             disable_log_requests=getattr(body, 'disable_log_requests', None),
             disable_log_stats=getattr(body, 'disable_log_stats', None),
+            gguf_weight_format=getattr(body, 'gguf_weight_format', None),
             vllm_v1_enabled=getattr(body, 'vllm_v1_enabled', None),
             # Version-aware entrypoint (Gap #5)
             entrypoint_override=getattr(body, 'entrypoint_override', None),
@@ -317,6 +323,10 @@ async def create_model(body: CreateModelRequest, _: dict = Depends(require_admin
             # Custom startup args (Plane B - Phase 2)
             engine_startup_args_json=getattr(body, 'engine_startup_args_json', None),
             engine_startup_env_json=getattr(body, 'engine_startup_env_json', None),
+            # Speculative decoding for llama.cpp (Gap #6)
+            draft_model_path=getattr(body, 'draft_model_path', None),
+            draft_n=getattr(body, 'draft_n', None),
+            draft_p_min=getattr(body, 'draft_p_min', None),
             state="stopped",
         )
         session.add(m)

@@ -62,6 +62,8 @@ class ModelItem(BaseModel):
     disable_log_requests: Optional[bool] = None
     disable_log_stats: Optional[bool] = None
     vllm_v1_enabled: Optional[bool] = None
+    # vLLM GGUF weight format (Gap #7)
+    gguf_weight_format: Optional[str] = None  # auto, gguf, ggml
     # Version-aware entrypoint (Gap #5)
     entrypoint_override: Optional[str] = None
     # Debug logging configuration (Gap #11)
@@ -77,6 +79,10 @@ class ModelItem(BaseModel):
     # Custom startup configuration (Plane B - Phase 2)
     engine_startup_args_json: Optional[str] = None
     engine_startup_env_json: Optional[str] = None
+    # Speculative decoding for llama.cpp (Gap #6)
+    draft_model_path: Optional[str] = None
+    draft_n: Optional[int] = None
+    draft_p_min: Optional[float] = None
     # Runtime state
     state: str
     archived: bool
@@ -145,6 +151,8 @@ class CreateModelRequest(BaseModel):
     disable_log_requests: Optional[bool] = None
     disable_log_stats: Optional[bool] = None
     vllm_v1_enabled: Optional[bool] = None
+    # vLLM GGUF weight format (Gap #7)
+    gguf_weight_format: Optional[str] = None  # auto, gguf, ggml
     # Version-aware entrypoint (Gap #5)
     entrypoint_override: Optional[str] = None
     # Debug logging configuration (Gap #11)
@@ -169,6 +177,10 @@ class CreateModelRequest(BaseModel):
     # Custom startup configuration (Plane B - Phase 2)
     engine_startup_args_json: Optional[str] = None
     engine_startup_env_json: Optional[str] = None
+    # Speculative decoding for llama.cpp (Gap #6)
+    draft_model_path: Optional[str] = None
+    draft_n: Optional[int] = None
+    draft_p_min: Optional[float] = None
 
 
 class UpdateModelRequest(BaseModel):
@@ -225,6 +237,8 @@ class UpdateModelRequest(BaseModel):
     disable_log_requests: Optional[bool] = None
     disable_log_stats: Optional[bool] = None
     vllm_v1_enabled: Optional[bool] = None
+    # vLLM GGUF weight format (Gap #7)
+    gguf_weight_format: Optional[str] = None  # auto, gguf, ggml
     # Version-aware entrypoint (Gap #5)
     entrypoint_override: Optional[str] = None
     # Debug logging configuration (Gap #11)
@@ -249,6 +263,10 @@ class UpdateModelRequest(BaseModel):
     # Custom startup configuration (Plane B - Phase 2)
     engine_startup_args_json: Optional[str] = None
     engine_startup_env_json: Optional[str] = None
+    # Speculative decoding for llama.cpp (Gap #6)
+    draft_model_path: Optional[str] = None
+    draft_n: Optional[int] = None
+    draft_p_min: Optional[float] = None
 
 
 class BaseDirCfg(BaseModel):
@@ -256,9 +274,44 @@ class BaseDirCfg(BaseModel):
     base_dir: str
 
 
+class GGUFValidationSummary(BaseModel):
+    """Summary of GGUF file validation results (Gap #5)."""
+    total_files: int
+    valid_files: int
+    invalid_files: int
+    warnings: list[str]  # List of validation warnings
+    errors: list[str]    # List of validation errors
+
+
+class EngineRecommendation(BaseModel):
+    """Smart engine recommendation based on folder contents."""
+    recommended: str  # 'vllm', 'llamacpp', or 'either'
+    reason: str
+    has_multipart_gguf: bool
+    has_safetensors: bool
+    has_gguf: bool
+    vllm_gguf_compatible: bool  # True only if single-file GGUF exists
+    options: list[dict]  # List of available options with explanations
+
+
+class SafeTensorInfo(BaseModel):
+    """Information about SafeTensor files in a model folder."""
+    files: list[str]  # List of SafeTensor filenames
+    total_size_gb: float  # Total size in GB
+    file_count: int
+    # Extracted from config.json
+    architecture: str | None = None
+    model_type: str | None = None
+    vocab_size: int | None = None
+    max_position_embeddings: int | None = None
+    torch_dtype: str | None = None
+    tie_word_embeddings: bool | None = None
+
+
 class InspectFolderResp(BaseModel):
     """Response from folder inspection endpoint."""
     has_safetensors: bool
+    safetensor_info: SafeTensorInfo | None = None  # Detailed SafeTensor info
     gguf_files: list[str]  # Legacy: flat list
     gguf_groups: list[GGUFGroup]  # New: smart grouped analysis
     tokenizer_files: list[str]
@@ -268,6 +321,10 @@ class InspectFolderResp(BaseModel):
     hidden_size: int | None = None
     num_hidden_layers: int | None = None
     num_attention_heads: int | None = None
+    # Smart engine recommendation (Gap #2)
+    engine_recommendation: EngineRecommendation | None = None
+    # GGUF validation summary (Gap #5)
+    gguf_validation: GGUFValidationSummary | None = None
 
 
 class HfConfigResp(BaseModel):

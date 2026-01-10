@@ -126,6 +126,8 @@ class Model(Base):
     disable_log_requests: Mapped[bool | None] = mapped_column(Boolean, nullable=True)  # Reduce log spam
     disable_log_stats: Mapped[bool | None] = mapped_column(Boolean, nullable=True)  # Faster startup
     vllm_v1_enabled: Mapped[bool | None] = mapped_column(Boolean, nullable=True)  # Enable V1 engine (VLLM_USE_V1)
+    # vLLM GGUF weight format (Gap #7)
+    gguf_weight_format: Mapped[str | None] = mapped_column(String(16), nullable=True)  # auto, gguf, ggml
     # Version-aware entrypoint (Gap #5)
     entrypoint_override: Mapped[str | None] = mapped_column(String(256), nullable=True)  # Custom entrypoint override
     # Debug logging configuration (Gap #11)
@@ -149,6 +151,10 @@ class Model(Base):
     # Custom startup configuration (Plane B - Phase 2)
     engine_startup_args_json: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON: custom flags
     engine_startup_env_json: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON: custom env vars
+    # Speculative decoding for llama.cpp (Gap #6)
+    draft_model_path: Mapped[str | None] = mapped_column(String(512), nullable=True)  # Path to draft model GGUF
+    draft_n: Mapped[int | None] = mapped_column(Integer, nullable=True)  # Number of tokens to draft (default: 16)
+    draft_p_min: Mapped[float | None] = mapped_column(Float, nullable=True)  # Min probability for draft acceptance
     state: Mapped[str] = mapped_column(String(16), default="stopped")
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
     port: Mapped[int | None] = mapped_column(Integer, nullable=True)

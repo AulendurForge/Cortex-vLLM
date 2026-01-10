@@ -213,13 +213,52 @@ async def system_gpus(_: dict = Depends(require_admin)):
                 temperature_c=float(v.get("temp")) if v.get("temp") is not None else None,
             )
         )
-    # NVML fallback if DCGM results are empty
+    
+    # Always try NVML to get compute capability for Flash Attention check (Gap #8)
+    # DCGM doesn't provide compute capability, so we supplement with NVML
+    try:
+        from pynvml import (
+            nvmlInit, nvmlShutdown, nvmlDeviceGetCount, nvmlDeviceGetHandleByIndex,
+            nvmlDeviceGetCudaComputeCapability
+        )  # type: ignore
+        nvmlInit()
+        try:
+            n = int(nvmlDeviceGetCount())
+            for i in range(n):
+                h = nvmlDeviceGetHandleByIndex(i)
+                try:
+                    major, minor = nvmlDeviceGetCudaComputeCapability(h)
+                    compute_cap = f"{major}.{minor}"
+                    architecture = _get_gpu_architecture(major, minor)
+                    fa_supported = (major >= 8)
+                    
+                    # Update existing entry or create new one
+                    if i < len(out):
+                        out[i] = GpuMetrics(
+                            index=out[i].index,
+                            name=out[i].name,
+                            utilization_pct=out[i].utilization_pct,
+                            mem_used_mb=out[i].mem_used_mb,
+                            mem_total_mb=out[i].mem_total_mb,
+                            temperature_c=out[i].temperature_c,
+                            compute_capability=compute_cap,
+                            architecture=architecture,
+                            flash_attention_supported=fa_supported
+                        )
+                except Exception:
+                    pass
+        finally:
+            nvmlShutdown()
+    except Exception:
+        pass
+    
+    # NVML full fallback if DCGM results are empty (get all metrics from NVML)
     if not out:
         try:
             from pynvml import (
                 nvmlInit, nvmlShutdown, nvmlDeviceGetCount, nvmlDeviceGetHandleByIndex,
                 nvmlDeviceGetName, nvmlDeviceGetMemoryInfo, nvmlDeviceGetUtilizationRates,
-                nvmlDeviceGetTemperature, NVML_TEMPERATURE_GPU
+                nvmlDeviceGetTemperature, NVML_TEMPERATURE_GPU, nvmlDeviceGetCudaComputeCapability
             )  # type: ignore
             nvmlInit()
             try:
@@ -245,13 +284,55 @@ async def system_gpus(_: dict = Depends(require_admin)):
                         temp = float(nvmlDeviceGetTemperature(h, NVML_TEMPERATURE_GPU))
                     except Exception:
                         temp = None
-                    out.append(GpuMetrics(index=i, name=name, utilization_pct=util_pct, mem_used_mb=mem_used_mb, mem_total_mb=mem_total_mb, temperature_c=temp))
+                    # Get compute capability for Flash Attention check (Gap #8)
+                    compute_cap = None
+                    architecture = None
+                    fa_supported = None
+                    try:
+                        major, minor = nvmlDeviceGetCudaComputeCapability(h)
+                        compute_cap = f"{major}.{minor}"
+                        # Determine architecture name based on SM version
+                        architecture = _get_gpu_architecture(major, minor)
+                        # Flash Attention 2 requires SM 80+ (Ampere and newer)
+                        fa_supported = (major >= 8)
+                    except Exception:
+                        pass
+                    out.append(GpuMetrics(
+                        index=i, name=name, utilization_pct=util_pct, 
+                        mem_used_mb=mem_used_mb, mem_total_mb=mem_total_mb, temperature_c=temp,
+                        compute_capability=compute_cap, architecture=architecture, flash_attention_supported=fa_supported
+                    ))
             finally:
                 nvmlShutdown()
         except Exception:
             pass
     _gpus_cache = (now, out)  # type: ignore
     return out
+
+
+def _get_gpu_architecture(major: int, minor: int) -> str:
+    """Get GPU architecture name from compute capability (Gap #8)."""
+    # Reference: https://developer.nvidia.com/cuda-gpus
+    if major == 9:
+        return "Hopper"  # H100, H200
+    elif major == 8:
+        if minor >= 9:
+            return "Ada Lovelace"  # RTX 40xx, L40
+        else:
+            return "Ampere"  # RTX 30xx, A100, A10
+    elif major == 7:
+        if minor >= 5:
+            return "Turing"  # RTX 20xx, T4
+        else:
+            return "Volta"  # V100
+    elif major == 6:
+        return "Pascal"  # GTX 10xx, P100
+    elif major == 5:
+        return "Maxwell"  # GTX 9xx
+    elif major == 3:
+        return "Kepler"  # GTX 6xx/7xx
+    else:
+        return f"SM {major}.{minor}"
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 

@@ -204,7 +204,7 @@ export function SideNav() {
           <div className="px-4 py-2">
             <div className="flex flex-col gap-1 text-[9px] text-white/30 font-bold uppercase tracking-[0.1em]">
               <span className="text-white/20">Developed by</span>
-              <span className="text-white/40 group-hover:text-white/60 transition-colors">Aulendur LLC</span>
+              <span className="text-white/40 group-hover:text-white/60 transition-colors">Aulendur Labs</span>
             </div>
           </div>
         </div>

@@ -187,6 +187,8 @@ export const ModelItemSchema = z.object({
   disable_log_requests: z.boolean().nullable().optional(),
   disable_log_stats: z.boolean().nullable().optional(),
   vllm_v1_enabled: z.boolean().nullable().optional(),
+  // vLLM GGUF weight format (Gap #7)
+  gguf_weight_format: z.string().nullable().optional(),
   // Version-aware entrypoint (Gap #5)
   entrypoint_override: z.string().nullable().optional(),
   // Debug logging configuration (Gap #11)

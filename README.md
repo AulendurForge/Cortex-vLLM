@@ -1,4 +1,4 @@
-<img src="frontend/src/assets/Aulendur%20LLC%20Dark%20Logo%20with%20Text_NoBackground.png" alt="Aulendur LLC" align="right" width="80" />
+<img src="frontend/src/assets/Aulendur%20LLC%20Dark%20Logo%20with%20Text_NoBackground.png" alt="Aulendur Labs" align="right" width="80" />
 
 <p align="center">
   <img src="frontend/src/assets/cortex%20logo%20and%20text%20black.png" alt="CORTEX" width="360" />
@@ -6,7 +6,7 @@
 
 # CORTEX
 
-OpenAI-compatible gateway and admin UI for running vLLM and llama.cpp inference engines on your own infrastructure. Built and maintained by Aulendur LLC.
+OpenAI-compatible gateway and admin UI for running vLLM and llama.cpp inference engines on your own infrastructure. Built and maintained by Aulendur Labs.
 
 - OpenAI-compatible endpoints: `/v1/chat/completions`, `/v1/completions`, `/v1/embeddings`
 - Health-aware routing, circuit breaking, retries
@@ -313,4 +313,4 @@ For local dev and advanced deployment, see the Docs → Getting Started.
 Please see the docs (Contributing) for local setup, coding standards, and PR guidelines.
 
 ## License
-Copyright © [{{CURRENT_YEAR}}] Aulendur LLC. See `LICENSE.txt` and `NOTICE.txt`.
+Copyright © [{{CURRENT_YEAR}}] Aulendur Labs. See `LICENSE.txt` and `NOTICE.txt`.

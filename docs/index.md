@@ -85,4 +85,4 @@ CORTEX is an OpenAI-compatible gateway and admin UI for running vLLM and llama.c
 
 ## License and Ownership
 
-Copyright © 2024-2025 Aulendur LLC. Licensed under the terms in `LICENSE.txt`. See `NOTICE.txt` for attributions.
+Copyright © 2024-2025 Aulendur Labs. Licensed under the terms in `LICENSE.txt`. See `NOTICE.txt` for attributions.
