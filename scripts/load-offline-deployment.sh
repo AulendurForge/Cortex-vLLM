@@ -60,7 +60,7 @@ if [ ! -d "$IMAGE_DIR" ]; then
     echo ""
     echo "Please ensure:"
     echo "  1. The offline package was transferred to this machine"
-    echo "  2. You're running this script from cortex-vllm directory"
+    echo "  2. You're running this script from Cortex directory"
     echo ""
     echo "Set custom location with:"
     echo "  IMAGE_DIR=/path/to/images bash $0"

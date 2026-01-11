@@ -76,8 +76,8 @@ On a machine with internet access:
 
 ```bash
 # Clone Cortex repository
-git clone https://github.com/AulendurForge/Cortex-vLLM.git
-cd cortex-vllm
+git clone https://github.com/AulendurForge/Cortex.git
+cd Cortex
 
 # Download and package all required Docker images
 make prepare-offline
@@ -128,7 +128,7 @@ tar -cJf cortex-offline-package.tar.xz cortex-offline-images/
 Transfer the following to your offline machine:
 
 ### Required Files:
-1. **cortex-vllm/** - Complete repository (code, configs, scripts)
+1. **Cortex/** - Complete repository (code, configs, scripts)
 2. **cortex-offline-images/** - Docker image package
 3. **Model files** - Any models for `/var/cortex/models` (if using offline models)
 
@@ -137,21 +137,21 @@ Transfer the following to your offline machine:
 **USB Drive** (most common):
 ```bash
 # On online machine
-cp -r cortex-vllm /media/usb/
+cp -r Cortex /media/usb/
 cp -r cortex-offline-images /media/usb/
 
 # On offline machine
-cp -r /media/usb/cortex-vllm ~/
-cp -r /media/usb/cortex-offline-images ~/cortex-vllm/
+cp -r /media/usb/Cortex ~/
+cp -r /media/usb/cortex-offline-images ~/Cortex/
 ```
 
 **Secure File Transfer** (if temporary network available):
 ```bash
 # Using SCP
-scp -r cortex-offline-images/ user@offline-machine:/home/user/cortex-vllm/
+scp -r cortex-offline-images/ user@offline-machine:/home/user/Cortex/
 
 # Using rsync (resume support)
-rsync -avP cortex-offline-images/ user@offline-machine:/home/user/cortex-vllm/cortex-offline-images/
+rsync -avP cortex-offline-images/ user@offline-machine:/home/user/Cortex/cortex-offline-images/
 ```
 
 **Physical Media** (maximum security):
@@ -166,7 +166,7 @@ rsync -avP cortex-offline-images/ user@offline-machine:/home/user/cortex-vllm/co
 On your offline machine:
 
 ```bash
-cd cortex-vllm
+cd Cortex
 
 # Load all images from package
 make load-offline
@@ -280,7 +280,7 @@ curl http://localhost:8084/admin/system/docker-images | jq .
 - [ ] Document versions in manifest.json
 
 ### Transfer
-- [ ] Copy cortex-vllm/ repository to transfer media
+- [ ] Copy Cortex/ repository to transfer media
 - [ ] Copy cortex-offline-images/ to transfer media
 - [ ] Copy model files to transfer media (optional)
 - [ ] Verify checksums/integrity (optional but recommended)
@@ -466,7 +466,7 @@ OFFLINE_MODE=False  # Can leave offline mode off since registry is local
 
 ```bash
 # On internet-connected machine
-cd cortex-vllm
+cd Cortex
 git pull  # Get latest Cortex code
 
 # Check for version updates in backend/src/config.py

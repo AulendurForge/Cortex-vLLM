@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Detect host machine IP address for Cortex-vLLM
+# Detect host machine IP address for Cortex
 # This script detects the primary LAN IP address, excluding Docker bridge networks and loopback
 
 set -e

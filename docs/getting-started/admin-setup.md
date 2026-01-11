@@ -1,4 +1,4 @@
-# Administrator Setup Guide for Cortex-vLLM
+# Administrator Setup Guide for Cortex
 
 ## 🎯 Quick Start (5 Minutes)
 
@@ -7,7 +7,7 @@
 ```bash
 # 1. Clone the repository
 git clone <your-repo-url>
-cd Cortex-vLLM
+cd Cortex
 
 # 2. Start everything
 make quick-start
@@ -93,7 +93,7 @@ make install-deps
 
 ### Directory Structure
 ```
-Cortex-vLLM/
+Cortex/
 ├── docker.compose.dev.yaml   ← Main config (edit if needed)
 ├── docker.compose.prod.yaml  ← Production config
 ├── backend/
@@ -159,7 +159,7 @@ sudo usermod -aG docker $USER
 
 ```bash
 git clone <your-repo-url>
-cd Cortex-vLLM
+cd Cortex
 ```
 
 ### Step 2.5: Prepare Models (Optional)
@@ -503,7 +503,7 @@ make prod-check
    ```bash
    # Add to crontab
    crontab -e
-   # Add: 0 2 * * * cd /path/to/Cortex-vLLM && make db-backup
+   # Add: 0 2 * * * cd /path/to/Cortex && make db-backup
    ```
 
 7. **Configure Firewall**
@@ -647,7 +647,7 @@ make db-backup
 # Automated backups (daily at 2 AM)
 crontab -e
 # Add:
-0 2 * * * cd /path/to/Cortex-vLLM && make db-backup
+0 2 * * * cd /path/to/Cortex && make db-backup
 ```
 
 ### Restoring from Backup
@@ -810,7 +810,7 @@ If issues persist:
 - `docs/models/huggingface-model-download.md` - Complete HuggingFace model download guide
 
 **Online Docs:**
-- Full documentation: https://aulendurforge.github.io/Cortex-vLLM/
+- Full documentation: https://aulendurforge.github.io/Cortex/
 
 **Quick Help:**
 ```bash

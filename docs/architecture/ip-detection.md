@@ -1,8 +1,8 @@
-# Dynamic IP Detection for Cortex-vLLM
+# Dynamic IP Detection for Cortex
 
 ## Overview
 
-Cortex-vLLM automatically detects the host machine's LAN IP address and uses it throughout the system for:
+Cortex automatically detects the host machine's LAN IP address and uses it throughout the system for:
 1. **CORS configuration** - Allows frontend access from the detected IP
 2. **Terminal output** - All URLs shown use the detected IP
 3. **Network access** - Enables other devices on the network to connect

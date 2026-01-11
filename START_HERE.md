@@ -1,8 +1,8 @@
-# 🚀 START HERE - Cortex-vLLM Quick Start
+# 🚀 START HERE - Cortex Quick Start
 
 ## For New Administrators
 
-**Welcome to Cortex-vLLM!** This guide gets you running in 5 minutes.
+**Welcome to Cortex!** This guide gets you running in 5 minutes.
 
 ---
 
@@ -106,7 +106,7 @@ Tests Failed:  0
 - Common issues & fixes
 
 ### 📖 Full Documentation
-👉 Visit: https://aulendurforge.github.io/Cortex-vLLM/
+👉 Visit: https://aulendurforge.github.io/Cortex/
 - Or browse the `docs/` directory locally
 - Architecture guides
 - API reference
@@ -228,14 +228,14 @@ API Gateway: http://192.168.1.181:8084
    
    # Automated (daily at 2 AM)
    crontab -e
-   # Add: 0 2 * * * cd /path/to/Cortex-vLLM && make db-backup
+   # Add: 0 2 * * * cd /path/to/Cortex && make db-backup
    ```
 
 ---
 
 ## 🏁 You're All Set!
 
-**Cortex-vLLM is now running at:**
+**Cortex is now running at:**
 
 ```bash
 # Run this to see your URLs:

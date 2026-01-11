@@ -1,6 +1,6 @@
 # Cortex Makefile Guide for Administrators
 
-This guide explains how to use the Makefile for simplified administration of Cortex-vLLM.
+This guide explains how to use the Makefile for simplified administration of Cortex.
 
 ## Prerequisites
 
@@ -55,8 +55,8 @@ The simplest way to get started:
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/AulendurForge/Cortex-vLLM.git
-cd Cortex-vLLM
+git clone https://github.com/AulendurForge/Cortex.git
+cd Cortex
 
 # 2. Start everything with one command
 make quick-start
@@ -473,7 +473,7 @@ Set up a cron job for regular backups:
 
 ```bash
 # Add to crontab (run daily at 2 AM)
-0 2 * * * cd /path/to/Cortex-vLLM && make db-backup
+0 2 * * * cd /path/to/Cortex && make db-backup
 ```
 
 ### Monitor Health
@@ -528,7 +528,7 @@ Print this and keep it handy:
 ## Support
 
 For more detailed documentation:
-- Full docs: https://aulendurforge.github.io/Cortex-vLLM/
+- Full docs: https://aulendurforge.github.io/Cortex/
 - GitHub issues: Report bugs or request features
 - README.md: Quick start guide
 

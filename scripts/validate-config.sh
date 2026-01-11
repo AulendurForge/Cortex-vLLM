@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Cortex-vLLM Configuration Validation Script
+# Cortex Configuration Validation Script
 # This script validates that Cortex is properly configured and accessible
 
 # Don't exit on errors - we want to show all test results
@@ -15,7 +15,7 @@ NC='\033[0m' # No Color
 
 echo ""
 echo -e "${BOLD}========================================${NC}"
-echo -e "${BOLD}Cortex-vLLM Configuration Validation${NC}"
+echo -e "${BOLD}Cortex Configuration Validation${NC}"
 echo -e "${BOLD}========================================${NC}"
 echo ""
 

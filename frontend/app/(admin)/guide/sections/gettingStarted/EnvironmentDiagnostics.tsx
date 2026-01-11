@@ -154,7 +154,7 @@ export default function EnvironmentDiagnostics() {
               />
               <p className="text-white/50 text-[10px]">
                 ⚡ Reboot required after driver update. See the{' '}
-                <a href="https://aulendurforge.github.io/Cortex-vLLM/operations/UPDATE_NVIDIA_DRIVERS/" target="_blank" rel="noopener noreferrer" className="text-cyan-300 underline">
+                <a href="https://aulendurforge.github.io/Cortex/operations/UPDATE_NVIDIA_DRIVERS/" target="_blank" rel="noopener noreferrer" className="text-cyan-300 underline">
                   full driver update guide
                 </a>{' '}for detailed instructions.
               </p>
@@ -418,7 +418,7 @@ export default function EnvironmentDiagnostics() {
           <ResourceLink 
             title="NVIDIA Driver Guide"
             description="Detailed driver update instructions"
-            href="https://aulendurforge.github.io/Cortex-vLLM/operations/UPDATE_NVIDIA_DRIVERS/"
+            href="https://aulendurforge.github.io/Cortex/operations/UPDATE_NVIDIA_DRIVERS/"
           />
           <ResourceLink 
             title="Docker GPU Setup"

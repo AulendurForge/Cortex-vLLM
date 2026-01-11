@@ -104,10 +104,10 @@ Set up daily automated backups with cron:
 crontab -e
 
 # Add daily backup at 2 AM
-0 2 * * * cd /path/to/Cortex-vLLM && make db-backup
+0 2 * * * cd /path/to/Cortex && make db-backup
 
 # Optional: Add weekly cleanup (keep last 7 days)
-0 3 * * 0 find /path/to/Cortex-vLLM/backups -name "*.sql" -mtime +7 -delete
+0 3 * * 0 find /path/to/Cortex/backups -name "*.sql" -mtime +7 -delete
 ```
 
 ---

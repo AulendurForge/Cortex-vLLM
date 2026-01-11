@@ -7,7 +7,7 @@
 
 ## 🎯 Overview
 
-This guide provides comprehensive instructions for downloading models from HuggingFace Hub and preparing them for use with Cortex-vLLM. It covers both **online** (internet-connected) and **offline** (air-gapped) deployment scenarios.
+This guide provides comprehensive instructions for downloading models from HuggingFace Hub and preparing them for use with Cortex. It covers both **online** (internet-connected) and **offline** (air-gapped) deployment scenarios.
 
 **What you'll learn:**
 - ✅ How to install HuggingFace tools on Linux
@@ -736,7 +736,7 @@ ls -la /var/cortex/models/
 ### Community Resources
 - **HuggingFace Community**: https://discuss.huggingface.co/
 - **Model Hub**: https://huggingface.co/models
-- **Cortex GitHub**: https://github.com/AulendurForge/Cortex-vLLM
+- **Cortex GitHub**: https://github.com/AulendurForge/Cortex
 
 ---
 

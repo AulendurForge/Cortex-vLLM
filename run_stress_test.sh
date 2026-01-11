@@ -17,7 +17,7 @@ fi
 mkdir -p ~/Desktop
 
 # Run the stress test
-python3 /home/mage/repos/cortex-vllm/sequential_stress_test.py
+python3 /home/mage/repos/Cortex/sequential_stress_test.py
 
 echo ""
 echo "Stress test completed!"

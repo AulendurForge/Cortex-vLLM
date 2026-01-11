@@ -1,4 +1,4 @@
-# Cortex-vLLM Configuration Checklist
+# Cortex Configuration Checklist
 
 ## ✅ Pre-Start Checklist for Administrators
 
@@ -31,10 +31,10 @@
 ### Step 1: Clone Repository
 ```bash
 git clone <your-repo-url>
-cd Cortex-vLLM
+cd Cortex
 ```
 - [ ] Repository cloned successfully
-- [ ] In the Cortex-vLLM directory
+- [ ] In the Cortex directory
 
 ### Step 2: Verify IP Detection
 ```bash

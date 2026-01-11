@@ -1,4 +1,4 @@
-# Cortex-vLLM Makefile
+# Cortex Makefile
 # Simplified administration for Docker-based LLM inference gateway
 #
 # Usage: make <target>
@@ -51,7 +51,7 @@ COLOR_BLUE = \033[34m
 
 help: ## Show this help message
 	@echo ""
-	@echo "$(COLOR_BOLD)Cortex-vLLM Administration Commands$(COLOR_RESET)"
+	@echo "$(COLOR_BOLD)Cortex Administration Commands$(COLOR_RESET)"
 	@echo ""
 	@echo "$(COLOR_BLUE)Basic Operations:$(COLOR_RESET)"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(COLOR_GREEN)%-20s$(COLOR_RESET) %s\n", $$1, $$2}'
@@ -440,7 +440,7 @@ quick-start: up ## Quick start: up with automatic admin bootstrap
 	@echo "$(COLOR_GREEN)$(COLOR_BOLD)For admins:$(COLOR_RESET)"
 	@echo "  2. Test creating an API key on the API Keys page"
 	@echo "  3. Check System Monitor page for host machine's GPU & Hardwaremetrics"
-	@echo "  4. View additional docs: https://aulendurforge.github.io/Cortex-vLLM/"
+	@echo "  4. View additional docs: https://aulendurforge.github.io/Cortex/"
 	@echo ""
 
 install-deps: ## Install required dependencies (Docker, Docker Compose)
@@ -507,7 +507,7 @@ ip: ## Show detected host IP address
 	@echo "$(COLOR_BLUE)ℹ Other devices on your network should use this IP too$(COLOR_RESET)"
 
 version: ## Show version information
-	@echo "Cortex-vLLM Gateway"
+	@echo "Cortex Gateway"
 	@echo "Version: 0.1.0"
 	@echo ""
 	@docker --version

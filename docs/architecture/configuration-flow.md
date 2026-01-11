@@ -1,4 +1,4 @@
-# Cortex-vLLM Configuration Flow
+# Cortex Configuration Flow
 
 ## 🎯 For Administrators: No Manual IP Configuration Needed!
 
@@ -454,7 +454,7 @@ make health        # Check service health
 
 ## 🎉 Summary
 
-**Cortex-vLLM uses a three-tier automatic configuration system:**
+**Cortex uses a three-tier automatic configuration system:**
 
 1. **Tier 1**: IP Detection (finds your IP)
 2. **Tier 2**: Docker Compose (configures CORS with your IP)

@@ -80,7 +80,7 @@ Cortex provides comprehensive GGUF support with smart detection and guidance:
 - `Makefile` - Run `make help` to see all commands
 
 **🌐 Full Documentation** (guides, architecture, API reference, operations):
-- Docs site: https://aulendurforge.github.io/Cortex-vLLM/
+- Docs site: https://aulendurforge.github.io/Cortex/
 - Local docs: Browse the `docs/` directory for comprehensive guides
   - Getting Started: Setup, configuration, admin guides
   - Architecture: System design, IP detection, configuration flow

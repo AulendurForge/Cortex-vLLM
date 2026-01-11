@@ -141,7 +141,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 
-- Full documentation site: https://aulendurforge.github.io/Cortex-vLLM/
+- Full documentation site: https://aulendurforge.github.io/Cortex/
 - Quick start guide: `START_HERE.md`
 - API reference: `docs/api/`
 - Architecture guides: `docs/architecture/`
@@ -166,8 +166,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - This is a beta release. Breaking changes may occur before v1.0.0
 - We welcome feedback and contributions from the community
-- Report issues and feature requests on [GitHub Issues](https://github.com/AulendurForge/Cortex-vLLM/issues)
-- Join discussions on [GitHub Discussions](https://github.com/AulendurForge/Cortex-vLLM/discussions)
+- Report issues and feature requests on [GitHub Issues](https://github.com/AulendurForge/Cortex/issues)
+- Join discussions on [GitHub Discussions](https://github.com/AulendurForge/Cortex/discussions)
 - See `docs/contributing/` for contribution guidelines
-- Repository: https://github.com/AulendurForge/Cortex-vLLM
+- Repository: https://github.com/AulendurForge/Cortex
 

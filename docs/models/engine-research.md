@@ -1,7 +1,7 @@
 # Engine Research Summary: vLLM & llama.cpp
 
 **Date**: October 4, 2025  
-**Research Scope**: Deep dive into vLLM and llama.cpp for Cortex-vLLM implementation
+**Research Scope**: Deep dive into vLLM and llama.cpp for Cortex implementation
 
 ---
 

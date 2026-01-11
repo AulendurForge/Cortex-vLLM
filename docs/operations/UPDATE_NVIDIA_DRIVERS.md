@@ -184,7 +184,7 @@ sudo systemctl restart docker
 ### 2. Restart Cortex
 
 ```bash
-cd /path/to/Cortex-vLLM
+cd /path/to/Cortex
 make restart
 # OR
 docker compose restart
