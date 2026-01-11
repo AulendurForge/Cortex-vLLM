@@ -831,10 +831,29 @@ llama.cpp (GPT-OSS 120B):
 
 ---
 
+## Smart Engine Guidance
+
+Cortex now provides **automatic engine recommendations** when you browse model folders:
+
+| Detected Files | Recommended Engine | Reason |
+|----------------|-------------------|--------|
+| SafeTensors + GGUF | vLLM + SafeTensors | Best vLLM performance |
+| Multi-part GGUF only | llama.cpp | Only engine supporting split files |
+| Single GGUF only | llama.cpp | Native GGUF support |
+| GPT-OSS/Harmony | llama.cpp | vLLM doesn't support architecture |
+
+**In the UI**: Guidance banners appear with one-click actions to switch engines or formats.
+
+See [Model Management](model-management.md#smart-engine-guidance) for details.
+
+---
+
 **For detailed guides:**
-- vLLM: See `vllm.md` (in this directory)
-- llama.cpp: See `llamaCPP.md` (in this directory)
-- Model Management: See `model-management.md` (in this directory)
-- Engine Research: See `engine-research.md` (in this directory)
-- HuggingFace Models: See `huggingface-model-download.md` (in this directory)
+- vLLM: See [vLLM Guide](vllm.md)
+- llama.cpp: See [llama.cpp Guide](llamaCPP.md)
+- GGUF Format: See [GGUF Format Guide](gguf-format.md)
+- Multi-Part GGUF: See [Multi-Part GGUF](gguf-multipart.md)
+- Model Management: See [Model Management](model-management.md)
+- Engine Research: See [Engine Research](engine-research.md)
+- HuggingFace Models: See [HuggingFace Download](huggingface-model-download.md)
 

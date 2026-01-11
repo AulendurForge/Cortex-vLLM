@@ -31,10 +31,20 @@ CORTEX is an OpenAI-compatible gateway and admin UI for running vLLM and llama.c
 - Recipe system for configuration templates
 - Offline/air-gapped deployment support
 
+### 📦 GGUF Support
+- **Smart Engine Guidance**: Automatic recommendations for engine/format selection
+- **GGUF Validation**: Header validation, corruption detection
+- **Metadata Extraction**: Architecture, context length, layer count from GGUF headers
+- **Multi-part GGUF**: Native llama.cpp support for split files
+- **Quantization Indicators**: Quality/speed ratings for Q4_K_M, Q8_0, etc.
+- **Architecture Compatibility**: vLLM vs llama.cpp support badges
+- **Speculative Decoding**: Draft model support for llama.cpp
+
 ### ⚙️ Advanced vLLM Configuration
 - Attention backend selection
 - V1/V2 engine control
 - Quantization (AWQ, GPTQ, FP8, INT8)
+- GGUF weight format control
 - Debug logging and trace modes
 - Custom startup arguments and environment variables
 
@@ -51,7 +61,7 @@ CORTEX is an OpenAI-compatible gateway and admin UI for running vLLM and llama.c
 |----------|---------------|
 | **Getting Started** | [Quickstart (Docker)](getting-started/quickstart-docker.md) • [Configuration](getting-started/configuration.md) |
 | **API** | [OpenAI-Compatible](api/openai-compatible.md) • [Admin API](api/admin-api.md) |
-| **Models** | [vLLM Guide](models/vllm.md) • [llama.cpp Guide](models/llamaCPP.md) • [HuggingFace Download](models/huggingface-model-download.md) |
+| **Models** | [vLLM Guide](models/vllm.md) • [llama.cpp Guide](models/llamaCPP.md) • [GGUF Format](models/gguf-format.md) • [HuggingFace Download](models/huggingface-model-download.md) |
 | **Operations** | [Deployments](operations/deployments.md) • [Offline Deployment](operations/offline-deployment.md) • [Makefile Guide](operations/makefile-guide.md) |
 | **Architecture** | [System Overview](architecture/system.md) • [Backend](architecture/backend.md) • [Frontend](architecture/frontend.md) |
 | **Security** | [Security Guide](security/security.md) • [Threat Model](security/threat-model.md) |

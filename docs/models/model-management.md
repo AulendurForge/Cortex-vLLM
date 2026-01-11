@@ -73,8 +73,94 @@ rm -rf /var/cortex/models/old-model-folder
 
 ## Model Preparation
 - **📖 HuggingFace Models**: See `docs/models/huggingface-model-download.md` for complete guide on downloading HF models
-- **📖 GGUF Models**: See `docs/models/llamaCPP.md` for llama.cpp model preparation
+- **📖 GGUF Models**: See `docs/models/gguf-format.md` for GGUF format guide and `docs/models/llamaCPP.md` for llama.cpp configuration
 - **📖 vLLM Models**: See `docs/models/vllm.md` for vLLM-specific configuration
+
+## Smart Engine Guidance
+
+Cortex automatically analyzes model folders and provides intelligent recommendations for engine and format selection.
+
+### How It Works
+
+When you browse to a model folder in offline mode, Cortex:
+
+1. **Scans for file types**: GGUF, SafeTensors, PyTorch
+2. **Analyzes GGUF files**: Detects quantization, multi-part splits, validates headers
+3. **Extracts metadata**: Architecture, context length, layer count
+4. **Computes recommendations**: Based on file availability and engine compatibility
+
+### Engine Recommendation Matrix
+
+| Scenario | SafeTensors | GGUF Type | Recommended Engine | Reason |
+|----------|-------------|-----------|-------------------|--------|
+| Both available | ✅ | Single | vLLM + SafeTensors | Best performance |
+| Both available | ✅ | Multi-part | vLLM + SafeTensors | vLLM can't load multi-part GGUF |
+| GGUF only | ❌ | Single | llama.cpp | Native GGUF support |
+| GGUF only | ❌ | Multi-part | llama.cpp | Only engine with multi-part support |
+| SafeTensors only | ✅ | ❌ | vLLM | Native format |
+
+### Guidance UI Components
+
+**Engine Guidance Banner**: Appears in the model form when recommendations apply:
+
+- **⚠️ Warning**: Multi-part GGUF with vLLM selected (incompatible)
+- **💡 Tip**: SafeTensors available with GGUF selected
+- **✅ Recommended**: Suggested engine/format combination
+
+**One-Click Actions**:
+- "Switch to SafeTensors" - Changes format selection
+- "Switch to llama.cpp" - Changes engine selection
+
+### GGUF Validation
+
+Cortex validates GGUF files during folder inspection:
+
+| Check | What It Detects |
+|-------|-----------------|
+| Magic bytes | Invalid/corrupt files |
+| Version | Unsupported GGUF versions |
+| Header integrity | Truncated downloads |
+| Legacy format | Old GGML files |
+
+**Validation Status**:
+- ✅ **Valid**: All files passed checks
+- ⚠️ **Warning**: Minor issues detected
+- ❌ **Invalid**: Corrupt or incomplete files
+
+### GGUF Metadata Extraction
+
+For valid GGUF files, Cortex extracts and displays:
+
+| Metadata | Example | Description |
+|----------|---------|-------------|
+| Architecture | `llama` | Model architecture type |
+| Context Length | `32K` | Maximum context window |
+| Layers | `32` | Number of transformer layers |
+| Hidden Size | `4096` | Embedding dimension |
+| Attention Heads | `32/8` | Q heads / KV heads (GQA) |
+| Vocab Size | `128K` | Vocabulary size |
+
+### Architecture Compatibility
+
+Cortex shows compatibility badges for each detected architecture:
+
+| Status | vLLM | llama.cpp | Meaning |
+|--------|------|-----------|---------|
+| ✓ Green | Full | Full | Both engines fully support |
+| ◐ Yellow | Partial | Full | Some vLLM limitations |
+| ⚡ Orange | Experimental | Full | Experimental vLLM support |
+| ✗ Red | None | Full | llama.cpp only |
+
+### Quantization Quality Indicators
+
+When selecting GGUF quantization levels, Cortex shows:
+
+- **Quality bars** (1-5 stars): Output quality rating
+- **Speed bars** (1-5 stars): Inference speed rating
+- **Bits per weight**: Compression level
+- **Description**: What the quantization is best for
+
+See [GGUF Format Guide](gguf-format.md) for detailed quantization information.
 
 ## Logs
 - `GET /admin/models/{id}/logs` returns recent container logs (for debugging)

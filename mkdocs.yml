@@ -43,15 +43,19 @@ nav:
       - Admin API: api/admin-api.md
   - Operations:
       - Deployments: operations/deployments.md
+      - Offline Deployment: operations/offline-deployment.md
       - Makefile Guide: operations/makefile-guide.md
+      - Model Container Lifecycle: operations/model-container-lifecycle.md
       - Scaling & Reliability: operations/scaling.md
       - Backup & Restore: operations/backup-restore.md
+      - NVIDIA Driver Updates: operations/UPDATE_NVIDIA_DRIVERS.md
       - Upgrade Notes: operations/upgrade-notes.md
   - Models:
       - HuggingFace Model Download: models/huggingface-model-download.md
       - Engine Comparison: models/engine-comparison.md
       - vLLM Guide: models/vllm.md
       - llama.cpp Guide: models/llamaCPP.md
+      - GGUF Format Guide: models/gguf-format.md
       - Multi-Part GGUF Files: models/gguf-multipart.md
       - Engine Research: models/engine-research.md
       - Model Management: models/model-management.md

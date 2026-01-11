@@ -47,6 +47,30 @@ make quick-start      # Deploy completely offline
 
 **See**: `OFFLINE_DEPLOYMENT_QUICKSTART.md` for step-by-step guide or `docs/operations/offline-deployment.md` for full documentation.
 
+## 📦 GGUF Model Support
+
+Cortex provides comprehensive GGUF support with smart detection and guidance:
+
+- **Smart Engine Guidance**: Automatic recommendations based on file analysis
+- **GGUF Validation**: Header validation, corruption detection
+- **Metadata Extraction**: Architecture, context length, layers from GGUF headers
+- **Multi-part GGUF**: Native llama.cpp support (no merge required)
+- **Quantization Indicators**: Quality/speed ratings (Q4_K_M, Q8_0, etc.)
+- **Architecture Compatibility**: vLLM vs llama.cpp support badges
+- **Speculative Decoding**: Draft model support for llama.cpp
+
+**GGUF with llama.cpp** (Recommended):
+- ✅ Full GGUF support including multi-part files
+- ✅ Native format, optimal performance
+- ✅ Works with any architecture (including GPT-OSS/Harmony)
+
+**GGUF with vLLM** (Experimental):
+- ⚠️ Single-file GGUF only
+- ⚠️ Requires external tokenizer
+- ⚠️ Performance lower than SafeTensors
+
+**See**: `docs/models/gguf-format.md` for complete GGUF guide.
+
 ## Documentation
 
 **📚 Quick Start**:

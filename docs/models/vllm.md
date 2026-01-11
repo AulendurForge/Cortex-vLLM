@@ -266,6 +266,93 @@ hf_config_path: "/models/model-folder"       # Optional config path
 
 ---
 
+## GGUF Support (Experimental)
+
+vLLM has **experimental** support for loading GGUF files. While functional, it has important limitations compared to native SafeTensors/HF format.
+
+### When to Use vLLM with GGUF
+
+**Consider vLLM + GGUF when**:
+- You only have GGUF files (no SafeTensors)
+- Need vLLM's batching/PagedAttention features
+- Single-file GGUF available
+
+**Use llama.cpp instead when**:
+- Multi-part GGUF files (vLLM doesn't support)
+- GPT-OSS/Harmony architecture
+- Want native GGUF optimization
+
+### GGUF Limitations in vLLM
+
+| Aspect | vLLM GGUF | vLLM SafeTensors | llama.cpp GGUF |
+|--------|-----------|------------------|----------------|
+| Multi-part files | ❌ No | ✅ Yes (shards) | ✅ Yes |
+| Performance | ⚠️ Lower | ✅ Optimal | ✅ Optimal |
+| Tokenizer | ❌ External required | ✅ Embedded | ✅ Embedded |
+| Architecture support | ⚠️ Limited | ✅ Full | ✅ Full |
+
+### GGUF Configuration
+
+**Required Settings**:
+
+| Field | Description | Example |
+|-------|-------------|---------|
+| `local_path` | Path to single-file GGUF | `/models/folder/model.Q8_0.gguf` |
+| `tokenizer` | HuggingFace tokenizer repo ID | `meta-llama/Llama-3.1-8B-Instruct` |
+
+**Optional Settings**:
+
+| Field | Description | Default |
+|-------|-------------|---------|
+| `hf_config_path` | Path to model config.json | Auto-detect |
+| `gguf_weight_format` | Force format: `auto`, `gguf`, `ggml` | `auto` |
+
+### GGUF Weight Format
+
+The `--gguf-weight-format` flag controls how vLLM interprets GGUF files:
+
+| Value | Description | When to Use |
+|-------|-------------|-------------|
+| `auto` | Auto-detect format | Default, works for most files |
+| `gguf` | Force modern GGUF | If auto-detection fails |
+| `ggml` | Force legacy GGML | Old GGML-format files only |
+
+**In Cortex UI**: Model Form → vLLM → Production Settings → GGUF Weight Format
+
+This option only appears when a GGUF file is selected.
+
+### Example: vLLM with GGUF
+
+```yaml
+# Model configuration
+engine_type: vllm
+local_path: /models/llama-model/llama-3-8b-Q8_0.gguf
+tokenizer: meta-llama/Llama-3.1-8B-Instruct
+gguf_weight_format: auto
+
+# Resulting vLLM command:
+vllm serve /models/llama-model/llama-3-8b-Q8_0.gguf \
+  --tokenizer meta-llama/Llama-3.1-8B-Instruct \
+  --gguf-weight-format auto \
+  # ... other flags
+```
+
+### Smart Engine Guidance
+
+When Cortex detects GGUF files, it provides smart recommendations:
+
+**Multi-part GGUF + vLLM selected**:
+- ⚠️ Warning: vLLM doesn't support multi-part GGUF
+- ✅ Recommended: Switch to llama.cpp or use SafeTensors
+
+**GGUF + SafeTensors available**:
+- 💡 Tip: SafeTensors performs better with vLLM
+- 🔄 One-click switch to SafeTensors
+
+See [GGUF Format Guide](gguf-format.md) for complete GGUF documentation.
+
+---
+
 ## Performance Tuning
 
 ### Memory Optimization

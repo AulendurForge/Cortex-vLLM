@@ -359,6 +359,122 @@ For extending context beyond training length:
 
 ---
 
+## Speculative Decoding
+
+Speculative decoding uses a smaller "draft" model to accelerate inference from a larger "target" model. This can significantly improve throughput without sacrificing quality.
+
+### How It Works
+
+```
+Traditional Inference:
+  Main Model → Generate token 1 → Generate token 2 → ... (slow)
+
+Speculative Decoding:
+  Draft Model → Quickly propose 16 tokens
+  Main Model → Verify all 16 at once → Accept matching tokens
+  Result: Multiple tokens per forward pass!
+```
+
+### Benefits
+
+| Aspect | Improvement |
+|--------|-------------|
+| **Throughput** | 1.5-2x faster generation |
+| **Quality** | Identical output (verification ensures correctness) |
+| **Latency** | Reduced time-to-completion |
+
+### Requirements
+
+1. **Draft Model**: A smaller model of the same architecture family
+2. **Same Tokenizer**: Both models must use the same vocabulary
+3. **GGUF Format**: Both models in GGUF format
+
+### Configuration in Cortex
+
+**Model Form → llama.cpp → Speculative Decoding (Advanced)**:
+
+| Field | Description | Default |
+|-------|-------------|---------|
+| **Draft Model Path** | Path to draft GGUF inside container | (required) |
+| **Draft Tokens (n)** | Tokens to draft per iteration | 16 |
+| **Min Acceptance Probability** | Threshold for accepting drafts | 0.5 |
+
+### Example Setup
+
+**Directory Structure**:
+```
+/var/cortex/models/
+└── mistral-project/
+    ├── Mistral-Small-24B-Q8_0.gguf      # Main model (24B)
+    └── Mistral-Small-DRAFT-0.5B-Q8_0.gguf  # Draft model (0.5B)
+```
+
+**Configuration**:
+```yaml
+# Main model local_path:
+/models/mistral-project/Mistral-Small-24B-Q8_0.gguf
+
+# Speculative decoding settings:
+draft_model_path: /models/mistral-project/Mistral-Small-DRAFT-0.5B-Q8_0.gguf
+draft_n: 16
+draft_p_min: 0.5
+```
+
+**Resulting llama-server command**:
+```bash
+llama-server \
+  --model /models/.../Mistral-Small-24B-Q8_0.gguf \
+  --model-draft /models/.../Mistral-Small-DRAFT-0.5B-Q8_0.gguf \
+  --draft 16 \
+  --draft-p-min 0.5 \
+  # ... other flags
+```
+
+### Finding Draft Models
+
+**Same Architecture Family**:
+- Mistral 24B → Mistral 0.5B DRAFT
+- Llama 3 70B → Llama 3 8B (or smaller)
+- Qwen 72B → Qwen 1.8B
+
+**Community Resources**:
+- HuggingFace: Search for "DRAFT" or "speculative" versions
+- Example: `alamios/Mistral-Small-3.1-DRAFT-0.5B-GGUF`
+
+### Tuning Parameters
+
+**Draft Tokens (n)**:
+- Higher values (24-32): More aggressive speculation
+- Lower values (8-12): More conservative, higher acceptance
+- Default (16): Good balance
+
+**Min Acceptance Probability**:
+- Lower (0.2-0.4): Accept more drafts, potentially more rejections
+- Higher (0.6-0.8): More conservative, fewer but higher-quality drafts
+- Default (0.5): Balanced approach
+
+### Performance Expectations
+
+**Best Case** (matching architectures):
+- 1.8-2x throughput improvement
+- 90%+ draft acceptance rate
+
+**Typical Case**:
+- 1.3-1.5x throughput improvement
+- 70-80% draft acceptance rate
+
+**When to Use**:
+- Long-form generation (articles, code)
+- Single-user deployments
+- When throughput matters more than latency
+
+**When NOT to Use**:
+- Very short responses (< 50 tokens)
+- High-concurrency scenarios
+- Mismatched model architectures
+
+---
+
 ## OpenAI API Compatibility
 
 llama-server provides OpenAI-compatible endpoints:
