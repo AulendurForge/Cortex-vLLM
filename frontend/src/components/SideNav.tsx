@@ -126,7 +126,7 @@ export function SideNav() {
                   { href: '/users', label: 'Users', color: 'blue' },
                   { href: '/keys', label: 'All API Keys', color: 'cyan' },
                   { href: '/system', label: 'System Monitor', color: 'rose' },
-                  { href: '/deployment', label: 'Deployment', color: 'amber' },
+                  { href: '/deployment', label: 'Deployment (Beta)', color: 'amber' },
                 ].map((item) => {
                   const active = pathname?.startsWith(item.href);
                   return (

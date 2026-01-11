@@ -100,6 +100,11 @@ class Settings(BaseSettings):
     LLAMACPP_LOG_VERBOSE: bool = False     # Enable verbose logging (performance impact)
     LLAMACPP_LOG_TIMESTAMPS: bool = True   # Enable timestamps in log messages
     LLAMACPP_LOG_COLORS: str = "auto"      # Log colors: on, off, or auto
+    # Startup options (Gap #6)
+    LLAMACPP_CHECK_TENSORS: bool = True    # Check tensor integrity on load (catches corrupted GGUFs)
+    LLAMACPP_SKIP_WARMUP: bool = False     # Skip warmup run for faster startup
+    # Chat template options (Gap #7)
+    LLAMACPP_JINJA_ENABLED: bool = True    # Enable Jinja template engine for chat
 
     def gen_urls(self) -> List[str]:
         return [u.strip() for u in self.VLLM_GEN_URLS.split(",") if u.strip()]

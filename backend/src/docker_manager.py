@@ -583,6 +583,42 @@ def _build_llamacpp_command(m: Model) -> list[str]:
     if settings.LLAMACPP_LOG_COLORS:
         cmd += ["--log-colors", settings.LLAMACPP_LOG_COLORS]
     
+    # Startup options (Gap #6)
+    # Check tensor integrity on load (catches corrupted GGUFs)
+    check_tensors = getattr(m, 'check_tensors', None)
+    if check_tensors is None:
+        check_tensors = settings.LLAMACPP_CHECK_TENSORS
+    if check_tensors:
+        cmd += ["--check-tensors"]
+    # Skip warmup for faster startup (useful for development/testing)
+    skip_warmup = getattr(m, 'skip_warmup', None)
+    if skip_warmup is None:
+        skip_warmup = settings.LLAMACPP_SKIP_WARMUP
+    if skip_warmup:
+        cmd += ["--no-warmup"]
+    
+    # Chat template options (Gap #7)
+    # Enable/disable Jinja template engine
+    jinja_enabled = getattr(m, 'jinja_enabled', None)
+    if jinja_enabled is None:
+        jinja_enabled = settings.LLAMACPP_JINJA_ENABLED
+    if jinja_enabled:
+        cmd += ["--jinja"]
+    else:
+        cmd += ["--no-jinja"]
+    
+    # Custom chat template (preset name or inline template)
+    chat_template = getattr(m, 'chat_template', None)
+    if chat_template:
+        cmd += ["--chat-template", chat_template]
+    
+    # Custom chat template file (must be mounted in container)
+    chat_template_file = getattr(m, 'chat_template_file', None)
+    if chat_template_file:
+        # Template file path should be relative to models directory
+        container_template_path = f"/models/{chat_template_file}"
+        cmd += ["--chat-template-file", container_template_path]
+    
     # NOTE: Sampling parameters (temperature, top_p, repetition_penalty, etc.)
     # are request-time parameters, NOT container startup args.
     # They will be applied by the gateway when forwarding requests (Plane C).

@@ -159,6 +159,13 @@ class Model(Base):
     startup_timeout_sec: Mapped[int | None] = mapped_column(Integer, nullable=True)  # Model loading timeout
     # Logging configuration (Gap #3)
     verbose_logging: Mapped[bool | None] = mapped_column(Boolean, nullable=True)  # Enable verbose logging
+    # Startup options (Gap #6)
+    check_tensors: Mapped[bool | None] = mapped_column(Boolean, nullable=True)  # Check tensor integrity on load
+    skip_warmup: Mapped[bool | None] = mapped_column(Boolean, nullable=True)  # Skip warmup for faster startup
+    # Chat template options (Gap #7)
+    chat_template: Mapped[str | None] = mapped_column(Text, nullable=True)  # Custom chat template (inline or preset name)
+    chat_template_file: Mapped[str | None] = mapped_column(String(512), nullable=True)  # Path to custom template file
+    jinja_enabled: Mapped[bool | None] = mapped_column(Boolean, nullable=True)  # Enable Jinja template engine
     state: Mapped[str] = mapped_column(String(16), default="stopped")
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
     port: Mapped[int | None] = mapped_column(Integer, nullable=True)

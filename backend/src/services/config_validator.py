@@ -7,11 +7,24 @@ Phase 3 feature - see cortexSustainmentPlan.md
 """
 
 import logging
+import os
 from typing import Dict, List, Optional, Tuple, Any
 from pydantic import BaseModel
 from ..models import Model
 
 logger = logging.getLogger(__name__)
+
+# KV cache quantization multipliers (Gap #5)
+# Maps cache_type to bytes per element
+KV_CACHE_MULTIPLIERS = {
+    'f32': 4.0,
+    'f16': 2.0,
+    'q8_0': 1.0,
+    'q5_1': 0.75,
+    'q5_0': 0.625,
+    'q4_1': 0.5625,
+    'q4_0': 0.5,
+}
 
 
 class ValidationWarning(BaseModel):
@@ -122,6 +135,151 @@ def estimate_vram_usage(m: Model, gpu_count: int = 1) -> Dict[str, Any]:
     }
 
 
+def estimate_llamacpp_vram_usage(m: Model, gpu_count: int = 1) -> Dict[str, Any]:
+    """Estimate VRAM usage for a llama.cpp (GGUF) model configuration (Gap #5).
+    
+    For GGUF models, we can get more accurate estimates because:
+    1. Model weights are already quantized - file size is actual VRAM needed
+    2. KV cache size depends on context_size, parallel_slots, and cache quantization
+    3. Metadata embedded in GGUF gives us actual layer count and embedding size
+    
+    Args:
+        m: Model configuration
+        gpu_count: Number of GPUs (for tensor split)
+        
+    Returns:
+        Dict with VRAM estimates per GPU
+    """
+    from ..config import get_settings
+    from ..utils.gguf_utils import extract_gguf_metadata, validate_gguf_file
+    
+    settings = get_settings()
+    
+    # Default values (conservative estimates)
+    model_weights_gb = 7.0  # Assume 7B model
+    params_b = 7.0
+    embedding_size = 4096
+    num_layers = 32
+    
+    # Try to get actual file size from GGUF
+    if m.local_path:
+        host_base = settings.CORTEX_MODELS_DIR
+        host_path = os.path.join(host_base, m.local_path)
+        
+        # Get file size
+        gguf_file = None
+        if m.local_path.lower().endswith('.gguf'):
+            gguf_file = host_path
+        elif os.path.isdir(host_path):
+            # Find GGUF files in directory
+            for f in os.listdir(host_path):
+                if f.lower().endswith('.gguf'):
+                    gguf_file = os.path.join(host_path, f)
+                    break
+        
+        if gguf_file and os.path.isfile(gguf_file):
+            # Get file size directly
+            try:
+                file_size_bytes = os.path.getsize(gguf_file)
+                model_weights_gb = file_size_bytes / (1024 ** 3)
+                
+                # Estimate params from file size (rough: 1GB ≈ 2B params for Q4, 1B for Q8)
+                quant_type = (m.local_path or '').lower()
+                if 'q8' in quant_type or 'f16' in quant_type:
+                    params_b = model_weights_gb * 1.0  # ~1B params per GB for Q8
+                elif 'q6' in quant_type:
+                    params_b = model_weights_gb * 1.33
+                elif 'q5' in quant_type:
+                    params_b = model_weights_gb * 1.6
+                elif 'q4' in quant_type or 'q3' in quant_type:
+                    params_b = model_weights_gb * 2.0  # ~2B params per GB for Q4
+                else:
+                    params_b = model_weights_gb * 1.5  # Conservative default
+                
+                # Try to extract metadata for more accurate estimates
+                metadata = extract_gguf_metadata(gguf_file)
+                if metadata:
+                    if metadata.embedding_length:
+                        embedding_size = metadata.embedding_length
+                    if metadata.block_count:
+                        num_layers = metadata.block_count
+                
+            except Exception as e:
+                logger.warning(f"Could not get GGUF file size: {e}")
+    
+    # KV cache estimation
+    # Formula: context_size × parallel_slots × layers × head_dim × 2 (K+V) × bytes_per_elem
+    context_size = getattr(m, 'context_size', None) or settings.LLAMACPP_DEFAULT_CONTEXT
+    parallel_slots = getattr(m, 'parallel_slots', None) or settings.LLAMACPP_MAX_PARALLEL
+    
+    # Head dimension is typically embedding_size / num_heads, but we approximate
+    # KV cache per token ≈ 2 × layers × head_dim × kv_heads × bytes_per_elem
+    # For GQA models, kv_heads is less than attention heads
+    head_dim = embedding_size // 32  # Typical: hidden_size / num_heads
+    kv_heads = max(1, num_layers // 4)  # Conservative GQA estimate
+    
+    # Get cache type multipliers
+    cache_type_k = (getattr(m, 'cache_type_k', None) or settings.LLAMACPP_CACHE_TYPE_K).lower()
+    cache_type_v = (getattr(m, 'cache_type_v', None) or settings.LLAMACPP_CACHE_TYPE_V).lower()
+    
+    bytes_per_k = KV_CACHE_MULTIPLIERS.get(cache_type_k, 2.0)
+    bytes_per_v = KV_CACHE_MULTIPLIERS.get(cache_type_v, 2.0)
+    
+    # KV cache size in bytes
+    # = context × slots × layers × head_dim × kv_heads × (bytes_k + bytes_v)
+    kv_cache_bytes = (
+        context_size * 
+        parallel_slots * 
+        num_layers * 
+        head_dim * 
+        kv_heads * 
+        (bytes_per_k + bytes_per_v)
+    )
+    kv_cache_gb = kv_cache_bytes / (1024 ** 3)
+    
+    # GPU split if using multiple GPUs
+    ngl = getattr(m, 'ngl', None) or settings.LLAMACPP_DEFAULT_NGL
+    if ngl == 0:
+        # CPU only mode - no VRAM needed for model
+        model_weights_gb = 0.0
+        kv_cache_gb = 0.0  # KV cache also on CPU
+    elif ngl < num_layers:
+        # Partial GPU offload
+        gpu_fraction = ngl / num_layers
+        model_weights_gb *= gpu_fraction
+    
+    # Tensor split across multiple GPUs
+    if gpu_count > 1:
+        model_weights_gb /= gpu_count
+        kv_cache_gb /= gpu_count
+    
+    # Overhead (CUDA workspace, allocator fragmentation, etc.)
+    overhead_gb = (model_weights_gb + kv_cache_gb) * 0.15
+    
+    # Total per GPU
+    total_per_gpu_gb = model_weights_gb + kv_cache_gb + overhead_gb
+    
+    # llama.cpp doesn't have a gpu_memory_utilization factor like vLLM
+    # but we add a small margin for safety
+    required_vram_gb = total_per_gpu_gb * 1.1
+    
+    return {
+        "params_b": round(params_b, 1),
+        "model_weights_gb": round(model_weights_gb, 2),
+        "kv_cache_gb": round(kv_cache_gb, 2),
+        "overhead_gb": round(overhead_gb, 2),
+        "total_per_gpu_gb": round(total_per_gpu_gb, 2),
+        "required_vram_gb": round(required_vram_gb, 2),
+        "gpu_count": gpu_count,
+        "context_size": context_size,
+        "parallel_slots": parallel_slots,
+        "cache_type_k": cache_type_k,
+        "cache_type_v": cache_type_v,
+        "ngl": ngl,
+        "note": "Estimate only - actual usage may vary by ±20%",
+    }
+
+
 def validate_model_config(m: Model, available_gpus: List[Dict] = None) -> List[ValidationWarning]:
     """Validate model configuration and return warnings.
     
@@ -139,13 +297,33 @@ def validate_model_config(m: Model, available_gpus: List[Dict] = None) -> List[V
     """
     warnings = []
     
-    # 1. VRAM Validation
+    # Determine engine type for proper validation
+    engine_type = getattr(m, 'engine_type', 'vllm')
+    
+    # 1. VRAM Validation (Gap #5: Use engine-specific estimation)
     try:
-        vram_est = estimate_vram_usage(m, m.tp_size or 1)
+        if engine_type == 'llamacpp':
+            # Use llama.cpp-specific VRAM estimation
+            gpu_count = 1
+            selected_gpus = getattr(m, 'selected_gpus', None)
+            if selected_gpus:
+                try:
+                    import json
+                    gpu_list = json.loads(selected_gpus) if isinstance(selected_gpus, str) else selected_gpus
+                    gpu_count = len(gpu_list) if gpu_list else 1
+                except Exception:
+                    pass
+            vram_est = estimate_llamacpp_vram_usage(m, gpu_count)
+            fix_suggestion = 'Reduce Context Size, Parallel Slots, or use more aggressive KV cache quantization (q4_0)'
+        else:
+            vram_est = estimate_vram_usage(m, m.tp_size or 1)
+            fix_suggestion = 'Reduce GPU Memory Utilization, Max Context Length, or enable KV cache quantization (--kv-cache-dtype fp8)'
+        
         required_gb = vram_est["required_vram_gb"]
         
         if available_gpus:
-            for i, gpu in enumerate(available_gpus[:m.tp_size or 1]):
+            gpu_count_to_check = m.tp_size or 1 if engine_type != 'llamacpp' else min(len(available_gpus), gpu_count)
+            for i, gpu in enumerate(available_gpus[:gpu_count_to_check]):
                 total_gb = (gpu.get('mem_total_mb') or 0) / 1024
                 used_gb = (gpu.get('mem_used_mb') or 0) / 1024
                 free_gb = total_gb - used_gb
@@ -156,7 +334,7 @@ def validate_model_config(m: Model, available_gpus: List[Dict] = None) -> List[V
                         category='memory',
                         title=f'Insufficient VRAM on GPU {i}',
                         message=f'Estimated need: {required_gb:.1f} GB, Available: {free_gb:.1f} GB',
-                        fix='Reduce GPU Memory Utilization, Max Context Length, or enable KV cache quantization (--kv-cache-dtype fp8)'
+                        fix=fix_suggestion
                     ))
                 elif required_gb > free_gb * 0.9:
                     warnings.append(ValidationWarning(
@@ -164,7 +342,7 @@ def validate_model_config(m: Model, available_gpus: List[Dict] = None) -> List[V
                         category='memory',
                         title=f'Tight VRAM on GPU {i}',
                         message=f'Estimated need: {required_gb:.1f} GB, Available: {free_gb:.1f} GB (little headroom)',
-                        fix='Consider reducing GPU Memory Utilization slightly for safety margin'
+                        fix='Consider reducing settings slightly for safety margin'
                     ))
     except Exception as e:
         logger.warning(f"VRAM estimation failed: {e}")
@@ -329,10 +507,24 @@ async def dry_run_validation(model_id: int) -> DryRunResult:
             # Run validations
             warnings = validate_model_config(m, available_gpus)
             
-            # Get VRAM estimate
+            # Get VRAM estimate (Gap #5: Use engine-specific estimation)
             vram_estimate = None
             try:
-                vram_estimate = estimate_vram_usage(m, m.tp_size or 1)
+                engine_type = getattr(m, 'engine_type', 'vllm')
+                if engine_type == 'llamacpp':
+                    # Calculate GPU count from selected_gpus
+                    gpu_count = 1
+                    selected_gpus = getattr(m, 'selected_gpus', None)
+                    if selected_gpus:
+                        try:
+                            import json
+                            gpu_list = json.loads(selected_gpus) if isinstance(selected_gpus, str) else selected_gpus
+                            gpu_count = len(gpu_list) if gpu_list else 1
+                        except Exception:
+                            pass
+                    vram_estimate = estimate_llamacpp_vram_usage(m, gpu_count)
+                else:
+                    vram_estimate = estimate_vram_usage(m, m.tp_size or 1)
             except Exception as e:
                 logger.warning(f"VRAM estimation failed: {e}")
             

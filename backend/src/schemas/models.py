@@ -87,6 +87,13 @@ class ModelItem(BaseModel):
     startup_timeout_sec: Optional[int] = None
     # Logging configuration (Gap #3)
     verbose_logging: Optional[bool] = None
+    # Startup options (Gap #6)
+    check_tensors: Optional[bool] = None
+    skip_warmup: Optional[bool] = None
+    # Chat template options (Gap #7)
+    chat_template: Optional[str] = None
+    chat_template_file: Optional[str] = None
+    jinja_enabled: Optional[bool] = None
     # Runtime state
     state: str
     archived: bool
@@ -189,6 +196,13 @@ class CreateModelRequest(BaseModel):
     startup_timeout_sec: Optional[int] = None
     # Logging configuration (Gap #3)
     verbose_logging: Optional[bool] = None
+    # Startup options (Gap #6)
+    check_tensors: Optional[bool] = None
+    skip_warmup: Optional[bool] = None
+    # Chat template options (Gap #7)
+    chat_template: Optional[str] = None
+    chat_template_file: Optional[str] = None
+    jinja_enabled: Optional[bool] = None
 
 
 class UpdateModelRequest(BaseModel):
@@ -279,6 +293,13 @@ class UpdateModelRequest(BaseModel):
     startup_timeout_sec: Optional[int] = None
     # Logging configuration (Gap #3)
     verbose_logging: Optional[bool] = None
+    # Startup options (Gap #6)
+    check_tensors: Optional[bool] = None
+    skip_warmup: Optional[bool] = None
+    # Chat template options (Gap #7)
+    chat_template: Optional[str] = None
+    chat_template_file: Optional[str] = None
+    jinja_enabled: Optional[bool] = None
 
 
 class BaseDirCfg(BaseModel):

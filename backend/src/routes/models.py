@@ -128,6 +128,13 @@ async def list_models(_: dict = Depends(require_admin)):
                 startup_timeout_sec=getattr(r, 'startup_timeout_sec', None),
                 # Logging configuration (Gap #3)
                 verbose_logging=getattr(r, 'verbose_logging', None),
+                # Startup options (Gap #6)
+                check_tensors=getattr(r, 'check_tensors', None),
+                skip_warmup=getattr(r, 'skip_warmup', None),
+                # Chat template options (Gap #7)
+                chat_template=getattr(r, 'chat_template', None),
+                chat_template_file=getattr(r, 'chat_template_file', None),
+                jinja_enabled=getattr(r, 'jinja_enabled', None),
                 state=r.state,
                 archived=bool(getattr(r, 'archived', False)),
                 port=r.port,
@@ -335,6 +342,13 @@ async def create_model(body: CreateModelRequest, _: dict = Depends(require_admin
             startup_timeout_sec=getattr(body, 'startup_timeout_sec', None),
             # Logging configuration (Gap #3)
             verbose_logging=getattr(body, 'verbose_logging', None),
+            # Startup options (Gap #6)
+            check_tensors=getattr(body, 'check_tensors', None),
+            skip_warmup=getattr(body, 'skip_warmup', None),
+            # Chat template options (Gap #7)
+            chat_template=getattr(body, 'chat_template', None),
+            chat_template_file=getattr(body, 'chat_template_file', None),
+            jinja_enabled=getattr(body, 'jinja_enabled', None),
             state="stopped",
         )
         session.add(m)
