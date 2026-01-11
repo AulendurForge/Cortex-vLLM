@@ -155,6 +155,10 @@ class Model(Base):
     draft_model_path: Mapped[str | None] = mapped_column(String(512), nullable=True)  # Path to draft model GGUF
     draft_n: Mapped[int | None] = mapped_column(Integer, nullable=True)  # Number of tokens to draft (default: 16)
     draft_p_min: Mapped[float | None] = mapped_column(Float, nullable=True)  # Min probability for draft acceptance
+    # Startup timeout configuration (Gap #2)
+    startup_timeout_sec: Mapped[int | None] = mapped_column(Integer, nullable=True)  # Model loading timeout
+    # Logging configuration (Gap #3)
+    verbose_logging: Mapped[bool | None] = mapped_column(Boolean, nullable=True)  # Enable verbose logging
     state: Mapped[str] = mapped_column(String(16), default="stopped")
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
     port: Mapped[int | None] = mapped_column(Integer, nullable=True)

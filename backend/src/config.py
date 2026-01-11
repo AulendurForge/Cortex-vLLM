@@ -90,6 +90,16 @@ class Settings(BaseSettings):
     # KV cache optimization (50% memory reduction with q8_0)
     LLAMACPP_CACHE_TYPE_K: str = "q8_0"  # KV cache quantization for K (keys)
     LLAMACPP_CACHE_TYPE_V: str = "q8_0"  # KV cache quantization for V (values)
+    # Monitoring and observability (Gap #1)
+    LLAMACPP_METRICS_ENABLED: bool = True  # Enable Prometheus /metrics endpoint
+    LLAMACPP_SLOTS_ENABLED: bool = True    # Enable /slots endpoint for slot status
+    # Startup timeout configuration (Gap #2)
+    LLAMACPP_STARTUP_TIMEOUT: int = 300    # Default 5 minutes for model loading
+    VLLM_STARTUP_TIMEOUT: int = 600        # Default 10 minutes for vLLM model loading
+    # Logging configuration (Gap #3)
+    LLAMACPP_LOG_VERBOSE: bool = False     # Enable verbose logging (performance impact)
+    LLAMACPP_LOG_TIMESTAMPS: bool = True   # Enable timestamps in log messages
+    LLAMACPP_LOG_COLORS: str = "auto"      # Log colors: on, off, or auto
 
     def gen_urls(self) -> List[str]:
         return [u.strip() for u in self.VLLM_GEN_URLS.split(",") if u.strip()]

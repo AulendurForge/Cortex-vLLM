@@ -561,6 +561,28 @@ def _build_llamacpp_command(m: Model) -> list[str]:
     cmd += ["--cache-type-k", cache_type_k]
     cmd += ["--cache-type-v", cache_type_v]
     
+    # Monitoring and observability (Gap #1)
+    # Enable Prometheus metrics endpoint at /metrics
+    if settings.LLAMACPP_METRICS_ENABLED:
+        cmd += ["--metrics"]
+    # Enable slots status endpoint at /slots
+    if settings.LLAMACPP_SLOTS_ENABLED:
+        cmd += ["--slots"]
+    
+    # Logging configuration (Gap #3)
+    # Verbose logging for debugging (has performance impact)
+    verbose_logging = getattr(m, 'verbose_logging', None)
+    if verbose_logging is None:
+        verbose_logging = settings.LLAMACPP_LOG_VERBOSE
+    if verbose_logging:
+        cmd += ["--log-verbose"]
+    # Enable timestamps in logs for easier debugging
+    if settings.LLAMACPP_LOG_TIMESTAMPS:
+        cmd += ["--log-timestamps"]
+    # Log colors (useful for terminal viewing)
+    if settings.LLAMACPP_LOG_COLORS:
+        cmd += ["--log-colors", settings.LLAMACPP_LOG_COLORS]
+    
     # NOTE: Sampling parameters (temperature, top_p, repetition_penalty, etc.)
     # are request-time parameters, NOT container startup args.
     # They will be applied by the gateway when forwarding requests (Plane C).
@@ -774,12 +796,14 @@ def start_llamacpp_container_for_model(m: Model) -> Tuple[str, int]:
             device_requests = [DeviceRequest(count=-1, capabilities=[["gpu"]])]
     
     # Health check - llama.cpp server responds to /v1/models endpoint
+    # StartPeriod is configurable via model.startup_timeout_sec or config default (Gap #2)
+    startup_timeout = getattr(m, 'startup_timeout_sec', None) or settings.LLAMACPP_STARTUP_TIMEOUT
     healthcheck = {
         "Test": ["CMD-SHELL", "curl -f http://localhost:8000/v1/models || exit 1"],
         "Interval": 10_000_000_000,  # 10s
         "Timeout": 8_000_000_000,    # 8s (llama.cpp may be slower)
         "Retries": 3,
-        "StartPeriod": 45_000_000_000,  # 45s (large models take time to load)
+        "StartPeriod": startup_timeout * 1_000_000_000,  # Convert seconds to nanoseconds
     }
     
     # Build command
@@ -964,6 +988,8 @@ def start_vllm_container_for_model(m: Model, hf_token: Optional[str] | None = No
     # The vLLM /health endpoint returns:
     #   - 200 OK when engine is healthy
     #   - 503 Service Unavailable when engine is dead (EngineDeadError)
+    # StartPeriod is configurable via model.startup_timeout_sec or config default (Gap #2)
+    startup_timeout = getattr(m, 'startup_timeout_sec', None) or settings.VLLM_STARTUP_TIMEOUT
     healthcheck = {
         "Test": [
             "CMD-SHELL",
@@ -975,7 +1001,7 @@ def start_vllm_container_for_model(m: Model, hf_token: Optional[str] | None = No
         "Interval": 10_000_000_000,  # 10s ns
         "Timeout": 5_000_000_000,    # 5s ns
         "Retries": 3,
-        "StartPeriod": 60_000_000_000,  # 60s for larger models (was 30s)
+        "StartPeriod": startup_timeout * 1_000_000_000,  # Convert seconds to nanoseconds
     }
 
     # publish container port 8000 to an ephemeral host port (still useful for logs/debug),

@@ -83,6 +83,10 @@ class ModelItem(BaseModel):
     draft_model_path: Optional[str] = None
     draft_n: Optional[int] = None
     draft_p_min: Optional[float] = None
+    # Startup timeout configuration (Gap #2)
+    startup_timeout_sec: Optional[int] = None
+    # Logging configuration (Gap #3)
+    verbose_logging: Optional[bool] = None
     # Runtime state
     state: str
     archived: bool
@@ -181,6 +185,10 @@ class CreateModelRequest(BaseModel):
     draft_model_path: Optional[str] = None
     draft_n: Optional[int] = None
     draft_p_min: Optional[float] = None
+    # Startup timeout configuration (Gap #2)
+    startup_timeout_sec: Optional[int] = None
+    # Logging configuration (Gap #3)
+    verbose_logging: Optional[bool] = None
 
 
 class UpdateModelRequest(BaseModel):
@@ -267,6 +275,10 @@ class UpdateModelRequest(BaseModel):
     draft_model_path: Optional[str] = None
     draft_n: Optional[int] = None
     draft_p_min: Optional[float] = None
+    # Startup timeout configuration (Gap #2)
+    startup_timeout_sec: Optional[int] = None
+    # Logging configuration (Gap #3)
+    verbose_logging: Optional[bool] = None
 
 
 class BaseDirCfg(BaseModel):

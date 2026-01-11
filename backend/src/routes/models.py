@@ -124,6 +124,10 @@ async def list_models(_: dict = Depends(require_admin)):
                 draft_model_path=getattr(r, 'draft_model_path', None),
                 draft_n=getattr(r, 'draft_n', None),
                 draft_p_min=getattr(r, 'draft_p_min', None),
+                # Startup timeout configuration (Gap #2)
+                startup_timeout_sec=getattr(r, 'startup_timeout_sec', None),
+                # Logging configuration (Gap #3)
+                verbose_logging=getattr(r, 'verbose_logging', None),
                 state=r.state,
                 archived=bool(getattr(r, 'archived', False)),
                 port=r.port,
@@ -327,6 +331,10 @@ async def create_model(body: CreateModelRequest, _: dict = Depends(require_admin
             draft_model_path=getattr(body, 'draft_model_path', None),
             draft_n=getattr(body, 'draft_n', None),
             draft_p_min=getattr(body, 'draft_p_min', None),
+            # Startup timeout configuration (Gap #2)
+            startup_timeout_sec=getattr(body, 'startup_timeout_sec', None),
+            # Logging configuration (Gap #3)
+            verbose_logging=getattr(body, 'verbose_logging', None),
             state="stopped",
         )
         session.add(m)
@@ -581,12 +589,20 @@ async def start_model(model_id: int, _: dict = Depends(require_admin)):
             
             # Phase 3: Progressive startup verification with health polling
             # This handles both immediate container failures AND slow model loading
+            # Gap #2: Configurable startup timeout
             import asyncio
             import docker
             import urllib.request
             
             client = docker.from_env()
             container = client.containers.get(name)
+            
+            # Get startup timeout from model or config defaults
+            from ..config import get_settings
+            settings = get_settings()
+            engine_type = getattr(m, 'engine_type', 'vllm')
+            default_timeout = settings.LLAMACPP_STARTUP_TIMEOUT if engine_type == 'llamacpp' else settings.VLLM_STARTUP_TIMEOUT
+            startup_timeout = getattr(m, 'startup_timeout_sec', None) or default_timeout
             
             # Quick check for immediate container death (e.g., invalid args, missing model)
             # Poll every 0.5s for the first 5 seconds
@@ -607,12 +623,16 @@ async def start_model(model_id: int, _: dict = Depends(require_admin)):
                 except Exception as e:
                     logger.debug(f"Startup check iteration {i}: {e}")
             
-            # Container is running - now check if vLLM health endpoint responds
-            # Do a few quick checks (non-blocking) to see if model is ready fast
+            # Container is running - now check if health endpoint responds
+            # Use configurable timeout for initial health polling (Gap #2)
+            # Poll every 2 seconds, up to a reasonable initial check period (30 seconds)
+            # The full startup_timeout is handled by Docker's healthcheck StartPeriod
             health_url = f"http://{name}:8000/health"
             is_ready = False
+            initial_poll_duration = min(30, startup_timeout)  # Poll for up to 30s initially
+            poll_attempts = initial_poll_duration // 2  # Every 2 seconds
             
-            for attempt in range(6):  # Check every 2 seconds for 12 seconds
+            for attempt in range(poll_attempts):
                 try:
                     req = urllib.request.Request(health_url, method='GET')
                     with urllib.request.urlopen(req, timeout=2) as resp:
@@ -641,7 +661,8 @@ async def start_model(model_id: int, _: dict = Depends(require_admin)):
                 # Model still loading - leave in "loading" state
                 # Note: For large models, this is normal - they may take 10+ minutes
                 # The frontend should poll readiness endpoint to track actual ready state
-                logger.info(f"Model {model_id} container started but not yet ready - still loading")
+                # Docker healthcheck will continue monitoring with StartPeriod = startup_timeout
+                logger.info(f"Model {model_id} container started but not yet ready - still loading (timeout: {startup_timeout}s)")
             
             # Register served name → URL so gateway can route by model
             # Include request defaults and engine type for Plane C (Phase 1)

@@ -357,6 +357,57 @@ For extending context beyond training length:
 # Cortex: Set in Model Form → Advanced llama.cpp section
 ```
 
+### Logging Configuration
+
+Configure logging verbosity for debugging:
+
+```bash
+# Via API when creating model:
+{
+  "verbose_logging": true  # Enable detailed logging
+}
+
+# Default settings (in backend/.env):
+LLAMACPP_LOG_VERBOSE=false     # Verbose logging (performance impact)
+LLAMACPP_LOG_TIMESTAMPS=true   # Timestamps in logs (enabled by default)
+LLAMACPP_LOG_COLORS=auto       # Colored logs: on, off, or auto
+```
+
+Verbose logging shows:
+- Detailed model loading information (tensors, metadata)
+- Memory allocation details
+- CUDA device information
+- Inference timing details
+
+**Note**: Verbose logging has a performance impact. Use only for debugging.
+
+### Startup Timeout
+
+Large models (70B+) can take several minutes to load. Configure the startup timeout to prevent premature failures:
+
+```bash
+# Via API when creating model:
+{
+  "startup_timeout_sec": 600  # 10 minutes for very large models
+}
+
+# Default timeouts (in backend/.env):
+LLAMACPP_STARTUP_TIMEOUT=300   # 5 minutes for llama.cpp
+VLLM_STARTUP_TIMEOUT=600       # 10 minutes for vLLM
+```
+
+The startup timeout affects:
+- Docker healthcheck `StartPeriod` - how long Docker waits before marking container unhealthy
+- Initial health polling in the API - how long to wait for model to respond
+
+**Recommendations by model size:**
+| Model Size | Recommended Timeout |
+|------------|---------------------|
+| < 7B       | 60-120 seconds      |
+| 7B-13B     | 120-180 seconds     |
+| 30B-70B    | 300-600 seconds     |
+| 70B+       | 600-900 seconds     |
+
 ---
 
 ## Speculative Decoding
@@ -823,26 +874,73 @@ curl -N http://localhost:8000/v1/chat/completions \
 
 ---
 
-## Health Checks
+## Health Checks & Monitoring
 
 ### Endpoints for Monitoring
 
+Cortex automatically enables monitoring endpoints for all llama.cpp containers:
+
 **Health** (used by Cortex):
 ```bash
-GET /v1/models
+GET /health
+# Returns: {"status": "ok"} when ready
+# Returns: {"error": {...}} with 503 when loading
 
-# llama.cpp doesn't have /health endpoint
-# Cortex uses /v1/models as health check
-# Returns: {"data": [{"id": "gpt-oss-120b"}]}
+GET /v1/models
+# Returns list of loaded models
+# Also used as health check fallback
 ```
 
-**Metrics** (Prometheus):
+**Metrics** (Prometheus - enabled by default):
 ```bash
 GET /metrics
 
-# Available if --endpoint-metrics enabled
-# Provides: Request counts, latencies, etc.
-# Cortex can scrape these (future enhancement)
+# Cortex enables --metrics flag by default
+# Returns Prometheus-format metrics:
+llamacpp:prompt_tokens_total 1024
+llamacpp:tokens_predicted_total 2048
+llamacpp:kv_cache_usage_ratio 0.65
+llamacpp:requests_processing 2
+llamacpp:prompt_tokens_seconds 150.5      # Prompt throughput
+llamacpp:predicted_tokens_seconds 45.2    # Generation throughput
+```
+
+**Slots Status** (enabled by default):
+```bash
+GET /slots
+
+# Cortex enables --slots flag by default
+# Returns JSON array of slot states:
+[
+  {
+    "id": 0,
+    "n_ctx": 4096,
+    "is_processing": true,
+    "speculative": false
+  },
+  {
+    "id": 1,
+    "n_ctx": 4096,
+    "is_processing": false,
+    "speculative": false
+  }
+]
+```
+
+### Configuration
+
+Metrics and slots endpoints are enabled by default via config settings:
+
+```bash
+# In backend/.env or environment
+LLAMACPP_METRICS_ENABLED=true   # Enable /metrics endpoint
+LLAMACPP_SLOTS_ENABLED=true     # Enable /slots endpoint
+```
+
+To disable (not recommended):
+```bash
+LLAMACPP_METRICS_ENABLED=false
+LLAMACPP_SLOTS_ENABLED=false
 ```
 
 ---

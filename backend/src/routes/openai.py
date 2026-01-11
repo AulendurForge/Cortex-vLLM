@@ -145,6 +145,113 @@ def translate_request_for_engine(request: dict, engine_type: str) -> dict:
     
     return translated
 
+
+# ============================================================================
+# Gap #4: Error Translation for llama.cpp API
+# ============================================================================
+
+def normalize_llamacpp_error(error_response: dict, status_code: int) -> dict:
+    """Normalize llama.cpp error responses to OpenAI-compatible format.
+    
+    llama.cpp returns errors in a slightly different format than OpenAI:
+    - llama.cpp: {"error": {"code": 503, "message": "...", "type": "unavailable_error"}}
+    - OpenAI:    {"error": {"message": "...", "type": "...", "code": "..."}}
+    
+    This function normalizes llama.cpp errors to match OpenAI's format.
+    
+    Args:
+        error_response: The error response from llama.cpp
+        status_code: HTTP status code
+        
+    Returns:
+        Normalized error response in OpenAI format
+    """
+    # Extract error object
+    error = error_response.get("error", {})
+    
+    # If it's already a string, wrap it
+    if isinstance(error, str):
+        return {
+            "error": {
+                "message": error,
+                "type": "server_error",
+                "code": str(status_code)
+            }
+        }
+    
+    # Map llama.cpp error types to OpenAI types
+    llamacpp_type = error.get("type", "")
+    message = error.get("message", "Unknown error")
+    code = error.get("code", status_code)
+    
+    # Type mapping
+    type_mapping = {
+        "unavailable_error": "service_unavailable",
+        "invalid_request_error": "invalid_request_error",
+        "server_error": "server_error",
+        "rate_limit_error": "rate_limit_error",
+    }
+    
+    openai_type = type_mapping.get(llamacpp_type, "server_error")
+    
+    # Handle specific llama.cpp error messages
+    if "Loading model" in message or "loading model" in message.lower():
+        return {
+            "error": {
+                "message": "Model is still loading. Please wait and retry.",
+                "type": "service_unavailable",
+                "code": "model_loading",
+                "retry_after": 30
+            }
+        }
+    
+    if "slot unavailable" in message.lower():
+        return {
+            "error": {
+                "message": "All inference slots are busy. Please retry in a moment.",
+                "type": "rate_limit_error",
+                "code": "slot_unavailable",
+                "retry_after": 5
+            }
+        }
+    
+    if "context length" in message.lower() or "context size" in message.lower():
+        return {
+            "error": {
+                "message": f"Request exceeds model's context length. {message}",
+                "type": "invalid_request_error",
+                "code": "context_length_exceeded"
+            }
+        }
+    
+    # Default normalization
+    return {
+        "error": {
+            "message": message,
+            "type": openai_type,
+            "code": str(code)
+        }
+    }
+
+
+def translate_error_response(response_content: dict, status_code: int, engine_type: str) -> dict:
+    """Translate engine-specific error responses to OpenAI format.
+    
+    Args:
+        response_content: The error response content
+        status_code: HTTP status code
+        engine_type: The engine type ('vllm' or 'llamacpp')
+        
+    Returns:
+        Normalized error response
+    """
+    if engine_type == "llamacpp":
+        return normalize_llamacpp_error(response_content, status_code)
+    
+    # vLLM errors are mostly OpenAI-compatible, pass through
+    return response_content
+
+
 def _cb_is_available(url: str) -> bool:
     settings = get_settings()
     if not settings.CB_ENABLED:
@@ -395,7 +502,10 @@ async def forward_json(request: Request, base_url: str, path: str, internal_key:
             data = await resp.aread()
             await resp_ctx.__aexit__(None, None, None)
             try:
-                r = JSONResponse(status_code=resp.status_code, content=httpx.Response(200, content=data).json())
+                content = httpx.Response(200, content=data).json()
+                # Gap #4: Translate llama.cpp errors to OpenAI format
+                content = translate_error_response(content, resp.status_code, engine_type)
+                r = JSONResponse(status_code=resp.status_code, content=content)
             except Exception:
                 r = JSONResponse(status_code=resp.status_code, content={"error": data.decode(errors="ignore")})
             await record_usage(request, r, start_ns, payload.get("model", ""), "generate", key_id=auth_ctx.get("key_id") if auth_ctx else None)
@@ -530,6 +640,8 @@ async def forward_json(request: Request, base_url: str, path: str, internal_key:
         # Standardized error envelope
         try:
             content = resp.json()
+            # Gap #4: Translate llama.cpp errors to OpenAI format
+            content = translate_error_response(content, resp.status_code, engine_type)
         except Exception:
             content = {"error": resp.text}
         r = JSONResponse(status_code=resp.status_code, content=content)
