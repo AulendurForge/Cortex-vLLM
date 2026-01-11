@@ -105,6 +105,8 @@ class Settings(BaseSettings):
     LLAMACPP_SKIP_WARMUP: bool = False     # Skip warmup run for faster startup
     # Chat template options (Gap #7)
     LLAMACPP_JINJA_ENABLED: bool = True    # Enable Jinja template engine for chat
+    # Memory management (Gap #8)
+    LLAMACPP_DEFRAG_THOLD: float = -1.0    # KV cache defrag threshold (-1 = disabled, 0.1 = 10%)
 
     def gen_urls(self) -> List[str]:
         return [u.strip() for u in self.VLLM_GEN_URLS.split(",") if u.strip()]

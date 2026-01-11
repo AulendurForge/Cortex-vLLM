@@ -94,6 +94,11 @@ class ModelItem(BaseModel):
     chat_template: Optional[str] = None
     chat_template_file: Optional[str] = None
     jinja_enabled: Optional[bool] = None
+    # Memory management (Gap #8)
+    defrag_thold: Optional[float] = None
+    # LoRA adapter support (Gap #10)
+    lora_adapters_json: Optional[str] = None
+    lora_init_without_apply: Optional[bool] = None
     # Runtime state
     state: str
     archived: bool
@@ -203,6 +208,11 @@ class CreateModelRequest(BaseModel):
     chat_template: Optional[str] = None
     chat_template_file: Optional[str] = None
     jinja_enabled: Optional[bool] = None
+    # Memory management (Gap #8)
+    defrag_thold: Optional[float] = None
+    # LoRA adapter support (Gap #10)
+    lora_adapters_json: Optional[str] = None
+    lora_init_without_apply: Optional[bool] = None
 
 
 class UpdateModelRequest(BaseModel):
@@ -300,6 +310,11 @@ class UpdateModelRequest(BaseModel):
     chat_template: Optional[str] = None
     chat_template_file: Optional[str] = None
     jinja_enabled: Optional[bool] = None
+    # Memory management (Gap #8)
+    defrag_thold: Optional[float] = None
+    # LoRA adapter support (Gap #10)
+    lora_adapters_json: Optional[str] = None
+    lora_init_without_apply: Optional[bool] = None
 
 
 class BaseDirCfg(BaseModel):

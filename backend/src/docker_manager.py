@@ -619,6 +619,49 @@ def _build_llamacpp_command(m: Model) -> list[str]:
         container_template_path = f"/models/{chat_template_file}"
         cmd += ["--chat-template-file", container_template_path]
     
+    # Memory management (Gap #8)
+    # KV cache defragmentation threshold (-1 = disabled, 0.1 = defrag at 10% fragmentation)
+    defrag_thold = getattr(m, 'defrag_thold', None)
+    if defrag_thold is None:
+        defrag_thold = settings.LLAMACPP_DEFRAG_THOLD
+    if defrag_thold >= 0:
+        cmd += ["--defrag-thold", str(defrag_thold)]
+    
+    # LoRA adapter support (Gap #10)
+    # Load LoRA adapters from JSON array
+    lora_adapters_json = getattr(m, 'lora_adapters_json', None)
+    if lora_adapters_json:
+        try:
+            import json
+            lora_adapters = json.loads(lora_adapters_json)
+            if isinstance(lora_adapters, list) and lora_adapters:
+                # Process each adapter
+                simple_paths = []
+                scaled_paths = []
+                for adapter in lora_adapters:
+                    if isinstance(adapter, str):
+                        # Simple path
+                        simple_paths.append(f"/models/{adapter}")
+                    elif isinstance(adapter, dict):
+                        # Path with scale: {"path": "...", "scale": 1.0}
+                        path = adapter.get('path', '')
+                        scale = adapter.get('scale', 1.0)
+                        if path:
+                            scaled_paths.append(f"/models/{path}:{scale}")
+                
+                # Add flags
+                if simple_paths:
+                    cmd += ["--lora", ",".join(simple_paths)]
+                if scaled_paths:
+                    cmd += ["--lora-scaled", ",".join(scaled_paths)]
+        except Exception:
+            pass  # Best effort - don't fail model start
+    
+    # Option to load LoRAs without applying (can apply via API later)
+    lora_init_without_apply = getattr(m, 'lora_init_without_apply', None)
+    if lora_init_without_apply:
+        cmd += ["--lora-init-without-apply"]
+    
     # NOTE: Sampling parameters (temperature, top_p, repetition_penalty, etc.)
     # are request-time parameters, NOT container startup args.
     # They will be applied by the gateway when forwarding requests (Plane C).

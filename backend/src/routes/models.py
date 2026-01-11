@@ -135,6 +135,11 @@ async def list_models(_: dict = Depends(require_admin)):
                 chat_template=getattr(r, 'chat_template', None),
                 chat_template_file=getattr(r, 'chat_template_file', None),
                 jinja_enabled=getattr(r, 'jinja_enabled', None),
+                # Memory management (Gap #8)
+                defrag_thold=getattr(r, 'defrag_thold', None),
+                # LoRA adapter support (Gap #10)
+                lora_adapters_json=getattr(r, 'lora_adapters_json', None),
+                lora_init_without_apply=getattr(r, 'lora_init_without_apply', None),
                 state=r.state,
                 archived=bool(getattr(r, 'archived', False)),
                 port=r.port,
@@ -349,6 +354,11 @@ async def create_model(body: CreateModelRequest, _: dict = Depends(require_admin
             chat_template=getattr(body, 'chat_template', None),
             chat_template_file=getattr(body, 'chat_template_file', None),
             jinja_enabled=getattr(body, 'jinja_enabled', None),
+            # Memory management (Gap #8)
+            defrag_thold=getattr(body, 'defrag_thold', None),
+            # LoRA adapter support (Gap #10)
+            lora_adapters_json=getattr(body, 'lora_adapters_json', None),
+            lora_init_without_apply=getattr(body, 'lora_init_without_apply', None),
             state="stopped",
         )
         session.add(m)

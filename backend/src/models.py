@@ -166,6 +166,11 @@ class Model(Base):
     chat_template: Mapped[str | None] = mapped_column(Text, nullable=True)  # Custom chat template (inline or preset name)
     chat_template_file: Mapped[str | None] = mapped_column(String(512), nullable=True)  # Path to custom template file
     jinja_enabled: Mapped[bool | None] = mapped_column(Boolean, nullable=True)  # Enable Jinja template engine
+    # Memory management (Gap #8)
+    defrag_thold: Mapped[float | None] = mapped_column(Float, nullable=True)  # KV cache defrag threshold (-1 = disabled)
+    # LoRA adapter support (Gap #10)
+    lora_adapters_json: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array of LoRA paths or {path, scale}
+    lora_init_without_apply: Mapped[bool | None] = mapped_column(Boolean, nullable=True)  # Load LoRAs without applying
     state: Mapped[str] = mapped_column(String(16), default="stopped")
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
     port: Mapped[int | None] = mapped_column(Integer, nullable=True)
