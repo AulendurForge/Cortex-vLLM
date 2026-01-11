@@ -1345,29 +1345,162 @@ llama-server \
 
 ---
 
+## Advanced Configuration Options
+
+### Custom Arguments Validation
+
+Cortex validates custom startup arguments with an allowlist of valid llama.cpp flags:
+
+```bash
+# If you add a custom argument with a typo, dry-run will warn you:
+"engine_startup_args_json": "[{\"flag\": \"--flash-atten\", \"type\": \"bool\", \"value\": true}]"
+
+# Dry-run output:
+{
+  "warnings": [
+    {
+      "severity": "info",
+      "title": "Unknown Flag",
+      "message": "Unknown flag '--flash-atten' - did you mean '--flash-attn'?",
+      "fix": "Did you mean '--flash-attn'?"
+    }
+  ]
+}
+```
+
+Unknown flags are allowed to pass through with a warning, but typos are detected using fuzzy matching.
+
+### LoRA Adapter Support
+
+llama.cpp supports dynamic LoRA adapter loading:
+
+```json
+{
+  "lora_adapters_json": "[{\"path\": \"my-lora.gguf\", \"scale\": 0.8}]",
+  "lora_init_without_apply": false
+}
+```
+
+**Configuration:**
+- `lora_adapters_json`: JSON array of LoRA adapter paths (or objects with `path` and `scale`)
+- `lora_init_without_apply`: Load adapters without applying (can be applied via runtime API)
+
+**Resulting flags:**
+```bash
+--lora /models/my-lora.gguf --lora-scaled /models/my-lora.gguf 0.8
+```
+
+### Grammar/Constrained Generation
+
+Enforce structured output using GBNF grammars:
+
+```json
+{
+  "grammar_file": "grammars/json.gbnf"
+}
+```
+
+**Resulting flag:**
+```bash
+--grammar-file /models/grammars/json.gbnf
+```
+
+Place grammar files in your models directory and reference them by relative path.
+
+### Model Alias
+
+Control the model name returned by `/v1/models`:
+
+```json
+{
+  "served_model_name": "my-custom-model-name"
+}
+```
+
+**Resulting flag:**
+```bash
+--alias my-custom-model-name
+```
+
+### Embedding Mode
+
+Enable the embeddings endpoint for embedding models:
+
+```json
+{
+  "task": "embed",
+  // OR
+  "enable_embeddings": true
+}
+```
+
+**Resulting flag:**
+```bash
+--embeddings
+```
+
+### System Prompt
+
+Set a default system prompt for all conversations:
+
+```json
+{
+  "system_prompt": "You are a helpful assistant. Always be concise and clear."
+}
+```
+
+The prompt is written to a file and passed via `--system-prompt-file`.
+
+### Continuous Batching Toggle
+
+Override the global continuous batching setting per model:
+
+```json
+{
+  "cont_batching": false  // Disable for this model (lower latency)
+}
+```
+
+When `false`, the `--cont-batching` flag is omitted.
+
+### KV Cache Defragmentation
+
+Configure KV cache defragmentation for long-running sessions:
+
+```json
+{
+  "defrag_thold": 0.1  // Defrag when 10% of KV cache is fragmented
+}
+```
+
+**Resulting flag:**
+```bash
+--defrag-thold 0.1
+```
+
+Set to `-1` (default) to disable.
+
+---
+
 ## Future Enhancements
 
 ### Planned for Cortex:
 
-1. **LoRA Adapter Support**
-   - llama.cpp supports dynamic LoRA loading
-   - Cortex could expose adapter management
-
-2. **RoPE Extension UI**
+1. **RoPE Extension UI**
    - Slider for context extension
    - Auto-calculate rope_freq_scale
 
-3. **Quantization Conversion**
+2. **Quantization Conversion**
    - In-UI quantization from F16 to Q8_0
    - Progress tracking
 
-4. **Multi-Model Serving**
+3. **Multi-Model Serving**
    - Load multiple GGUFs in single container
    - Dynamic model switching
 
-5. **Grammar/Constrained Generation**
-   - llama.cpp supports GBNF grammars
-   - Enforce JSON, code, structured output
+4. **Built-in Grammar Templates**
+   - JSON, list, and other common grammars
+   - Grammar file upload via UI
 
 ---
 
