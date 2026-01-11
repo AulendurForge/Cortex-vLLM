@@ -175,6 +175,10 @@ class Model(Base):
     grammar_file: Mapped[str | None] = mapped_column(String(512), nullable=True)  # Path to GBNF grammar file
     # Embedding mode (Gap #13)
     enable_embeddings: Mapped[bool | None] = mapped_column(Boolean, nullable=True)  # Enable embeddings endpoint
+    # System prompt (Gap #14)
+    system_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)  # Default system prompt text
+    # Continuous batching (Gap #15)
+    cont_batching: Mapped[bool | None] = mapped_column(Boolean, nullable=True)  # Per-model override (default: use global)
     state: Mapped[str] = mapped_column(String(16), default="stopped")
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
     port: Mapped[int | None] = mapped_column(Integer, nullable=True)

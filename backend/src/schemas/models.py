@@ -103,6 +103,10 @@ class ModelItem(BaseModel):
     grammar_file: Optional[str] = None
     # Embedding mode (Gap #13)
     enable_embeddings: Optional[bool] = None
+    # System prompt (Gap #14)
+    system_prompt: Optional[str] = None
+    # Continuous batching (Gap #15)
+    cont_batching: Optional[bool] = None
     # Runtime state
     state: str
     archived: bool
@@ -221,6 +225,10 @@ class CreateModelRequest(BaseModel):
     grammar_file: Optional[str] = None
     # Embedding mode (Gap #13)
     enable_embeddings: Optional[bool] = None
+    # System prompt (Gap #14)
+    system_prompt: Optional[str] = None
+    # Continuous batching (Gap #15)
+    cont_batching: Optional[bool] = None
 
 
 class UpdateModelRequest(BaseModel):
@@ -327,6 +335,10 @@ class UpdateModelRequest(BaseModel):
     grammar_file: Optional[str] = None
     # Embedding mode (Gap #13)
     enable_embeddings: Optional[bool] = None
+    # System prompt (Gap #14)
+    system_prompt: Optional[str] = None
+    # Continuous batching (Gap #15)
+    cont_batching: Optional[bool] = None
 
 
 class BaseDirCfg(BaseModel):

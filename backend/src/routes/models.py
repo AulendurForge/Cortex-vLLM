@@ -144,6 +144,10 @@ async def list_models(_: dict = Depends(require_admin)):
                 grammar_file=getattr(r, 'grammar_file', None),
                 # Embedding mode (Gap #13)
                 enable_embeddings=getattr(r, 'enable_embeddings', None),
+                # System prompt (Gap #14)
+                system_prompt=getattr(r, 'system_prompt', None),
+                # Continuous batching (Gap #15)
+                cont_batching=getattr(r, 'cont_batching', None),
                 state=r.state,
                 archived=bool(getattr(r, 'archived', False)),
                 port=r.port,
@@ -367,6 +371,10 @@ async def create_model(body: CreateModelRequest, _: dict = Depends(require_admin
             grammar_file=getattr(body, 'grammar_file', None),
             # Embedding mode (Gap #13)
             enable_embeddings=getattr(body, 'enable_embeddings', None),
+            # System prompt (Gap #14)
+            system_prompt=getattr(body, 'system_prompt', None),
+            # Continuous batching (Gap #15)
+            cont_batching=getattr(body, 'cont_batching', None),
             state="stopped",
         )
         session.add(m)

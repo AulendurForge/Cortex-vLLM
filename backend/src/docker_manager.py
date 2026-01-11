@@ -553,8 +553,12 @@ def _build_llamacpp_command(m: Model) -> list[str]:
     cmd += ["--timeout", str(settings.LLAMACPP_SERVER_TIMEOUT)]
     cmd += ["--parallel", str(parallel_slots)]
     
-    # Enable continuous batching for better throughput
-    if settings.LLAMACPP_CONT_BATCHING:
+    # Enable continuous batching for better throughput (Gap #15)
+    # Per-model override takes precedence over global setting
+    cont_batching = getattr(m, 'cont_batching', None)
+    if cont_batching is None:
+        cont_batching = settings.LLAMACPP_CONT_BATCHING
+    if cont_batching:
         cmd += ["--cont-batching"]
     
     # KV cache quantization for 50% memory reduction
@@ -680,6 +684,23 @@ def _build_llamacpp_command(m: Model) -> list[str]:
     # Enable embeddings if task is 'embed' or explicitly enabled
     if task == 'embed' or enable_embeddings:
         cmd += ["--embeddings"]
+    
+    # System prompt (Gap #14)
+    system_prompt = getattr(m, 'system_prompt', None)
+    system_prompt_path = None
+    if system_prompt:
+        # Write system prompt to a file in the models config directory
+        import os
+        config_dir = os.path.join(settings.CORTEX_MODELS_DIR_HOST or settings.CORTEX_MODELS_DIR, ".cortex_configs")
+        os.makedirs(config_dir, exist_ok=True)
+        prompt_filename = f"system_prompt_{m.id}.txt"
+        prompt_path = os.path.join(config_dir, prompt_filename)
+        with open(prompt_path, 'w') as f:
+            f.write(system_prompt)
+        # Container path uses the mounted models directory
+        container_prompt_path = f"/models/.cortex_configs/{prompt_filename}"
+        cmd += ["--system-prompt-file", container_prompt_path]
+        system_prompt_path = prompt_path
     
     # NOTE: Sampling parameters (temperature, top_p, repetition_penalty, etc.)
     # are request-time parameters, NOT container startup args.
