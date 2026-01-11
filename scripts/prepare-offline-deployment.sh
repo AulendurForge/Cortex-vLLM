@@ -48,12 +48,15 @@ retry() {
     done
 }
 
-# Configuration - read from config or use defaults
-# NOTE: Qwen3 models require newer Transformers (>= 4.51). The current vllm/vllm-openai:latest
-# satisfies this, but for true offline reproducibility you should pin VLLM_VERSION to a specific tag
-# you have validated in your environment.
-VLLM_VERSION=${VLLM_VERSION:-"latest"}
-LLAMACPP_TAG=${LLAMACPP_TAG:-"server-cuda"}
+# Configuration - read from central versions file
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "${SCRIPT_DIR}/versions.env" ]; then
+    source "${SCRIPT_DIR}/versions.env"
+fi
+
+# Allow environment variable overrides (backwards compatibility)
+VLLM_VERSION=${VLLM_VERSION:-${CORTEX_VLLM_VERSION:-"latest"}}
+LLAMACPP_TAG=${LLAMACPP_TAG:-${CORTEX_LLAMACPP_TAG:-"server-cuda"}}
 OUTPUT_DIR=${OUTPUT_DIR:-"./cortex-offline-images"}
 
 # Colors
@@ -202,6 +205,26 @@ EOF
 
 echo -e "${GREEN}✓ Manifest created${NC}"
 echo ""
+
+# Generate checksums for all tar files
+echo "Generating SHA256 checksums..."
+CHECKSUMS_FILE="$OUTPUT_DIR/checksums.sha256"
+> "$CHECKSUMS_FILE"  # Clear existing file
+
+for tar_file in "$OUTPUT_DIR"/*.tar; do
+    if [ -f "$tar_file" ]; then
+        filename=$(basename "$tar_file")
+        echo -n "  Checksumming $filename... "
+        checksum=$(sha256sum "$tar_file" | awk '{print $1}')
+        echo "$checksum  $filename" >> "$CHECKSUMS_FILE"
+        echo -e "${GREEN}✓${NC}"
+    fi
+done
+
+if [ -f "$CHECKSUMS_FILE" ]; then
+    echo -e "${GREEN}✓ Checksums written to checksums.sha256${NC}"
+    echo ""
+fi
 
 # Create README
 cat > "$OUTPUT_DIR/README.txt" << 'EOF'

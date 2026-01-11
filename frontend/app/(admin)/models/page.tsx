@@ -279,6 +279,39 @@ export default function ModelsPage() {
         <a href="/guide?tab=api-keys" className="text-xs font-semibold text-blue-300 hover:text-blue-200 transition-colors">📖 API Guide →</a>
       </InfoBox>
 
+      {/* vLLM Recipes tip */}
+      <Card className="p-3 bg-gradient-to-r from-blue-500/5 to-purple-500/5 border-blue-500/20">
+        <div className="flex items-center gap-3">
+          <span className="text-lg">📚</span>
+          <div className="flex-1">
+            <p className="text-[11px] text-white/70">
+              <strong className="text-white/90">Setting up a vLLM model?</strong>{' '}
+              Check the{' '}
+              <a 
+                href="https://docs.vllm.ai/projects/recipes/en/latest/index.html" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-blue-300 hover:text-blue-200 underline underline-offset-2 font-medium"
+              >
+                vLLM Recipes
+              </a>
+              {' '}for official model-specific parameters and requirements. Not all models are documented—online searching may help for newer architectures.
+            </p>
+          </div>
+          <a 
+            href="https://docs.vllm.ai/projects/recipes/en/latest/index.html" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="shrink-0 px-2.5 py-1.5 bg-blue-500/20 hover:bg-blue-500/30 text-blue-200 text-[10px] font-semibold rounded border border-blue-500/30 transition-colors flex items-center gap-1"
+          >
+            <span>Open</span>
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
+          </a>
+        </div>
+      </Card>
+
       <Card className="p-0 overflow-hidden shadow-xl">
         <Table>
           <thead>

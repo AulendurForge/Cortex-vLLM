@@ -31,6 +31,8 @@ nav:
       - Admin Setup Guide: getting-started/admin-setup.md
       - Configuration: getting-started/configuration.md
       - Configuration Checklist: getting-started/configuration-checklist.md
+  - Features:
+      - Chat Playground: features/chat-playground.md
   - Architecture:
       - System Overview: architecture/system.md
       - Backend: architecture/backend.md

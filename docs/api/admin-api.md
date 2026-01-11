@@ -73,6 +73,101 @@ The dry-run endpoint returns:
 - `GET /admin/upstreams` — health snapshots and model registry
 - `POST /admin/upstreams/refresh-health` — trigger on-demand health checks
 
+## Chat Playground API
+
+These endpoints power the Chat Playground UI. They use session cookie authentication (`require_user_session`), not API key authentication.
+
+### Running Models
+- `GET /v1/models/running` — list healthy running models for chat selection
+- `GET /v1/models/{model_name}/constraints` — get model context limits and defaults
+
+### Chat Sessions
+- `GET /v1/chat/sessions` — list user's chat sessions (newest first)
+- `POST /v1/chat/sessions` — create a new chat session
+- `GET /v1/chat/sessions/{id}` — get session with all messages
+- `POST /v1/chat/sessions/{id}/messages` — add message to session
+- `DELETE /v1/chat/sessions/{id}` — delete a chat session
+- `DELETE /v1/chat/sessions` — clear all user's chat sessions
+
+### Running Model Response
+
+```json
+[
+  {
+    "served_model_name": "Qwen-2-7B-Instruct",
+    "task": "generate",
+    "engine_type": "vllm",
+    "state": "running"
+  }
+]
+```
+
+### Model Constraints Response
+
+```json
+{
+  "served_model_name": "Qwen-2-7B-Instruct",
+  "engine_type": "vllm",
+  "task": "generate",
+  "context_size": null,
+  "max_model_len": 32768,
+  "max_tokens_default": 512,
+  "request_defaults": null,
+  "supports_streaming": true,
+  "supports_system_prompt": true
+}
+```
+
+### Chat Session Response
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "title": "What is Python?",
+  "model_name": "Qwen-2-7B-Instruct",
+  "engine_type": "vllm",
+  "constraints": { "max_model_len": 32768 },
+  "messages": [
+    {
+      "id": 1,
+      "role": "user",
+      "content": "What is Python?",
+      "metrics": null,
+      "timestamp": 1704672000000
+    },
+    {
+      "id": 2,
+      "role": "assistant",
+      "content": "Python is a high-level programming language...",
+      "metrics": { "tokens_per_second": 32.5, "ttft_ms": 145 },
+      "timestamp": 1704672005000
+    }
+  ],
+  "created_at": 1704672000000,
+  "updated_at": 1704672005000
+}
+```
+
+### Create Session Request
+
+```json
+{
+  "model_name": "Qwen-2-7B-Instruct",
+  "engine_type": "vllm",
+  "constraints": { "max_model_len": 32768 }
+}
+```
+
+### Add Message Request
+
+```json
+{
+  "role": "user",
+  "content": "What is Python?",
+  "metrics": { "tokens_per_second": 32.5 }
+}
+```
+
 ## Model Discovery & Inspection
 - `GET /admin/models/base-dir` — get current models base directory
 - `PUT /admin/models/base-dir` — set models base directory
@@ -176,5 +271,110 @@ Models with `engine_type: vllm` using GGUF files:
 | Field | Type | Description |
 |-------|------|-------------|
 | `gguf_weight_format` | string | GGUF format type: `auto`, `gguf`, `ggml` |
+
+## Deployment & Migration
+
+Endpoints for exporting/importing Cortex configurations and database.
+
+### Export Operations
+- `POST /admin/deployment/export` — Start full deployment export
+- `POST /admin/deployment/export-model/{id}` — Export single model
+- `POST /admin/deployment/estimate-size` — Estimate export size and check disk space
+
+### Import Operations
+- `GET /admin/deployment/model-manifests?output_dir=...` — List available model manifests
+- `POST /admin/deployment/import-model` — Import model from manifest (supports `dry_run`)
+
+### Database Operations
+- `POST /admin/deployment/check-database-dump` — Check if dump file exists
+- `POST /admin/deployment/restore-database` — Restore database from dump
+
+### Job Management
+- `GET /admin/deployment/status` — Current job status
+- `GET /admin/deployment/jobs` — List job history
+- `GET /admin/deployment/jobs/{id}` — Get specific job
+- `DELETE /admin/deployment/jobs/{id}` — Cancel running job
+
+### Export Request
+
+```json
+{
+  "output_dir": "/var/cortex/exports",
+  "include_images": true,
+  "include_db": true,
+  "include_configs": true,
+  "include_models_manifest": true,
+  "tar_models": false,
+  "tar_hf_cache": false,
+  "allow_pull_images": true
+}
+```
+
+### Import Model Request
+
+```json
+{
+  "output_dir": "/var/cortex/exports",
+  "manifest_file": "model-1.json",
+  "conflict_strategy": "rename",
+  "dry_run": true
+}
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `conflict_strategy` | string | `error` or `rename` (adds "-IMPORTED" suffix) |
+| `dry_run` | boolean | Preview import without making changes |
+
+### Database Restore Request
+
+```json
+{
+  "output_dir": "/var/cortex/exports",
+  "backup_first": true,
+  "drop_existing": false
+}
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `backup_first` | boolean | `true` | Create safety backup before restore |
+| `drop_existing` | boolean | `false` | Drop all tables before restore |
+
+### Job Status Response
+
+```json
+{
+  "id": "deploy-1234567890",
+  "status": "running",
+  "job_type": "export",
+  "step": "Exporting Docker images",
+  "progress": 0.45,
+  "started_at": 1736483400.0,
+  "estimated_size_bytes": 6452936704,
+  "bytes_written": 2903821516,
+  "eta_seconds": 120
+}
+```
+
+### Size Estimation Response
+
+```json
+{
+  "estimated_bytes": 6452936704,
+  "estimated_formatted": "6.0 GB",
+  "breakdown": {
+    "docker_images": "6.0 GB",
+    "database": "10.0 MB"
+  },
+  "disk_space": {
+    "sufficient": true,
+    "available_bytes": 868923961344,
+    "available_formatted": "809.2 GB",
+    "required_formatted": "7.2 GB",
+    "safety_margin": 1.2
+  }
+}
+```
 
 Refer to the OpenAPI spec for complete request/response schemas.

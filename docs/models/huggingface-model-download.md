@@ -736,7 +736,7 @@ ls -la /var/cortex/models/
 ### Community Resources
 - **HuggingFace Community**: https://discuss.huggingface.co/
 - **Model Hub**: https://huggingface.co/models
-- **Cortex GitHub**: https://github.com/your-org/Cortex-vLLM
+- **Cortex GitHub**: https://github.com/AulendurForge/Cortex-vLLM
 
 ---
 

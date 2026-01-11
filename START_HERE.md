@@ -215,6 +215,12 @@ API Gateway: http://192.168.1.181:8084
    - Configure & Start
    - 📖 **Need models?** See `docs/models/huggingface-model-download.md` for complete HF download guide
 
+4. **Test with Chat Playground**
+   - Login → Chat → Playground
+   - Select a running model and start chatting
+   - See real-time metrics (tokens/sec, TTFT)
+   - 📖 **Full guide**: `docs/features/chat-playground.md`
+
 4. **Set up backups**
    ```bash
    # Manual backup

@@ -9,7 +9,7 @@ export default function AboutCortex() {
       <header className="space-y-2 text-center md:text-left">
         <h1 className="text-2xl font-black tracking-tight text-white uppercase italic">Platform Architecture</h1>
         <p className="text-white/60 text-sm leading-relaxed max-w-3xl">
-          CORTEX is a secure AI gateway developed by Aulendur Labs. 
+          CORTEX is a secure AI gateway developed by <a href="https://www.aulendur.com" target="_blank" rel="noopener noreferrer" className="text-white/80 hover:text-white hover:underline transition-colors">Aulendur Labs</a>. 
           Enabling usable, reliable, and governable advanced AI within restricted environments.
         </p>
       </header>
@@ -48,7 +48,7 @@ export default function AboutCortex() {
       </section>
 
       <div className="text-[9px] text-white/20 uppercase font-black tracking-[0.3em] text-center pt-4 border-t border-white/5">
-        Aulendur Labs
+        <a href="https://www.aulendur.com" target="_blank" rel="noopener noreferrer" className="hover:text-white/40 hover:underline transition-colors">Aulendur Labs</a>
       </div>
     </section>
   );

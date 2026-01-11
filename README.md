@@ -11,6 +11,7 @@ OpenAI-compatible gateway and admin UI for running vLLM and llama.cpp inference 
 - OpenAI-compatible endpoints: `/v1/chat/completions`, `/v1/completions`, `/v1/embeddings`
 - Health-aware routing, circuit breaking, retries
 - Usage metering, admin APIs/UI for users, orgs, keys, models
+- **Chat Playground**: Interactive web UI for testing models with real-time metrics
 - Prometheus metrics; optional Redis and OpenTelemetry
 
 ## ⚡ No Configuration Required!
@@ -336,5 +337,8 @@ For local dev and advanced deployment, see the Docs → Getting Started.
 ## Contributing
 Please see the docs (Contributing) for local setup, coding standards, and PR guidelines.
 
+## Changelog
+See [CHANGELOG.md](CHANGELOG.md) for a detailed list of changes and version history.
+
 ## License
-Copyright © [{{CURRENT_YEAR}}] Aulendur Labs. See `LICENSE.txt` and `NOTICE.txt`.
+Copyright © 2026 Aulendur Labs. See `LICENSE.txt` and `NOTICE.txt`.

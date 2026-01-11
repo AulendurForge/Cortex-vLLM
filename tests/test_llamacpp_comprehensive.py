@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+!/usr/bin/env python3
 """
 Comprehensive test suite for llama.cpp implementation in Cortex.
 

@@ -122,6 +122,61 @@ def _is_network_available() -> bool:
         return False
 
 
+# Cache for network validation
+_NETWORK_VALIDATED = False
+_NETWORK_NAME = "cortex_default"
+
+
+def _ensure_docker_network() -> str:
+    """Ensure the Docker network exists for model containers.
+    
+    Model containers need to be on the same network as the gateway to enable
+    service-to-service communication (container name resolution).
+    
+    Returns:
+        str: Name of the Docker network to use
+        
+    Behavior:
+    - If cortex_default exists: use it
+    - If not: create it with a warning
+    - On failure: log warning and return None (Docker will use bridge)
+    """
+    global _NETWORK_VALIDATED
+    
+    if _NETWORK_VALIDATED:
+        return _NETWORK_NAME
+    
+    cli = _client()
+    try:
+        # Check if network exists
+        cli.networks.get(_NETWORK_NAME)
+        logger.info(f"Docker network '{_NETWORK_NAME}' found")
+        _NETWORK_VALIDATED = True
+        return _NETWORK_NAME
+    except docker.errors.NotFound:
+        # Network doesn't exist - try to create it
+        logger.warning(f"Docker network '{_NETWORK_NAME}' not found. Creating...")
+        try:
+            cli.networks.create(
+                _NETWORK_NAME,
+                driver="bridge",
+                labels={"com.docker.compose.project": "cortex"}
+            )
+            logger.info(f"Created Docker network '{_NETWORK_NAME}'")
+            _NETWORK_VALIDATED = True
+            return _NETWORK_NAME
+        except Exception as create_err:
+            logger.warning(
+                f"Could not create network '{_NETWORK_NAME}': {create_err}. "
+                "Model containers may not be reachable from gateway. "
+                "Ensure 'make up' has been run to create the Compose network."
+            )
+            return None
+    except Exception as e:
+        logger.warning(f"Error checking network '{_NETWORK_NAME}': {e}. Using Docker default.")
+        return None
+
+
 def _ensure_image(image: str) -> None:
     """Ensure Docker image is available locally.
     
@@ -931,6 +986,9 @@ def start_llamacpp_container_for_model(m: Model) -> Tuple[str, int]:
     print(f"[docker_manager] starting llamacpp model {m.id}, cmd: {cmd}", flush=True)
     print(f"[docker_manager] ngl={ngl}, device_requests={device_requests}", flush=True)
     
+    # Ensure network exists for container-to-gateway communication
+    network_name = _ensure_docker_network()
+    
     # Use containers.run() with runtime parameter (supported per Docker SDK docs)
     # The nvidia runtime ensures CUDA libraries are mounted from the host
     run_kwargs = {
@@ -943,11 +1001,12 @@ def start_llamacpp_container_for_model(m: Model) -> Tuple[str, int]:
         "healthcheck": healthcheck,
         "restart_policy": {"Name": "no"},
         "ports": {"8000/tcp": ("0.0.0.0", 0)},
-        "network": "cortex_default",
         "labels": {"com.docker.compose.project": "cortex"},
         "shm_size": "8g",
         "ipc_mode": "host",
     }
+    if network_name:
+        run_kwargs["network"] = network_name
     
     # Add runtime and device_requests for GPU support
     # Both are required for nvidia runtime to expose GPUs
@@ -1127,14 +1186,8 @@ def start_vllm_container_for_model(m: Model, hf_token: Optional[str] | None = No
     # but we'll prefer service-to-service via container name on the compose network
     ports = {"8000/tcp": ("0.0.0.0", 0)}
 
-    # Ensure managed container joins the same compose network as gateway when available
-    host_config_kwargs = {}
-    try:
-        # If the gateway service is on a user-defined network named 'cortex_default', prefer it
-        # Fallbacks will let Docker create a bridge network automatically.
-        host_config_kwargs["network"] = "cortex_default"
-    except Exception:
-        pass
+    # Ensure managed container joins the same compose network as gateway
+    network_name = _ensure_docker_network()
 
     # Build final command and log for troubleshooting.
     # Version-aware entrypoint selection (Gap #5):
@@ -1148,23 +1201,26 @@ def start_vllm_container_for_model(m: Model, hf_token: Optional[str] | None = No
         print(f"[docker_manager] starting model {m.id} with entrypoint: {entrypoint}, cmd: {preview_cmd}", flush=True)
     except Exception:
         pass
-    container: Container = cli.containers.run(
-        image=image,
-        name=name,
-        entrypoint=entrypoint,
-        command=preview_cmd,
-        detach=True,
-        environment=environment,
-        volumes=binds,
-        device_requests=device_requests,
-        healthcheck=healthcheck,
-        restart_policy={"Name": "no"},  # No auto-restart - models start only when admin clicks Start
-        ports=ports,
-        network=host_config_kwargs.get("network"),
-        labels={"com.docker.compose.project": "cortex"},
-        shm_size="2g",
-        ipc_mode="host",
-    )
+    run_kwargs = {
+        "image": image,
+        "name": name,
+        "entrypoint": entrypoint,
+        "command": preview_cmd,
+        "detach": True,
+        "environment": environment,
+        "volumes": binds,
+        "device_requests": device_requests,
+        "healthcheck": healthcheck,
+        "restart_policy": {"Name": "no"},  # No auto-restart - models start only when admin clicks Start
+        "ports": ports,
+        "labels": {"com.docker.compose.project": "cortex"},
+        "shm_size": "2g",
+        "ipc_mode": "host",
+    }
+    if network_name:
+        run_kwargs["network"] = network_name
+    
+    container: Container = cli.containers.run(**run_kwargs)
 
     container.reload()
     port_info = container.attrs.get("NetworkSettings", {}).get("Ports", {}).get("8000/tcp", [])

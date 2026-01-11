@@ -14,6 +14,7 @@ from .routes.users import router as users_router
 from .routes.models import router as models_router
 from .routes.recipes import router as recipes_router
 from .routes.deployment import router as deployment_router
+from .routes.chat import router as chat_router
 from .middleware.ratelimit import check_rate_limit
 import httpx
 import asyncio
@@ -119,6 +120,9 @@ async def metrics():
 
 # OpenAI-compatible endpoints under /v1/*
 app.include_router(openai_router, prefix="/v1")
+# Chat playground endpoints (accessible by any authenticated user)
+app.include_router(chat_router, prefix="/v1")
+# Admin endpoints
 app.include_router(keys_router, prefix="/admin")
 app.include_router(admin_router, prefix="/admin")
 app.include_router(authn_router, prefix="/auth")

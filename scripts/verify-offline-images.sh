@@ -17,9 +17,15 @@ echo "Cortex Offline Readiness Verification"
 echo -e "==========================================${NC}"
 echo ""
 
-# Read versions from config if available
-VLLM_VERSION=${VLLM_VERSION:-"v0.6.3"}
-LLAMACPP_TAG=${LLAMACPP_TAG:-"server-cuda"}
+# Read versions from central versions file
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "${SCRIPT_DIR}/versions.env" ]; then
+    source "${SCRIPT_DIR}/versions.env"
+fi
+
+# Allow environment variable overrides (backwards compatibility)
+VLLM_VERSION=${VLLM_VERSION:-${CORTEX_VLLM_VERSION:-"latest"}}
+LLAMACPP_TAG=${LLAMACPP_TAG:-${CORTEX_LLAMACPP_TAG:-"server-cuda"}}
 
 REQUIRED_IMAGES=(
     # Core engines

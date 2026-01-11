@@ -27,9 +27,10 @@ class Settings(BaseSettings):
     CB_TIMEOUT_COOLDOWN: int = 60      # Cooldown after timeout surge
     CB_HEALTH_CHECK_INTERVAL: int = 10 # More frequent health checks
     # Upstream health checks
-    HEALTH_CHECK_TTL_SEC: int = 10
+    # TTL must be > POLL_SEC to avoid gaps where healthy models appear unhealthy
+    HEALTH_CHECK_TTL_SEC: int = 30  # How long health data is valid (should be 2x poll interval)
     HEALTH_CHECK_PATH: str = "/health"
-    HEALTH_POLL_SEC: int = 15
+    HEALTH_POLL_SEC: int = 10  # How often to poll (reduced from 15 for faster updates)
     # OpenTelemetry (optional)
     OTEL_ENABLED: bool = False
     OTEL_SERVICE_NAME: str = "cortex-gateway"

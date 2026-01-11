@@ -55,7 +55,7 @@ The simplest way to get started:
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/your-org/Cortex-vLLM.git
+git clone https://github.com/AulendurForge/Cortex-vLLM.git
 cd Cortex-vLLM
 
 # 2. Start everything with one command

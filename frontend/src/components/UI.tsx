@@ -40,14 +40,14 @@ export function PrimaryButton(props: React.ButtonHTMLAttributes<HTMLButtonElemen
   return <Button variant="primary" {...props} />;
 }
 
-export function Card({ children, className = '', variant = 'default' }: { children: ReactNode; className?: string; variant?: 'default' | 'purple' | 'blue' | 'cyan' }) {
+export function Card({ children, className = '', variant = 'default', onClick, ...props }: { children: ReactNode; className?: string; variant?: 'default' | 'purple' | 'blue' | 'cyan'; onClick?: () => void } & React.HTMLAttributes<HTMLDivElement>) {
   const variants = {
     default: '',
     purple: 'bg-gemstone-purple',
     blue: 'bg-gemstone-blue',
     cyan: 'bg-gemstone-cyan',
   };
-  return <div className={cn('card', variants[variant], className)}>{children}</div>;
+  return <div className={cn('card', variants[variant], className)} onClick={onClick} {...props}>{children}</div>;
 }
 
 export function Table({ children, className = '' }: { children: ReactNode; className?: string }) {
@@ -74,10 +74,13 @@ export function H2({ children, className = '' }: { children: ReactNode; classNam
   return <h2 className={cn('text-lg font-semibold text-white/80 tracking-tight', className)}>{children}</h2>;
 }
 
-export function PageHeader({ title, actions, className = '' }: { title: ReactNode; actions?: ReactNode; className?: string }) {
+export function PageHeader({ title, subtitle, actions, className = '' }: { title: ReactNode; subtitle?: string; actions?: ReactNode; className?: string }) {
   return (
     <div className={cn('flex items-center justify-between gap-4 mb-4', className)}>
-      <H1 className="m-0">{title}</H1>
+      <div>
+        <H1 className="m-0">{title}</H1>
+        {subtitle && <p className="text-sm text-white/50 mt-1">{subtitle}</p>}
+      </div>
       <div className="flex items-center gap-3">{actions}</div>
     </div>
   );
@@ -102,9 +105,17 @@ export function TextArea({ className = '', ...props }: React.TextareaHTMLAttribu
   return <textarea className={cn('input min-h-[100px]', className)} {...props} />;
 }
 
-export function Select({ className = '', children, ...props }: React.SelectHTMLAttributes<HTMLSelectElement>) {
+type SelectProps = Omit<React.SelectHTMLAttributes<HTMLSelectElement>, 'size'> & { 
+  selectSize?: 'default' | 'sm';
+};
+
+export function Select({ className = '', children, selectSize = 'default', ...props }: SelectProps) {
+  const sizes = {
+    default: '',
+    sm: 'py-1.5 px-3 text-sm',
+  };
   return (
-    <select className={cn('input appearance-none', className)} {...props}>
+    <select className={cn('input appearance-none', sizes[selectSize], className)} {...props}>
       {children}
     </select>
   );
@@ -131,25 +142,37 @@ export function SectionTitle({ children, variant = 'purple', className = '' }: {
   );
 }
 
-export function InfoBox({ children, variant = 'blue', title, className = '' }: { children: ReactNode; variant?: 'blue' | 'purple' | 'cyan'; title?: string; className?: string }) {
+export function InfoBox({ children, variant = 'blue', title, className = '' }: { children: ReactNode; variant?: 'blue' | 'purple' | 'cyan' | 'error' | 'warning'; title?: string; className?: string }) {
   const variants = {
     blue: 'info-box-blue',
     purple: 'info-box-purple',
     cyan: 'info-box-cyan',
+    error: 'bg-red-500/10 border border-red-500/20 rounded-xl p-4 text-sm',
+    warning: 'bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 text-sm',
   };
   
   const iconColors = {
     blue: 'text-blue-300',
     purple: 'text-purple-300',
     cyan: 'text-cyan-300',
+    error: 'text-red-300',
+    warning: 'text-amber-300',
+  };
+
+  const icons = {
+    blue: 'ℹ️',
+    purple: '📊',
+    cyan: '⚡',
+    error: '❌',
+    warning: '⚠️',
   };
 
   return (
     <div className={cn(variants[variant], className)}>
       {title && <div className={cn('font-semibold mb-1 flex items-center gap-2', iconColors[variant])}>
-        {variant === 'blue' && 'ℹ️'} {variant === 'purple' && '📊'} {variant === 'cyan' && '⚡'} {title}
+        {icons[variant]} {title}
       </div>}
-      <div className="text-white/80">
+      <div className={cn('text-white/80', variant === 'error' && 'text-red-200', variant === 'warning' && 'text-amber-200')}>
         {children}
       </div>
     </div>

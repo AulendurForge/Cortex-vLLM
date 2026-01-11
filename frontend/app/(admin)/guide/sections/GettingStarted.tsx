@@ -1,93 +1,93 @@
 'use client';
 
-import Link from 'next/link';
-import { Card, SectionTitle, Button, InfoBox } from '../../../../src/components/UI';
-import { HostIpDisplay } from '../../../../src/components/HostIpDisplay';
+import { useState, useCallback, useEffect } from 'react';
 import { cn } from '../../../../src/lib/cn';
 
-type Step = {
+// Sub-section imports
+import WelcomeToCortex from './gettingStarted/WelcomeToCortex';
+import FirstModelTutorial from './gettingStarted/FirstModelTutorial';
+import EnvironmentDiagnostics from './gettingStarted/EnvironmentDiagnostics';
+
+type SubTab = {
   id: string;
-  title: string;
-  description: string;
-  href: string;
-  cta: string;
-  Icon: (props: { className?: string }) => JSX.Element;
+  label: string;
+  icon: string;
+  content: React.ReactNode;
 };
 
-const platformCards: Step[] = [
-  { id: 'resources', title: 'Hardware Health', description: 'Monitor GPU/CPU and VRAM topology.', href: '/health', cta: 'Review', Icon: ({ className }) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className={className}><path d="M3 12h4l2 7 4-14 2 7h4" strokeWidth="1.5"/></svg> },
-  { id: 'models', title: 'Inference Pools', description: 'Orchestrate and deploy local LLMs.', href: '/models', cta: 'Manage', Icon: ({ className }) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className={className}><rect x="3" y="3" width="7" height="7" rx="1.5" strokeWidth="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5" strokeWidth="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5" strokeWidth="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5" strokeWidth="1.5"/></svg> },
-  { id: 'observe', title: 'Traffic Analytics', description: 'Track tokens and request latency.', href: '/usage', cta: 'Analyze', Icon: ({ className }) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className={className}><path d="M4 20V8m6 12V4m6 16v-6m6 6V10" strokeWidth="1.5"/></svg> },
-];
-
-const adminCards: Step[] = [
-  { id: 'access', title: 'API Management', description: 'Provision scoped access tokens.', href: '/keys', cta: 'Security', Icon: ({ className }) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className={className}><path d="M12 2l7 4v6c0 4.418-3.582 8-7 8s-7-3.582-7-8V6l7-4z" strokeWidth="1.5"/><path d="M9 12a3 3 0 116 0v2H9v-2z" strokeWidth="1.5"/><path d="M13 14l6 6m-2-4l-2 2" strokeWidth="1.5"/></svg> },
-  { id: 'rbac', title: 'Identity Controls', description: 'Configure multi-tenant Orgs & Users.', href: '/orgs', cta: 'Configure', Icon: ({ className }) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className={className}><path d="M12 12a4 4 0 110-8 4 4 0 010 8z" strokeWidth="1.5"/><path d="M3 21a7 7 0 0114 0" strokeWidth="1.5"/><path d="M17 11a3 3 0 116 0 3 3 0 01-6 0z" strokeWidth="1.5"/></svg> },
+const SUB_TABS: SubTab[] = [
+  { id: 'welcome', label: 'Welcome', icon: '👋', content: <WelcomeToCortex /> },
+  { id: 'first-model', label: 'First Model', icon: '🚀', content: <FirstModelTutorial /> },
+  { id: 'diagnostics', label: 'Environment', icon: '🔧', content: <EnvironmentDiagnostics /> },
 ];
 
 export default function GettingStarted() {
+  const [activeTab, setActiveTab] = useState('welcome');
+
+  // Sync with URL hash for deep linking
+  useEffect(() => {
+    const hash = window.location.hash.replace('#', '');
+    if (hash && SUB_TABS.find(t => t.id === hash)) {
+      setActiveTab(hash);
+    }
+  }, []);
+
+  const handleTabChange = useCallback((tabId: string) => {
+    setActiveTab(tabId);
+    window.history.replaceState(null, '', `#${tabId}`);
+  }, []);
+
+  const activeContent = SUB_TABS.find(t => t.id === activeTab)?.content;
+
   return (
     <section className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-700">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-black tracking-tight text-white uppercase italic">Platform Initialization</h1>
-        <p className="text-white/60 text-xs leading-relaxed max-w-2xl">
-          Secure, private LLM orchestration for mission-critical infrastructure.
+      <header className="space-y-2 text-center md:text-left">
+        <h1 className="text-2xl font-black tracking-tight text-white uppercase italic">Getting Started</h1>
+        <p className="text-white/60 text-sm leading-relaxed max-w-3xl">
+          Your guide to deploying and managing LLMs with Cortex. Start here to understand the platform, 
+          spin up your first model, and verify your environment is properly configured.
         </p>
       </header>
 
-      <HostIpDisplay variant="banner" className="py-2.5" />
+      {/* Sub-tab Navigation */}
+      <nav 
+        role="tablist" 
+        aria-label="Getting Started Sections" 
+        className="flex flex-wrap items-center gap-1.5 bg-gradient-to-r from-indigo-500/5 via-purple-500/5 to-cyan-500/5 p-1.5 rounded-xl border border-white/10"
+      >
+        {SUB_TABS.map((tab) => {
+          const isActive = tab.id === activeTab;
+          return (
+            <button
+              key={tab.id}
+              role="tab"
+              aria-selected={isActive}
+              aria-controls={`panel-${tab.id}`}
+              onClick={() => handleTabChange(tab.id)}
+              className={cn(
+                'flex items-center gap-1.5 px-4 py-2 text-[11px] font-bold uppercase tracking-wider rounded-lg transition-all duration-300',
+                isActive 
+                  ? 'bg-white/15 text-white shadow-inner border border-white/10' 
+                  : 'text-white/40 hover:text-white/70 hover:bg-white/5'
+              )}
+              type="button"
+            >
+              <span className="text-sm">{tab.icon}</span>
+              <span className="hidden sm:inline">{tab.label}</span>
+            </button>
+          );
+        })}
+      </nav>
 
-      <InfoBox variant="blue" title="Network Configuration" className="text-xs p-2.5">
-        Cortex detects your host address automatically. Use <code className="bg-black/40 px-1 rounded text-cyan-300">http://HOST_IP:8084</code> for SDK integration.
-      </InfoBox>
-
-      <section className="space-y-3">
-        <SectionTitle variant="purple" className="text-[10px]">Operations Workflow</SectionTitle>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {platformCards.map((card) => (
-            <Card key={card.id} className="p-3.5 h-full border-white/5 hover:border-indigo-500/30 bg-white/[0.02] flex flex-col group transition-all duration-300">
-              <div className="flex items-center gap-3">
-                <div className="shrink-0 rounded-xl bg-indigo-500/10 p-2 text-indigo-400 border border-indigo-500/20 group-hover:scale-110 transition-transform">
-                  <card.Icon className="w-5 h-5" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h2 className="text-[11px] font-bold text-white uppercase tracking-wider">{card.title}</h2>
-                  <p className="text-[10px] text-white/40 leading-tight mt-0.5">{card.description}</p>
-                </div>
-              </div>
-              <div className="mt-3">
-                <Link href={card.href} className="inline-flex w-full">
-                  <Button variant="default" size="sm" className="w-full text-[9px] font-black uppercase tracking-[0.2em] h-7">{card.cta}</Button>
-                </Link>
-              </div>
-            </Card>
-          ))}
-        </div>
-      </section>
-
-      <section className="space-y-3">
-        <SectionTitle variant="cyan" className="text-[10px]">Governance</SectionTitle>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {adminCards.map((card) => (
-            <Card key={card.id} className="p-3.5 h-full border-white/5 hover:border-cyan-500/30 bg-white/[0.02] flex flex-col group transition-all duration-300">
-              <div className="flex items-center gap-3">
-                <div className="shrink-0 rounded-xl bg-cyan-500/10 p-2 text-cyan-400 border border-cyan-500/20 group-hover:scale-110 transition-transform">
-                  <card.Icon className="w-5 h-5" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h2 className="text-[11px] font-bold text-white uppercase tracking-wider">{card.title}</h2>
-                  <p className="text-[10px] text-white/40 leading-tight mt-0.5">{card.description}</p>
-                </div>
-              </div>
-              <div className="mt-3">
-                <Link href={card.href} className="inline-flex w-full">
-                  <Button variant="default" size="sm" className="w-full text-[9px] font-black uppercase tracking-[0.2em] h-7">{card.cta}</Button>
-                </Link>
-              </div>
-            </Card>
-          ))}
-        </div>
-      </section>
+      {/* Content Panel */}
+      <div 
+        id={`panel-${activeTab}`}
+        role="tabpanel"
+        aria-labelledby={`tab-${activeTab}`}
+        className="animate-in fade-in slide-in-from-bottom-1 duration-300"
+      >
+        {activeContent}
+      </div>
     </section>
   );
 }

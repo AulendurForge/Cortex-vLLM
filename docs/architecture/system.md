@@ -8,9 +8,11 @@ CORTEX is an enterprise-grade, self-hosted LLM inference gateway and model manag
 graph TD
   Client[Client / SDK] -->|HTTP: /v1/*| Gateway[FastAPI Gateway]
   Admin[Admin UI] -->|HTTP: /admin/*| Gateway
+  Chat[Chat Playground] -->|HTTP: /v1/chat/*| Gateway
   
   subgraph Gateway
     Router[OpenAI Routes] --> Auth[API Key Auth]
+    ChatRouter[Chat Routes] --> SessionAuth[Session Auth]
     Router --> RL[Rate Limit / Concurrency]
     Router --> Choose[URL Selection]
     Choose --> Models
@@ -36,6 +38,12 @@ graph TD
 - **Multi-engine support**: vLLM (GPU) and llama.cpp (CPU/GPU)
 - **Health-aware routing**: Prefers healthy engines, round-robin load balancing
 - **Streaming support**: Server-sent events with TTFT metrics
+
+### Chat Playground
+- **Interactive testing**: Web UI for testing running models
+- **Real-time metrics**: Tokens/second, time-to-first-token, context usage
+- **Server-side persistence**: User-scoped chat history stored in database
+- **Cross-device access**: Access chat history from any machine
 
 ### Model Management
 - **Lifecycle management**: Create, configure, start, stop, delete models

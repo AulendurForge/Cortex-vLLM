@@ -285,3 +285,29 @@ class ConfigKV(Base):
 
     key: Mapped[str] = mapped_column(String(128), primary_key=True)
     value: Mapped[str] = mapped_column(Text)
+
+
+class ChatSession(Base):
+    """Stores chat playground sessions, scoped to individual users."""
+    __tablename__ = "chat_sessions"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)  # UUID
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    title: Mapped[str] = mapped_column(String(255), default="New Chat")
+    model_name: Mapped[str] = mapped_column(String(255))
+    engine_type: Mapped[str] = mapped_column(String(32), default="vllm")
+    constraints_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+
+class ChatMessage(Base):
+    """Stores individual messages within a chat session."""
+    __tablename__ = "chat_messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    session_id: Mapped[str] = mapped_column(ForeignKey("chat_sessions.id", ondelete="CASCADE"), index=True)
+    role: Mapped[str] = mapped_column(String(16))  # 'user', 'assistant', 'system'
+    content: Mapped[str] = mapped_column(Text)
+    metrics_json: Mapped[str | None] = mapped_column(Text, nullable=True)  # tokens/sec, TTFT, etc.
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)

@@ -9,6 +9,8 @@ import ManageModels from './sections/ManageModels';
 import ApiKeys from './sections/ApiKeys';
 import AboutUsage from './sections/AboutUsage';
 import ManageUsersOrgs from './sections/ManageUsersOrgs';
+import ChatPlayground from './sections/ChatPlayground';
+import DeploymentMigration from './sections/DeploymentMigration';
 import AboutCortex from './sections/AboutCortex';
 
 export default function GuidePage() {
@@ -22,8 +24,10 @@ export default function GuidePage() {
             { id: 'getting-started', label: '🚀 Getting Started', content: <GettingStarted /> },
             { id: 'manage-models', label: '🤖 Manage Models', content: <ManageModels /> },
             { id: 'api-keys', label: '🔑 API Keys', content: <ApiKeys /> },
-            { id: 'about-usage', label: '📊 About Usage', content: <AboutUsage /> },
+            { id: 'about-usage', label: '📊 Usage Analytics', content: <AboutUsage /> },
             { id: 'manage-users-orgs', label: '👥 Users & Orgs', content: <ManageUsersOrgs /> },
+            { id: 'chat-playground', label: '💬 Chat', content: <ChatPlayground /> },
+            { id: 'deployment-migration', label: '📦 Deployment', content: <DeploymentMigration /> },
             { id: 'about-cortex', label: '🧠 About Cortex', content: <AboutCortex /> },
           ]}
         />

@@ -31,7 +31,7 @@ export default function LoginPage() {
       } catch {}
       setUser({ name: username, role: role as any });
       addToast({ title: 'Welcome back!', kind: 'success' });
-      router.push('/guide');
+      router.push('/guide?tab=getting-started');
     } catch (e: any) {
       addToast({ title: 'Authentication failed', kind: 'error' });
     }
@@ -121,7 +121,7 @@ export default function LoginPage() {
           <div className="flex flex-col items-center gap-2">
             <div className="h-px w-12 bg-white/10" />
             <div className="text-[9px] text-white/20 font-bold uppercase tracking-[0.3em]">
-              Developed by Aulendur Labs
+              Developed by <a href="https://www.aulendur.com" target="_blank" rel="noopener noreferrer" className="hover:text-white/40 hover:underline transition-colors">Aulendur Labs</a>
             </div>
           </div>
         </div>

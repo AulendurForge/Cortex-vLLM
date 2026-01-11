@@ -10,6 +10,7 @@ backend/src/
 │   ├── openai.py    # OpenAI-compatible endpoints
 │   ├── admin.py     # Admin system/usage/registry endpoints
 │   ├── models.py    # Model lifecycle management
+│   ├── chat.py      # Chat Playground API endpoints
 │   ├── keys.py      # API key management
 │   ├── users.py     # User management
 │   ├── orgs.py      # Organization management
@@ -47,6 +48,7 @@ backend/src/
 - `routes/openai.py`: OpenAI-compatible endpoints; streaming proxy; retries; circuit breaker hooks; token usage estimation
 - `routes/admin.py`: System metrics, usage analytics, model registry, upstreams health, bootstrap
 - `routes/models.py`: Model CRUD, container lifecycle (start/stop), testing, logs, configuration
+- `routes/chat.py`: Chat Playground API; running model list; model constraints; session CRUD; message persistence
 - `routes/keys.py`: API key creation, listing, revocation
 - `routes/users.py`: User management with role-based access
 - `routes/orgs.py`: Organization management
@@ -81,7 +83,7 @@ backend/src/
 - `middleware/usage.py`: Persist per-request usage (prompt/completion tokens, status, latency) to Postgres
 - `health.py`: Background poller to collect upstream health, latency, and discover models
 - `state.py`: In-memory snapshots (circuit breakers, health, registry, LB indices)
-- `models.py`: SQLAlchemy ORM for `api_keys`, `users`, `organizations`, `usage`, `models`, `config_kv`
+- `models.py`: SQLAlchemy ORM for `api_keys`, `users`, `organizations`, `usage`, `models`, `config_kv`, `chat_sessions`, `chat_messages`
 - `docker_manager.py`: Start/stop vLLM and llama.cpp containers; build command flags from model config
 - `metrics.py`: Prometheus counters and histograms for requests, latency, selection, and streaming TTFT
 - `config.py`: Settings via environment with sensible defaults; helpers for pools and paths

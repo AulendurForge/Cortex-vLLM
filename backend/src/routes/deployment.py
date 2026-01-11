@@ -7,10 +7,16 @@ from ..auth import require_admin
 from ..config import get_settings
 from ..services.deployment_manager import (
     get_job_status,
+    get_job_history,
+    get_job_by_id,
+    cancel_job,
     start_deployment_export,
     start_model_export,
     list_model_manifests_in_dir,
     import_model_from_manifest,
+    check_database_dump_exists,
+    start_database_restore,
+    estimate_export_size,
 )
 
 
@@ -47,6 +53,13 @@ class ImportModelRequest(BaseModel):
     name_override: str | None = None
     local_path_override: str | None = None
     use_exported_engine_image: bool = True
+    dry_run: bool = False  # Preview import without making changes
+
+
+class DatabaseRestoreRequest(BaseModel):
+    output_dir: str
+    backup_first: bool = True  # Create safety backup before restore
+    drop_existing: bool = False  # Drop existing tables before restore
 
 
 @router.get("/deployment/options")
@@ -81,7 +94,47 @@ async def deployment_options(_: dict = Depends(require_admin)):
 
 @router.get("/deployment/status")
 async def deployment_status(_: dict = Depends(require_admin)):
+    """Get the current/latest job status."""
     return await get_job_status()
+
+
+@router.get("/deployment/jobs")
+async def deployment_jobs(limit: int = 20, _: dict = Depends(require_admin)):
+    """Get recent job history.
+    
+    Returns a list of jobs sorted by most recent first.
+    Use limit parameter to control how many jobs to return (default: 20, max: 50).
+    """
+    limit = max(1, min(50, limit))
+    return {"jobs": await get_job_history(limit)}
+
+
+@router.get("/deployment/jobs/{job_id}")
+async def deployment_job_by_id(job_id: str, _: dict = Depends(require_admin)):
+    """Get a specific job by ID."""
+    result = await get_job_by_id(job_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="job_not_found")
+    return result
+
+
+@router.delete("/deployment/jobs/{job_id}")
+async def deployment_cancel_job(job_id: str, _: dict = Depends(require_admin)):
+    """Cancel a running or pending job.
+    
+    Returns the job status after cancellation request.
+    Note: Cancellation is cooperative - long-running operations may take time to stop.
+    """
+    try:
+        return await cancel_job(job_id)
+    except RuntimeError as e:
+        msg = str(e)
+        if msg == "job_not_found":
+            raise HTTPException(status_code=404, detail=msg)
+        if msg == "job_not_cancellable":
+            raise HTTPException(status_code=400, detail=msg)
+        raise HTTPException(status_code=400, detail=msg)
+
 
 @router.get("/deployment/model-manifests")
 async def deployment_model_manifests(output_dir: str, _: dict = Depends(require_admin)):
@@ -90,6 +143,36 @@ async def deployment_model_manifests(output_dir: str, _: dict = Depends(require_
     if not output_dir.startswith("/"):
         raise HTTPException(status_code=400, detail="output_dir_must_be_absolute")
     return {"items": list_model_manifests_in_dir(output_dir)}
+
+
+class EstimateExportRequest(BaseModel):
+    output_dir: str
+    include_images: bool = True
+    include_db: bool = True
+    tar_models: bool = False
+    tar_hf_cache: bool = False
+
+
+@router.post("/deployment/estimate-size")
+async def deployment_estimate_size(req: EstimateExportRequest, _: dict = Depends(require_admin)):
+    """Estimate export size and check available disk space.
+    
+    Returns:
+    - estimated_bytes: Total estimated size
+    - breakdown: Size per component
+    - disk_space: Available space and sufficiency check
+    """
+    if not req.output_dir:
+        raise HTTPException(status_code=400, detail="output_dir_required")
+    if not req.output_dir.startswith("/"):
+        raise HTTPException(status_code=400, detail="output_dir_must_be_absolute")
+    return await estimate_export_size(
+        output_dir=req.output_dir,
+        include_images=req.include_images,
+        include_db=req.include_db,
+        tar_models=req.tar_models,
+        tar_hf_cache=req.tar_hf_cache,
+    )
 
 
 @router.post("/deployment/export")
@@ -134,6 +217,12 @@ async def deployment_export_model(model_id: int, req: ModelExportRequest, _: dic
 
 @router.post("/deployment/import-model")
 async def deployment_import_model(req: ImportModelRequest, _: dict = Depends(require_admin)):
+    """Import a model from an exported manifest.
+    
+    Set dry_run=true to preview what would be imported without making changes.
+    The preview includes validation of local_path, engine image availability,
+    and conflict detection.
+    """
     if not req.output_dir:
         raise HTTPException(status_code=400, detail="output_dir_required")
     if not req.output_dir.startswith("/"):
@@ -151,6 +240,7 @@ async def deployment_import_model(req: ImportModelRequest, _: dict = Depends(req
             name_override=req.name_override,
             local_path_override=req.local_path_override,
             use_exported_engine_image=bool(req.use_exported_engine_image),
+            dry_run=bool(req.dry_run),
         )
         return out
     except RuntimeError as e:
@@ -158,5 +248,51 @@ async def deployment_import_model(req: ImportModelRequest, _: dict = Depends(req
         if msg == "served_model_name_conflict":
             raise HTTPException(status_code=409, detail=msg)
         raise HTTPException(status_code=400, detail=msg)
+
+
+# ============================================================================
+# Database Restore Endpoints (GAP-D1)
+# ============================================================================
+
+@router.get("/deployment/database-dump")
+async def deployment_database_dump_info(output_dir: str, _: dict = Depends(require_admin)):
+    """Check if a database dump exists in the export directory."""
+    if not output_dir:
+        raise HTTPException(status_code=400, detail="output_dir_required")
+    if not output_dir.startswith("/"):
+        raise HTTPException(status_code=400, detail="output_dir_must_be_absolute")
+    return check_database_dump_exists(output_dir)
+
+
+@router.post("/deployment/restore-database")
+async def deployment_restore_database(req: DatabaseRestoreRequest, _: dict = Depends(require_admin)):
+    """Restore database from an exported pg_dump file.
+    
+    This operation:
+    1. Optionally creates a backup of the current database (safety net)
+    2. Optionally drops existing tables (for clean restore)
+    3. Executes the pg_dump restore via psql
+    4. Verifies the restore completed successfully
+    
+    WARNING: This is a destructive operation. Use with caution.
+    """
+    if not req.output_dir:
+        raise HTTPException(status_code=400, detail="output_dir_required")
+    if not req.output_dir.startswith("/"):
+        raise HTTPException(status_code=400, detail="output_dir_must_be_absolute")
+    
+    # Verify dump exists before starting job
+    dump_info = check_database_dump_exists(req.output_dir)
+    if not dump_info.get("exists"):
+        raise HTTPException(status_code=404, detail="database_dump_not_found")
+    
+    try:
+        return await start_database_restore(
+            output_dir=req.output_dir,
+            backup_first=req.backup_first,
+            drop_existing=req.drop_existing,
+        )
+    except RuntimeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 

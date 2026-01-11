@@ -61,6 +61,24 @@ export default function DeploymentPage() {
   const [importLocalPathOverride, setImportLocalPathOverride] = React.useState<string>('');
   const [useExportedEngineImage, setUseExportedEngineImage] = React.useState<boolean>(true);
   const [importing, setImporting] = React.useState(false);
+  const [importPreview, setImportPreview] = React.useState<any>(null);
+  const [previewLoading, setPreviewLoading] = React.useState(false);
+
+  // Database restore state
+  const [dbRestoreDir, setDbRestoreDir] = React.useState('/var/cortex/exports');
+  const [dbDumpInfo, setDbDumpInfo] = React.useState<any>(null);
+  const [dbRestoreBackupFirst, setDbRestoreBackupFirst] = React.useState(true);
+  const [dbRestoreDropExisting, setDbRestoreDropExisting] = React.useState(false);
+  const [dbRestoring, setDbRestoring] = React.useState(false);
+  const [dbDumpLoading, setDbDumpLoading] = React.useState(false);
+
+  // Job history state
+  const [jobHistory, setJobHistory] = React.useState<any[]>([]);
+  const [showJobHistory, setShowJobHistory] = React.useState(false);
+
+  // Disk space estimation state
+  const [sizeEstimate, setSizeEstimate] = React.useState<any>(null);
+  const [estimating, setEstimating] = React.useState(false);
 
   React.useEffect(() => {
     let stop = false;
@@ -109,7 +127,7 @@ export default function DeploymentPage() {
 
   const running = (status as any)?.status === 'running' || (status as any)?.status === 'pending';
 
-  const start = async () => {
+  const doExport = async () => {
     setLoading(true);
     try {
       const res = await apiFetch<any>('/admin/deployment/export', {
@@ -174,9 +192,43 @@ export default function DeploymentPage() {
     }
   };
 
+  const doPreview = async () => {
+    if (!selectedManifestFile) {
+      addToast({ title: 'Select a manifest first', kind: 'error' });
+      return;
+    }
+    setPreviewLoading(true);
+    setImportPreview(null);
+    try {
+      const res = await apiFetch<any>('/admin/deployment/import-model', {
+        method: 'POST',
+        body: JSON.stringify({
+          output_dir: importDir,
+          manifest_file: selectedManifestFile,
+          conflict_strategy: importConflictStrategy,
+          served_model_name_override: importServedOverride || null,
+          name_override: importNameOverride || null,
+          local_path_override: importLocalPathOverride || null,
+          use_exported_engine_image: useExportedEngineImage,
+          dry_run: true,
+        }),
+      });
+      setImportPreview(res);
+    } catch (e: any) {
+      addToast({ title: `Preview failed: ${e?.message || 'error'}`, kind: 'error' });
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
   const doImport = async () => {
     if (!selectedManifestFile) {
       addToast({ title: 'Select a manifest first', kind: 'error' });
+      return;
+    }
+    // Check preview first if we have one with validation errors
+    if (importPreview && !importPreview.can_import) {
+      addToast({ title: 'Cannot import: resolve validation errors first', kind: 'error' });
       return;
     }
     setImporting(true);
@@ -191,9 +243,11 @@ export default function DeploymentPage() {
           name_override: importNameOverride || null,
           local_path_override: importLocalPathOverride || null,
           use_exported_engine_image: useExportedEngineImage,
+          dry_run: false,
         }),
       });
       addToast({ title: `Imported model #${res?.id}`, kind: 'success' });
+      setImportPreview(null); // Clear preview after successful import
       // Refresh models list for dropdowns
       try {
         const ms = await apiFetch<ModelItem[]>('/admin/models');
@@ -203,6 +257,101 @@ export default function DeploymentPage() {
       addToast({ title: `Import failed: ${e?.message || 'error'}`, kind: 'error' });
     } finally {
       setImporting(false);
+    }
+  };
+
+  // Disk space estimation
+  const estimateSize = async () => {
+    setEstimating(true);
+    try {
+      const res = await apiFetch<any>('/admin/deployment/estimate-size', {
+        method: 'POST',
+        body: JSON.stringify({
+          output_dir: outputDir,
+          include_images: includeImages,
+          include_db: includeDb,
+          tar_models: tarModels,
+          tar_hf_cache: tarHfCache,
+        }),
+      });
+      setSizeEstimate(res);
+      if (res?.disk_space?.sufficient === false) {
+        addToast({ title: `⚠️ Insufficient disk space: ${res.disk_space.available_formatted} available, ${res.disk_space.required_formatted} required`, kind: 'error' });
+      }
+    } catch (e: any) {
+      addToast({ title: `Failed to estimate size: ${e?.message || 'error'}`, kind: 'error' });
+    } finally {
+      setEstimating(false);
+    }
+  };
+
+  // Job history functions
+  const refreshJobHistory = async () => {
+    try {
+      const res = await apiFetch<any>('/admin/deployment/jobs?limit=20');
+      setJobHistory(Array.isArray(res?.jobs) ? res.jobs : []);
+    } catch (e: any) {
+      addToast({ title: `Failed to load job history: ${e?.message || 'error'}`, kind: 'error' });
+    }
+  };
+
+  const cancelJob = async (jobId: string) => {
+    try {
+      await apiFetch<any>(`/admin/deployment/jobs/${jobId}`, { method: 'DELETE' });
+      addToast({ title: 'Job cancelled', kind: 'success' });
+      refreshJobHistory();
+    } catch (e: any) {
+      addToast({ title: `Failed to cancel job: ${e?.message || 'error'}`, kind: 'error' });
+    }
+  };
+
+  // Database restore functions
+  const checkDbDump = async () => {
+    setDbDumpLoading(true);
+    try {
+      const info = await apiFetch<any>(`/admin/deployment/database-dump?output_dir=${encodeURIComponent(dbRestoreDir)}`);
+      setDbDumpInfo(info);
+      if (!info?.exists) {
+        addToast({ title: 'No database dump found in directory', kind: 'error' });
+      }
+    } catch (e: any) {
+      addToast({ title: `Failed to check dump: ${e?.message || 'error'}`, kind: 'error' });
+      setDbDumpInfo(null);
+    } finally {
+      setDbDumpLoading(false);
+    }
+  };
+
+  const doDbRestore = async () => {
+    if (!dbDumpInfo?.exists) {
+      addToast({ title: 'Check for database dump first', kind: 'error' });
+      return;
+    }
+    // Confirm destructive operation
+    if (!window.confirm(
+      'WARNING: This will restore the database from the dump file.\n\n' +
+      (dbRestoreDropExisting ? '⚠️ DROP EXISTING is enabled - all current data will be deleted!\n\n' : '') +
+      (dbRestoreBackupFirst ? '✓ A backup will be created first.\n\n' : '⚠️ No backup will be created!\n\n') +
+      'Are you sure you want to proceed?'
+    )) {
+      return;
+    }
+    setDbRestoring(true);
+    try {
+      const res = await apiFetch<any>('/admin/deployment/restore-database', {
+        method: 'POST',
+        body: JSON.stringify({
+          output_dir: dbRestoreDir,
+          backup_first: dbRestoreBackupFirst,
+          drop_existing: dbRestoreDropExisting,
+        }),
+      });
+      setStatus(res);
+      addToast({ title: 'Database restore started', kind: 'success' });
+    } catch (e: any) {
+      addToast({ title: `Restore failed: ${e?.message || 'error'}`, kind: 'error' });
+    } finally {
+      setDbRestoring(false);
     }
   };
 
@@ -218,7 +367,7 @@ export default function DeploymentPage() {
         title="Deployment"
         actions={
           <div className="flex items-center gap-2">
-            <Button variant="cyan" size="sm" onClick={start} disabled={loading || running}>
+            <Button variant="cyan" size="sm" onClick={doExport} disabled={loading || running}>
               {running ? 'Running…' : loading ? 'Starting…' : 'Create Offline Package'}
             </Button>
           </div>
@@ -289,6 +438,29 @@ export default function DeploymentPage() {
             Allow pulling missing images from registries (online only)
           </label>
         </div>
+
+        {/* Size estimation and export button */}
+        <div className="flex items-center justify-between pt-2 border-t border-white/10">
+          <div className="flex items-center gap-3">
+            <Button variant="default" size="sm" onClick={estimateSize} disabled={estimating || loading}>
+              {estimating ? 'Estimating…' : 'Check Size'}
+            </Button>
+            {sizeEstimate && (
+              <div className="text-[11px] text-white/70">
+                Estimated: <strong className="text-white">{sizeEstimate.estimated_formatted}</strong>
+                {sizeEstimate.disk_space && (
+                  <span className={`ml-2 ${sizeEstimate.disk_space.sufficient ? 'text-emerald-400' : 'text-red-400'}`}>
+                    ({sizeEstimate.disk_space.available_formatted} available)
+                    {!sizeEstimate.disk_space.sufficient && ' ⚠️ Insufficient!'}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+          <Button variant="primary" size="sm" onClick={doExport} disabled={loading || running}>
+            {loading ? 'Starting…' : 'Start Full Export'}
+          </Button>
+        </div>
       </Card>
 
       <Card className="p-4 space-y-3" variant="cyan">
@@ -338,15 +510,31 @@ export default function DeploymentPage() {
       <Card className="p-4 space-y-3">
         <div className="flex items-center justify-between">
           <div className="text-sm font-semibold text-white/80">Job status</div>
-          <Badge className={(status as any)?.status === 'completed' ? 'bg-emerald-500/20 text-emerald-200 border-emerald-400/30' : (status as any)?.status === 'failed' ? 'bg-red-500/20 text-red-200 border-red-400/30' : 'bg-white/10 text-white/70 border-white/10'}>
-            {(status as any)?.status || 'idle'}
-          </Badge>
+          <div className="flex items-center gap-2">
+            <Button variant="default" size="sm" onClick={() => { setShowJobHistory(!showJobHistory); if (!showJobHistory) refreshJobHistory(); }}>
+              {showJobHistory ? 'Hide History' : 'Show History'}
+            </Button>
+            <Badge className={(status as any)?.status === 'completed' ? 'bg-emerald-500/20 text-emerald-200 border-emerald-400/30' : (status as any)?.status === 'failed' ? 'bg-red-500/20 text-red-200 border-red-400/30' : (status as any)?.status === 'cancelled' ? 'bg-yellow-500/20 text-yellow-200 border-yellow-400/30' : 'bg-white/10 text-white/70 border-white/10'}>
+              {(status as any)?.status || 'idle'}
+            </Badge>
+          </div>
         </div>
 
         {(status as any)?.status !== 'idle' && (
           <>
             <div className="text-[11px] text-white/70">
               Step: <span className="font-mono">{step || '-'}</span> · Progress: <span className="font-mono">{pct}%</span>
+              {(status as any)?.job_type && <span className="ml-2 text-white/50">({(status as any).job_type})</span>}
+              {(status as any)?.estimated_size_bytes > 0 && (
+                <span className="ml-2">
+                  · {((status as any)?.bytes_written / 1024 / 1024).toFixed(1)} MB / {((status as any)?.estimated_size_bytes / 1024 / 1024).toFixed(1)} MB
+                </span>
+              )}
+              {(status as any)?.eta_seconds != null && (
+                <span className="ml-2 text-white/50">
+                  (ETA: {Math.round((status as any).eta_seconds / 60)}m {Math.round((status as any).eta_seconds % 60)}s)
+                </span>
+              )}
             </div>
             {(status as any)?.output_dir && (
               <div className="text-[11px] text-white/70">
@@ -363,6 +551,42 @@ export default function DeploymentPage() {
             </div>
           </>
         )}
+
+        {/* Job History Section */}
+        {showJobHistory && (
+          <div className="mt-3 border-t border-white/10 pt-3">
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-sm font-semibold text-white/70">Recent Jobs</div>
+              <Button variant="default" size="sm" onClick={refreshJobHistory}>Refresh</Button>
+            </div>
+            {jobHistory.length === 0 ? (
+              <div className="text-[11px] text-white/50 text-center py-2">No jobs in history</div>
+            ) : (
+              <div className="space-y-1 max-h-[200px] overflow-auto">
+                {jobHistory.map((job: any) => (
+                  <div key={job.id} className="flex items-center justify-between p-2 bg-white/5 rounded text-[11px]">
+                    <div className="flex items-center gap-2">
+                      <span className={`w-2 h-2 rounded-full ${
+                        job.status === 'completed' ? 'bg-emerald-400' : 
+                        job.status === 'failed' ? 'bg-red-400' : 
+                        job.status === 'cancelled' ? 'bg-yellow-400' : 
+                        job.status === 'running' ? 'bg-blue-400 animate-pulse' : 'bg-white/30'
+                      }`} />
+                      <span className="font-mono text-white/80">{job.id}</span>
+                      <span className="text-white/50">{job.job_type || 'export'}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-white/50">{job.status}</span>
+                      {(job.status === 'running' || job.status === 'pending') && (
+                        <Button variant="default" size="sm" onClick={() => cancelJob(job.id)}>Cancel</Button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </Card>
 
       <Card className="p-4 space-y-3" variant="purple">
@@ -372,7 +596,10 @@ export default function DeploymentPage() {
             <Button variant="cyan" size="sm" onClick={refreshManifests} disabled={manifestLoading}>
               {manifestLoading ? 'Scanning…' : 'Scan'}
             </Button>
-            <Button variant="primary" size="sm" onClick={doImport} disabled={importing || !selectedManifestFile}>
+            <Button variant="default" size="sm" onClick={doPreview} disabled={previewLoading || !selectedManifestFile}>
+              {previewLoading ? 'Checking…' : 'Preview'}
+            </Button>
+            <Button variant="primary" size="sm" onClick={doImport} disabled={importing || !selectedManifestFile || (importPreview && !importPreview.can_import)}>
               {importing ? 'Importing…' : 'Import'}
             </Button>
           </div>
@@ -394,7 +621,7 @@ export default function DeploymentPage() {
           </div>
           <div>
             <div className="text-sm font-semibold text-white/80 mb-1">Manifest</div>
-            <select className="input" value={selectedManifestFile} onChange={(e) => setSelectedManifestFile(e.target.value)}>
+            <select className="input" value={selectedManifestFile} onChange={(e) => { setSelectedManifestFile(e.target.value); setImportPreview(null); }}>
               <option value="">Select manifest…</option>
               {manifestItems.map((it) => (
                 <option key={it.file} value={it.file}>
@@ -452,6 +679,144 @@ export default function DeploymentPage() {
             </div>
           </div>
         </details>
+
+        {/* Import Preview Section */}
+        {importPreview && (
+          <div className={`p-3 rounded border ${importPreview.can_import ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-red-500/10 border-red-500/30'}`}>
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-sm font-semibold text-white/90">
+                {importPreview.can_import ? '✓ Ready to Import' : '✗ Cannot Import'}
+              </div>
+              <Badge className={importPreview.can_import ? 'bg-emerald-500/20 text-emerald-200' : 'bg-red-500/20 text-red-200'}>
+                Preview
+              </Badge>
+            </div>
+            
+            <div className="text-[11px] text-white/80 space-y-2">
+              <div className="font-semibold">Would create:</div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1 pl-2">
+                <div>Name:</div>
+                <code className="bg-white/10 px-1 rounded">{importPreview.would_create?.name || '-'}</code>
+                <div>Served name:</div>
+                <code className="bg-white/10 px-1 rounded">{importPreview.would_create?.served_model_name || '-'}</code>
+                <div>Engine:</div>
+                <code className="bg-white/10 px-1 rounded">{importPreview.would_create?.engine_type || '-'}</code>
+                <div>Engine image:</div>
+                <code className="bg-white/10 px-1 rounded text-[10px]">{importPreview.would_create?.engine_image || '(default)'}</code>
+                <div>Local path:</div>
+                <code className="bg-white/10 px-1 rounded text-[10px]">{importPreview.would_create?.local_path || '(none)'}</code>
+              </div>
+              
+              {importPreview.conflict && (
+                <div className="mt-2 p-2 bg-yellow-500/10 border border-yellow-500/30 rounded">
+                  <div className="font-semibold text-yellow-200">⚠️ Conflict detected:</div>
+                  <div className="pl-2 text-yellow-100">
+                    Existing model #{importPreview.conflict.existing_id}: "{importPreview.conflict.existing_name}" uses served_model_name "{importPreview.conflict.served_model_name}"
+                    {importConflictStrategy === 'rename' && (
+                      <span className="text-emerald-300"> → Will rename to "{importPreview.would_create?.served_model_name}"</span>
+                    )}
+                  </div>
+                </div>
+              )}
+              
+              {importPreview.warnings?.length > 0 && (
+                <div className="mt-2 p-2 bg-yellow-500/10 border border-yellow-500/30 rounded">
+                  <div className="font-semibold text-yellow-200">Warnings:</div>
+                  <ul className="list-disc pl-5 text-yellow-100">
+                    {importPreview.warnings.map((w: string, i: number) => (
+                      <li key={i}>{w}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              
+              {importPreview.validation_errors?.length > 0 && (
+                <div className="mt-2 p-2 bg-red-500/10 border border-red-500/30 rounded">
+                  <div className="font-semibold text-red-200">Errors (must resolve):</div>
+                  <ul className="list-disc pl-5 text-red-100">
+                    {importPreview.validation_errors.map((e: string, i: number) => (
+                      <li key={i}>{e}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </Card>
+
+      {/* Database Restore Section */}
+      <Card className="p-4 space-y-3" variant="blue">
+        <div className="flex items-center justify-between">
+          <div className="text-sm font-semibold text-white/80">Restore database from export</div>
+          <div className="flex items-center gap-2">
+            <Button variant="cyan" size="sm" onClick={checkDbDump} disabled={dbDumpLoading}>
+              {dbDumpLoading ? 'Checking…' : 'Check Dump'}
+            </Button>
+            <Button 
+              variant="primary" 
+              size="sm" 
+              onClick={doDbRestore} 
+              disabled={dbRestoring || !dbDumpInfo?.exists || running}
+            >
+              {dbRestoring ? 'Restoring…' : 'Restore Database'}
+            </Button>
+          </div>
+        </div>
+        
+        <InfoBox variant="purple" title="⚠️ Destructive Operation">
+          <div className="text-sm text-white/80">
+            Database restore will overwrite existing data. Always ensure you have a backup before proceeding.
+            The restore process will stop all running models first.
+          </div>
+        </InfoBox>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <div className="text-sm font-semibold text-white/80 mb-1">Import directory (absolute path)</div>
+            <Input 
+              value={dbRestoreDir} 
+              onChange={(e) => { setDbRestoreDir(e.target.value); setDbDumpInfo(null); }} 
+              placeholder="/var/cortex/exports" 
+            />
+            <div className="text-[11px] text-white/60 mt-1">
+              We look for <code className="bg-white/10 px-1 py-0.5 rounded border border-white/10">{dbRestoreDir}/db/cortex.sql</code>
+            </div>
+          </div>
+          <div className="space-y-2">
+            {dbDumpInfo?.exists && (
+              <div className="p-2 bg-emerald-500/10 border border-emerald-500/30 rounded text-[11px] text-emerald-200">
+                <div>✓ Database dump found</div>
+                <div>Size: {Math.round((dbDumpInfo.size_bytes || 0) / 1024)} KB</div>
+                <div>Modified: {dbDumpInfo.modified_at || 'unknown'}</div>
+              </div>
+            )}
+            {dbDumpInfo && !dbDumpInfo.exists && (
+              <div className="p-2 bg-red-500/10 border border-red-500/30 rounded text-[11px] text-red-200">
+                ✗ No database dump found at {dbDumpInfo.path}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <label className="inline-flex items-center gap-2 text-sm">
+            <input 
+              type="checkbox" 
+              checked={dbRestoreBackupFirst} 
+              onChange={(e) => setDbRestoreBackupFirst(e.target.checked)} 
+            />
+            Create backup before restore (recommended)
+          </label>
+          <label className="inline-flex items-center gap-2 text-sm text-yellow-300">
+            <input 
+              type="checkbox" 
+              checked={dbRestoreDropExisting} 
+              onChange={(e) => setDbRestoreDropExisting(e.target.checked)} 
+            />
+            Drop existing tables first (clean restore)
+          </label>
+        </div>
       </Card>
     </section>
   );

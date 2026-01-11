@@ -76,7 +76,7 @@ On a machine with internet access:
 
 ```bash
 # Clone Cortex repository
-git clone https://github.com/your-org/cortex-vllm.git
+git clone https://github.com/AulendurForge/Cortex-vLLM.git
 cd cortex-vllm
 
 # Download and package all required Docker images
@@ -173,10 +173,14 @@ make load-offline
 ```
 
 **What this does**:
-1. Finds all .tar files in `cortex-offline-images/`
-2. Loads each image into Docker's local cache
-3. Verifies images loaded successfully
-4. Shows summary of cached images
+1. Verifies checksums of all tar files (if `checksums.sha256` exists)
+2. Finds all .tar files in `cortex-offline-images/`
+3. Loads each image into Docker's local cache
+4. **Post-load verification**: Confirms expected images exist in Docker
+5. Reports critical vs optional missing images
+6. Shows summary of cached images
+
+**Post-load verification** automatically reads expected images from the manifest and verifies they exist after loading. Critical images (vLLM, llama.cpp, postgres, redis) will cause the script to exit with an error if missing.
 
 **Expected output**:
 ```
@@ -360,6 +364,53 @@ nano backend/.env
 
 ---
 
+## Version Management
+
+### Central Version Configuration
+
+Cortex uses a central version file to ensure consistency across all scripts:
+
+```bash
+# scripts/versions.env - Single source of truth
+CORTEX_VLLM_VERSION="${CORTEX_VLLM_VERSION:-latest}"
+CORTEX_LLAMACPP_TAG="${CORTEX_LLAMACPP_TAG:-server-cuda}"
+```
+
+All scripts (`prepare-offline-deployment.sh`, `verify-offline-images.sh`) automatically source this file.
+
+### Pinning Versions for Production
+
+For production/offline deployments, pin specific versions:
+
+```bash
+# Edit scripts/versions.env
+CORTEX_VLLM_VERSION="v0.8.0"
+CORTEX_LLAMACPP_TAG="server-cuda"
+
+# Or set environment variables
+export CORTEX_VLLM_VERSION="v0.8.0"
+make prepare-offline
+```
+
+### Version Override Hierarchy
+
+1. **Environment variables** (highest priority): `VLLM_VERSION`, `LLAMACPP_TAG`
+2. **Cortex versions**: `CORTEX_VLLM_VERSION`, `CORTEX_LLAMACPP_TAG` 
+3. **scripts/versions.env** defaults
+4. **Hardcoded fallbacks** (lowest priority): `"latest"`, `"server-cuda"`
+
+### Keeping Versions Synchronized
+
+When updating versions:
+
+1. Update `scripts/versions.env` 
+2. Update `backend/.env` (if set explicitly)
+3. Run `make prepare-offline` to cache new images
+4. Run `make verify-offline` to confirm
+5. Update `backend/src/config.py` default if needed
+
+---
+
 ## Advanced: Local Docker Registry
 
 For organizations deploying Cortex on multiple offline machines:
@@ -450,13 +501,27 @@ make restart
 
 ### Best Practices
 
-1. **Verify checksums** after transfer
-   ```bash
-   # Generate on online machine
-   sha256sum cortex-offline-images/*.tar > checksums.txt
+1. **Verify checksums** after transfer (automatic)
    
-   # Verify on offline machine
-   sha256sum -c checksums.txt
+   Cortex now automatically generates and verifies SHA256 checksums for all exported files.
+   
+   ```bash
+   # Checksums are automatically generated during export
+   # Located at: {output_dir}/checksums.sha256
+   
+   # During load, checksums are automatically verified:
+   make load-offline
+   # Output: "Verifying file checksums..."
+   # db/cortex.sql ✓
+   # manifest.json ✓
+   # manifests/models.json ✓
+   
+   # To skip verification (not recommended):
+   VERIFY_CHECKSUMS=false make load-offline
+   
+   # Manual verification:
+   cd cortex-offline-images
+   sha256sum -c checksums.sha256
    ```
 
 2. **Pin specific versions** (don't use :latest)
@@ -622,6 +687,91 @@ curl http://localhost:8084/admin/system/docker-images \
 
 ---
 
+### Deployment Job Management
+
+Cortex maintains job history for deployment operations:
+
+```bash
+# Get current/latest job status
+curl http://localhost:8084/admin/deployment/status -b /tmp/cookies.txt | jq .
+
+# List recent jobs (last 20)
+curl http://localhost:8084/admin/deployment/jobs -b /tmp/cookies.txt | jq .
+
+# Get specific job by ID
+curl http://localhost:8084/admin/deployment/jobs/{job_id} -b /tmp/cookies.txt | jq .
+
+# Cancel a running job
+curl -X DELETE http://localhost:8084/admin/deployment/jobs/{job_id} -b /tmp/cookies.txt | jq .
+```
+
+**Job Types**: `export`, `model_export`, `db_restore`
+
+**Job Statuses**: `pending`, `running`, `completed`, `failed`, `cancelled`
+
+---
+
+### Disk Space Estimation
+
+Before starting a large export, estimate the required space:
+
+```bash
+curl -X POST http://localhost:8084/admin/deployment/estimate-size \
+  -H "Content-Type: application/json" \
+  -b /tmp/cookies.txt \
+  -d '{
+    "output_dir": "/var/cortex/exports",
+    "include_images": true,
+    "include_db": true,
+    "tar_models": true,
+    "tar_hf_cache": false
+  }' | jq .
+```
+
+**Response**:
+```json
+{
+  "estimated_bytes": 45000000000,
+  "estimated_formatted": "41.9 GB",
+  "breakdown": {
+    "docker_images": "6.0 GB",
+    "database": "10.0 MB",
+    "models": "35.8 GB"
+  },
+  "disk_space": {
+    "sufficient": true,
+    "available_bytes": 800000000000,
+    "available_formatted": "745.1 GB",
+    "required_bytes": 54000000000,
+    "required_formatted": "50.3 GB",
+    "safety_margin": 1.2
+  }
+}
+```
+
+---
+
+### HF Token Handling on Import
+
+When importing models that originally had HuggingFace tokens configured:
+
+1. Tokens are redacted during export for security
+2. Import warnings indicate if a token was present
+3. After import, configure the token in **Admin → Models → Edit**
+
+**Import dry-run response**:
+```json
+{
+  "dry_run": true,
+  "warnings": [
+    "⚠️ HF_TOKEN REQUIRED: This model had an HF token configured which was redacted for security. After import, go to Admin → Models → Edit and add your Hugging Face token."
+  ],
+  "can_import": true
+}
+```
+
+---
+
 ## Configuration Reference
 
 ### backend/.env (Offline Mode)
@@ -737,6 +887,296 @@ docker load -i backups/docker-images/all-images-backup.tar
 docker load -i backups/docker-images/vllm-v0.6.3-backup.tar
 ```
 
+### Database Backup and Restore
+
+Cortex provides built-in database backup and restore capabilities for migration and disaster recovery.
+
+#### Exporting Database (via API)
+
+```bash
+# Full deployment export (includes database dump)
+curl -X POST http://localhost:8084/admin/deployment/export \
+  -H "Cookie: cortex_session=admin" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "output_dir": "/var/cortex/exports",
+    "include_db": true,
+    "include_configs": true,
+    "include_models_manifest": true
+  }'
+```
+
+This creates a `db/cortex.sql` file in the output directory containing a full PostgreSQL dump.
+
+#### Restoring Database (via API)
+
+```bash
+# Restore database from dump file
+curl -X POST http://localhost:8084/admin/deployment/restore-database \
+  -H "Cookie: cortex_session=admin" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "output_dir": "/var/cortex/exports",
+    "backup_first": true,
+    "drop_existing": true
+  }'
+```
+
+**Parameters:**
+- `output_dir`: Directory containing the `db/cortex.sql` dump file
+- `backup_first`: Create a safety backup before restore (default: true)
+- `drop_existing`: Drop existing tables before restore for a clean slate (default: false)
+
+**⚠️ Warning**: Database restore with `drop_existing: true` will **permanently delete** all existing data. Always enable `backup_first` unless you're certain.
+
+#### Restore via Admin UI
+
+1. Navigate to **Admin → Deployment**
+2. In the **Database Restore** section (red card):
+   - Set the import directory path
+   - Optionally change the dump file path (default: `db/cortex.sql`)
+   - Click **Restore Database**
+3. Monitor progress in the deployment status panel
+
+#### Safety Backups
+
+When `backup_first: true`, Cortex automatically creates a backup at:
+```
+{output_dir}/db/pre_restore_backup/cortex_backup_{timestamp}.sql
+```
+
+To restore from a safety backup:
+```bash
+curl -X POST http://localhost:8084/admin/deployment/restore-database \
+  -H "Cookie: cortex_session=admin" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "output_dir": "/var/cortex/exports",
+    "db_file": "db/pre_restore_backup/cortex_backup_1234567890.sql",
+    "backup_first": false,
+    "drop_existing": true
+  }'
+```
+
+#### Manual Database Operations
+
+For advanced scenarios, you can use PostgreSQL tools directly:
+
+```bash
+# Connect to database container
+docker exec -it cortex-postgres-1 psql -U cortex -d cortex
+
+# Manual backup
+docker exec cortex-postgres-1 pg_dump -U cortex cortex > backup.sql
+
+# Manual restore (drop existing first)
+docker exec -i cortex-postgres-1 psql -U cortex -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
+docker exec -i cortex-postgres-1 psql -U cortex cortex < backup.sql
+```
+
+#### PostgreSQL 16 Compatibility Notes
+
+Cortex uses PostgreSQL 16, which includes `\restrict` and `\unrestrict` commands in `pg_dump` output. These are session-based security features that can cause issues when restoring to a different PostgreSQL instance.
+
+**Automatic handling:** The restore-database API automatically strips these commands, ensuring compatibility across different PostgreSQL 16 instances.
+
+**Manual restore:** If restoring manually, strip these commands first:
+
+```bash
+# Strip \restrict commands for cross-instance compatibility
+sed -i '/^\\restrict/d;/^\\unrestrict/d' backup.sql
+
+# Then restore
+docker exec -i cortex-postgres-1 psql -U cortex cortex < backup.sql
+```
+
+---
+
+## Advanced: Image Layer Deduplication
+
+### Understanding Docker Layers
+
+Docker images are built from layers. Each layer represents a set of filesystem changes (adding files, installing packages, etc.). When you have multiple images that share a common base, they share those base layers.
+
+**How Cortex images share layers:**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                  vLLM Image (~8-12 GB)                         │
+├─────────────────────────────────────────────────────────────────┤
+│  vLLM application layer (~3-4 GB)                              │
+├─────────────────────────────────────────────────────────────────┤
+│  Python dependencies layer (~1-2 GB)                           │
+├─────────────────────────────────────────────────────────────────┤
+│  CUDA toolkit layer (~3-4 GB)                       ◄── SHARED │
+├─────────────────────────────────────────────────────────────────┤
+│  Ubuntu base layer (~200 MB)                        ◄── SHARED │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│              llama.cpp Image (~3-5 GB)                         │
+├─────────────────────────────────────────────────────────────────┤
+│  llama.cpp application layer (~1-2 GB)                         │
+├─────────────────────────────────────────────────────────────────┤
+│  CUDA toolkit layer (~3-4 GB)                       ◄── SHARED │
+├─────────────────────────────────────────────────────────────────┤
+│  Ubuntu base layer (~200 MB)                        ◄── SHARED │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+Both vLLM and llama.cpp images typically share:
+- **Ubuntu/Debian base layer** (~200 MB)
+- **CUDA toolkit layer** (~3-4 GB)
+- **Common system libraries**
+
+### Current Export Behavior
+
+When using `make prepare-offline`, each image is saved independently:
+
+```bash
+docker save vllm/vllm-openai:latest -o vllm-openai-latest.tar
+docker save ghcr.io/ggml-org/llama.cpp:server-cuda -o llamacpp-server-cuda.tar
+```
+
+**Result:** Shared layers are duplicated across tar files.
+
+| File | Size | Notes |
+|------|------|-------|
+| vllm-openai-latest.tar | ~10 GB | Contains full CUDA stack |
+| llamacpp-server-cuda.tar | ~4 GB | Contains CUDA stack again (duplicate) |
+| **Total** | **~14 GB** | ~3-4 GB duplicated |
+
+### Optimized Export: Combined Save
+
+Docker's `save` command can export multiple images to a single tar file, automatically deduplicating shared layers:
+
+```bash
+# Optimized: save both images to one tar file
+docker save vllm/vllm-openai:latest ghcr.io/ggml-org/llama.cpp:server-cuda \
+  -o cortex-engines-combined.tar
+```
+
+**Result:** Shared layers are stored once.
+
+| File | Size | Savings |
+|------|------|---------|
+| cortex-engines-combined.tar | ~11 GB | ~3 GB saved |
+
+### Estimated Space Savings
+
+| Image Combination | Independent | Combined | Savings |
+|-------------------|-------------|----------|---------|
+| vLLM + llama.cpp | ~14 GB | ~11 GB | ~20-25% |
+| vLLM + llama.cpp + infra | ~16 GB | ~12 GB | ~25% |
+| Multiple vLLM versions (v0.6.3, v0.7.0) | ~20 GB | ~14 GB | ~30% |
+
+**Note:** Actual savings depend on how images were built. Images from the same maintainer or built on similar base images will share more layers.
+
+### Using Combined Saves
+
+#### Manual Combined Export
+
+```bash
+# Navigate to offline images directory
+cd cortex-offline-images
+
+# Export engine images together (largest savings)
+docker save \
+  vllm/vllm-openai:latest \
+  ghcr.io/ggml-org/llama.cpp:server-cuda \
+  -o engines-combined.tar
+
+# Export infrastructure images together
+docker save \
+  postgres:16 \
+  redis:7 \
+  prom/prometheus:v2.47.0 \
+  prom/node-exporter:v1.6.1 \
+  -o infrastructure-combined.tar
+
+# Generate checksums
+sha256sum engines-combined.tar infrastructure-combined.tar > checksums.sha256
+```
+
+#### Loading Combined Images
+
+```bash
+# Combined tar files load the same way
+docker load -i engines-combined.tar
+docker load -i infrastructure-combined.tar
+
+# All images from the combined tar are now available
+docker images | grep -E "vllm|llama"
+```
+
+### Trade-offs
+
+| Approach | Pros | Cons |
+|----------|------|------|
+| **Independent saves** (default) | - Simpler to manage<br>- Can update one image without re-exporting others<br>- Easier to debug | - Larger total size<br>- More transfer time |
+| **Combined saves** | - Smaller total size<br>- Faster transfer<br>- Less disk space needed | - Must re-export all images to update one<br>- Harder to identify issues with specific images |
+
+### Recommendations
+
+**Use independent saves (default) when:**
+- You have plenty of storage and bandwidth
+- You frequently update individual images
+- You want simpler troubleshooting
+- You're transferring via fast networks or local drives
+
+**Use combined saves when:**
+- Storage or bandwidth is constrained
+- You're doing a full migration (all images at once)
+- Transfer is over slow networks or physical media
+- You're creating a "golden" offline package for multiple deployments
+
+### Verifying Layer Sharing
+
+To check if your images share layers:
+
+```bash
+# List layers in each image
+docker image inspect vllm/vllm-openai:latest --format '{{.RootFS.Layers}}' | tr ',' '\n' | wc -l
+docker image inspect ghcr.io/ggml-org/llama.cpp:server-cuda --format '{{.RootFS.Layers}}' | tr ',' '\n' | wc -l
+
+# Find common layers
+comm -12 \
+  <(docker image inspect vllm/vllm-openai:latest --format '{{.RootFS.Layers}}' | tr ' ' '\n' | sort) \
+  <(docker image inspect ghcr.io/ggml-org/llama.cpp:server-cuda --format '{{.RootFS.Layers}}' | tr ' ' '\n' | sort)
+```
+
+### Script for Optimized Export
+
+For frequent deployments, you can use this helper script:
+
+```bash
+#!/bin/bash
+# scripts/prepare-offline-optimized.sh
+
+OUTPUT_DIR="${1:-cortex-offline-images}"
+mkdir -p "$OUTPUT_DIR"
+
+echo "=== Exporting Engine Images (combined) ==="
+docker save \
+  vllm/vllm-openai:${CORTEX_VLLM_VERSION:-latest} \
+  ghcr.io/ggml-org/llama.cpp:${CORTEX_LLAMACPP_TAG:-server-cuda} \
+  -o "$OUTPUT_DIR/engines-combined.tar"
+
+echo "=== Exporting Infrastructure Images (combined) ==="
+docker save \
+  postgres:16 \
+  redis:7 \
+  prom/prometheus:v2.47.0 \
+  -o "$OUTPUT_DIR/infrastructure-combined.tar"
+
+echo "=== Generating checksums ==="
+cd "$OUTPUT_DIR"
+sha256sum *.tar > checksums.sha256
+
+echo "=== Done ==="
+du -sh *.tar
+```
+
 ---
 
 ## Multi-Machine Deployment
@@ -807,6 +1247,25 @@ make quick-start
 # After successful load and verification
 mkdir -p backups/offline-package-YYYYMMDD
 mv cortex-offline-images/ backups/offline-package-YYYYMMDD/
+```
+
+### Q: What if model containers can't communicate with the gateway?
+
+**A**: Model containers must be on the same Docker network as the gateway (typically `cortex_default`). Cortex automatically:
+1. Checks if the network exists before starting model containers
+2. Creates the network if missing (with a warning)
+3. Falls back to Docker's default bridge network if creation fails
+
+If you're having connectivity issues:
+```bash
+# Verify network exists
+docker network ls | grep cortex_default
+
+# If missing, restart Cortex (this creates the network)
+make restart
+
+# Manually check network connectivity
+docker exec -it cortex-gateway-1 curl -s http://<model-container-name>:8000/health
 ```
 
 ### Q: What if I need a different vLLM version?

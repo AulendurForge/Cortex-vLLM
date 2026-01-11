@@ -3,11 +3,59 @@
 Next.js App Router + TypeScript admin UI (`frontend/`).
 
 ## Structure
-- `app/(admin)/*`: Pages for Health, Keys, Usage, Models, Orgs, Users, Guide
-- `src/components/*`: UI primitives, charts, monitoring widgets, models tools
+- `app/(admin)/*`: Pages for Health, Keys, Usage, Models, Orgs, Users, Chat, Guide
+- `src/components/*`: UI primitives, charts, monitoring widgets, models tools, chat UI
 - `src/lib/api-clients.ts`: fetch helper adds `x-request-id` and normalizes error envelope
+- `src/lib/chat-client.ts`: streaming chat client and model constraint fetching
+- `src/lib/chat-api.ts`: server-side chat session persistence
+- `src/hooks/useChat.ts`: chat state management hook
 - `providers/*`: App/Toast/User providers
 - Styling: Tailwind CSS with custom utility classes in `styles/globals.css`
+
+## Chat Playground Components
+
+The Chat Playground (`src/components/chat/`) provides an interactive chat interface:
+
+### Core Components
+| Component | Purpose |
+|-----------|---------|
+| `ChatInput.tsx` | Message input with context window tracking |
+| `ChatSidebar.tsx` | Session list, new chat, delete operations |
+| `MessageList.tsx` | Conversation display with auto-scroll |
+| `MessageContent.tsx` | Markdown and code syntax highlighting |
+| `ModelSelector.tsx` | Running model dropdown with health awareness |
+| `PerformanceMetrics.tsx` | Real-time tok/s, TTFT, token count |
+
+### Supporting Libraries
+| File | Purpose |
+|------|---------|
+| `lib/chat-client.ts` | SSE streaming, model constraints, token estimation |
+| `lib/chat-api.ts` | Session CRUD operations via REST API |
+| `hooks/useChat.ts` | State management, streaming control, metrics |
+
+### Feature Highlights
+
+**Streaming Chat**:
+- Native Fetch + ReadableStream for SSE parsing
+- No external dependencies (no LangChain, no AI SDK)
+- Real-time token counting and TTFT measurement
+- Abort support via AbortController
+
+**Chat Persistence**:
+- Server-side storage (database, not localStorage)
+- User-scoped sessions (isolation between users)
+- Cross-device access to chat history
+- Auto-generated titles from first message
+
+**Model Selection**:
+- Fetches running models via `/v1/models/running`
+- Health-aware filtering (only shows healthy models)
+- Model locking once conversation starts
+- Constraint fetching for context tracking
+
+**See also**: [Chat Playground Guide](../features/chat-playground.md)
+
+---
 
 ## Model Form Components
 

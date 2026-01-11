@@ -116,6 +116,36 @@ export function SideNav() {
             </div>
           </div>
 
+          {/* Chat */}
+          <div>
+            <div className="px-3 text-[10px] uppercase tracking-[0.2em] text-white/40 mb-3 font-bold">Chat</div>
+            <div className="flex flex-col gap-1">
+              {[
+                { href: '/chat', label: 'Playground', color: 'teal' },
+              ].map((item) => {
+                const active = pathname?.startsWith(item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    aria-current={active ? 'page' : undefined}
+                    className={cn(
+                      'group flex items-center px-4 py-2.5 rounded-xl transition-all duration-300 relative overflow-hidden',
+                      active 
+                        ? 'bg-white/10 text-white shadow-lg shadow-black/20' 
+                        : 'text-white/60 hover:text-white hover:bg-white/5'
+                    )}
+                  >
+                    {active && (
+                      <div className="absolute left-0 top-0 bottom-0 w-1 rounded-full bg-teal-500" />
+                    )}
+                    <span className="relative z-10 font-medium">{item.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Administration */}
           {user?.role === 'admin' && (
             <div>
@@ -204,7 +234,7 @@ export function SideNav() {
           <div className="px-4 py-2">
             <div className="flex flex-col gap-1 text-[9px] text-white/30 font-bold uppercase tracking-[0.1em]">
               <span className="text-white/20">Developed by</span>
-              <span className="text-white/40 group-hover:text-white/60 transition-colors">Aulendur Labs</span>
+              <a href="https://www.aulendur.com" target="_blank" rel="noopener noreferrer" className="text-white/40 hover:text-white/70 hover:underline transition-colors">Aulendur Labs</a>
             </div>
           </div>
         </div>
