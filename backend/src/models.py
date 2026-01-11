@@ -171,6 +171,10 @@ class Model(Base):
     # LoRA adapter support (Gap #10)
     lora_adapters_json: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array of LoRA paths or {path, scale}
     lora_init_without_apply: Mapped[bool | None] = mapped_column(Boolean, nullable=True)  # Load LoRAs without applying
+    # Grammar support (Gap #11)
+    grammar_file: Mapped[str | None] = mapped_column(String(512), nullable=True)  # Path to GBNF grammar file
+    # Embedding mode (Gap #13)
+    enable_embeddings: Mapped[bool | None] = mapped_column(Boolean, nullable=True)  # Enable embeddings endpoint
     state: Mapped[str] = mapped_column(String(16), default="stopped")
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
     port: Mapped[int | None] = mapped_column(Integer, nullable=True)

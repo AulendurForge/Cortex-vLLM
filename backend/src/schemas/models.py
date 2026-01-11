@@ -99,6 +99,10 @@ class ModelItem(BaseModel):
     # LoRA adapter support (Gap #10)
     lora_adapters_json: Optional[str] = None
     lora_init_without_apply: Optional[bool] = None
+    # Grammar support (Gap #11)
+    grammar_file: Optional[str] = None
+    # Embedding mode (Gap #13)
+    enable_embeddings: Optional[bool] = None
     # Runtime state
     state: str
     archived: bool
@@ -213,6 +217,10 @@ class CreateModelRequest(BaseModel):
     # LoRA adapter support (Gap #10)
     lora_adapters_json: Optional[str] = None
     lora_init_without_apply: Optional[bool] = None
+    # Grammar support (Gap #11)
+    grammar_file: Optional[str] = None
+    # Embedding mode (Gap #13)
+    enable_embeddings: Optional[bool] = None
 
 
 class UpdateModelRequest(BaseModel):
@@ -315,6 +323,10 @@ class UpdateModelRequest(BaseModel):
     # LoRA adapter support (Gap #10)
     lora_adapters_json: Optional[str] = None
     lora_init_without_apply: Optional[bool] = None
+    # Grammar support (Gap #11)
+    grammar_file: Optional[str] = None
+    # Embedding mode (Gap #13)
+    enable_embeddings: Optional[bool] = None
 
 
 class BaseDirCfg(BaseModel):

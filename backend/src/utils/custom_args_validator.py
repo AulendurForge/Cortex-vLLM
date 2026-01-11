@@ -6,11 +6,145 @@ custom startup arguments and environment variables.
 See cortexSustainmentPlan.md Phase 2 for design details.
 """
 
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple, Optional
 from fastapi import HTTPException
 import logging
+import difflib
 
 logger = logging.getLogger(__name__)
+
+
+# ============================================================================
+# Gap #9: Valid llama.cpp Server Flags Allowlist
+# ============================================================================
+
+# Comprehensive allowlist of valid llama.cpp server flags
+# Used for typo detection and suggestions (soft warning, not blocking)
+VALID_LLAMACPP_FLAGS = {
+    # Model loading
+    "-m", "--model",
+    "-a", "--alias",
+    "-hf", "--hf-repo",
+    "-hff", "--hf-file",
+    "-hfv", "--hf-revision",
+    "-hft", "--hf-token",
+    
+    # Context and batching
+    "-c", "--ctx-size",
+    "-n", "--n-predict",
+    "-b", "--batch-size",
+    "-ub", "--ubatch-size",
+    "-np", "--parallel",
+    "-cb", "--cont-batching",
+    "--context-shift",
+    
+    # GPU configuration
+    "-ngl", "--n-gpu-layers",
+    "-sm", "--split-mode",
+    "-ts", "--tensor-split",
+    "-mg", "--main-gpu",
+    "-fa", "--flash-attn",
+    "-mlock", "--mlock",
+    "-nommq", "--no-mmap",
+    "--numa",
+    
+    # Server configuration
+    "--host", "--port",
+    "-t", "--threads",
+    "-tb", "--threads-batch",
+    "--threads-http",
+    "--timeout",
+    "--slots",
+    "--metrics",
+    "--embedding", "--embeddings",
+    "--rerank",
+    "--webui",
+    
+    # KV Cache
+    "-ctk", "--cache-type-k",
+    "-ctv", "--cache-type-v",
+    "--cache-reuse",
+    "-dt", "--defrag-thold",
+    
+    # Sampling parameters (should be in Request Defaults, but valid)
+    "--temp", "--temperature",
+    "--top-k", "--top-p",
+    "--min-p", "--typical",
+    "--repeat-penalty", "--repeat-last-n",
+    "--frequency-penalty", "--presence-penalty",
+    "--dry-multiplier", "--dry-base",
+    "--samplers", "--sampler-seq",
+    
+    # RoPE configuration
+    "--rope-freq-base", "--rope-freq-scale",
+    "--rope-scaling", "--rope-scale",
+    "--yarn-orig-ctx", "--yarn-attn-factor",
+    "--yarn-beta-fast", "--yarn-beta-slow",
+    "--yarn-ext-factor",
+    
+    # LoRA adapters
+    "--lora", "--lora-scaled",
+    "--lora-init-without-apply",
+    
+    # Chat templates
+    "--chat-template", "--chat-template-file",
+    "--chat-template-kwargs",
+    "--jinja", "--no-jinja",
+    
+    # Grammar/Constrained generation
+    "--grammar", "--grammar-file",
+    
+    # Logging
+    "-v", "--verbose", "--log-verbose",
+    "--log-disable", "--log-file",
+    "--log-colors", "--log-prefix",
+    "--log-timestamps",
+    "--verbosity", "--log-verbosity",
+    
+    # Speculative decoding
+    "--draft", "--draft-min", "--draft-p-min",
+    
+    # Control vectors
+    "--control-vector", "--control-vector-scaled",
+    "--control-vector-layer-range",
+    
+    # System prompt
+    "--system-prompt-file", "-sp",
+    
+    # Misc
+    "--check-tensors",
+    "--warmup", "--no-warmup",
+    "--seed", "-s",
+    "--pooling",
+    "--api-key", "--api-key-file",
+    "--props",
+    "--version",
+    "-h", "--help",
+}
+
+# Short flag to long flag mapping for better suggestions
+FLAG_ALIASES = {
+    "-m": "--model",
+    "-c": "--ctx-size",
+    "-n": "--n-predict",
+    "-b": "--batch-size",
+    "-ub": "--ubatch-size",
+    "-ngl": "--n-gpu-layers",
+    "-t": "--threads",
+    "-tb": "--threads-batch",
+    "-np": "--parallel",
+    "-cb": "--cont-batching",
+    "-fa": "--flash-attn",
+    "-ctk": "--cache-type-k",
+    "-ctv": "--cache-type-v",
+    "-v": "--verbose",
+    "-s": "--seed",
+    "-a": "--alias",
+    "-sp": "--system-prompt-file",
+    "-sm": "--split-mode",
+    "-ts": "--tensor-split",
+    "-dt": "--defrag-thold",
+}
 
 
 # Security: Arguments that must NEVER be user-configurable
@@ -54,39 +188,125 @@ PROTECTED_ENV_VARS = {
 }
 
 
-def validate_custom_startup_args(args: List[Dict[str, Any]]) -> None:
+def find_closest_flag(flag: str, valid_flags: set, threshold: float = 0.6) -> Optional[str]:
+    """Find the closest matching valid flag using fuzzy matching (Gap #9).
+    
+    Args:
+        flag: The flag to find a match for
+        valid_flags: Set of valid flags to match against
+        threshold: Minimum similarity ratio (0-1) to consider a match
+        
+    Returns:
+        The closest matching flag, or None if no close match found
+    """
+    # Normalize the input flag
+    flag_lower = flag.lower()
+    
+    # Check if it's already valid (case-insensitive)
+    for valid in valid_flags:
+        if flag_lower == valid.lower():
+            return valid
+    
+    # Try fuzzy matching
+    closest = difflib.get_close_matches(flag_lower, [f.lower() for f in valid_flags], n=1, cutoff=threshold)
+    if closest:
+        # Find the original case version
+        for valid in valid_flags:
+            if valid.lower() == closest[0]:
+                return valid
+    
+    return None
+
+
+def validate_llamacpp_flag(flag: str) -> Tuple[bool, Optional[str], Optional[str]]:
+    """Validate a single llama.cpp flag and suggest corrections (Gap #9).
+    
+    Args:
+        flag: The flag to validate
+        
+    Returns:
+        Tuple of (is_valid, suggestion, warning_message)
+        - is_valid: True if flag is known valid
+        - suggestion: Suggested correct flag if typo detected
+        - warning_message: Warning message if applicable
+    """
+    flag_lower = flag.lower().strip()
+    
+    # Check if it's in the valid flags set (case-insensitive)
+    for valid in VALID_LLAMACPP_FLAGS:
+        if flag_lower == valid.lower():
+            return (True, None, None)
+    
+    # Not found - try fuzzy matching to find suggestion
+    suggestion = find_closest_flag(flag, VALID_LLAMACPP_FLAGS, threshold=0.6)
+    
+    if suggestion:
+        warning = f"Unknown flag '{flag}' - did you mean '{suggestion}'?"
+    else:
+        warning = f"Unknown flag '{flag}' - not in llama.cpp allowlist. Will pass through as-is."
+    
+    return (False, suggestion, warning)
+
+
+def validate_custom_startup_args(args: List[Dict[str, Any]], engine_type: str = "vllm") -> List[Dict[str, Any]]:
     """Validate custom startup arguments for security and compatibility.
     
     Enforces:
     - Hard blocks forbidden args (security invariants)
     - Soft warns for request-time params (logged, not blocked)
+    - Gap #9: Validates llama.cpp flags and suggests corrections for typos
     
     Args:
         args: List of custom arg dicts with 'flag' and 'value' keys
+        engine_type: Engine type for engine-specific validation
+        
+    Returns:
+        List of validation warnings (for UI display)
         
     Raises:
         HTTPException: If forbidden args are present
     """
+    warnings = []
+    
     if not args:
-        return
+        return warnings
     
     for arg in args:
-        flag = str(arg.get("flag", "")).lower().strip()
+        flag = str(arg.get("flag", "")).strip()
+        flag_lower = flag.lower()
         
         # Hard block: Security invariants
-        if flag in FORBIDDEN_CUSTOM_ARGS:
+        if flag_lower in FORBIDDEN_CUSTOM_ARGS or flag in FORBIDDEN_CUSTOM_ARGS:
             raise HTTPException(
                 status_code=400,
                 detail=f"Cannot override {flag}: managed by Cortex for security/routing"
             )
         
         # Soft warn: Request-time parameters
-        if flag in REQUEST_TIME_PARAMS:
-            logger.warning(
-                f"User added request-time parameter {flag} as startup arg. "
-                f"This should be in Request Defaults (Plane C), not startup args. "
-                f"See cortexSustainmentPlan.md for guidance."
+        if flag_lower in REQUEST_TIME_PARAMS or flag in REQUEST_TIME_PARAMS:
+            warning_msg = (
+                f"Request-time parameter '{flag}' should be in Request Defaults, not startup args."
             )
+            logger.warning(warning_msg)
+            warnings.append({
+                "flag": flag,
+                "severity": "warning",
+                "message": warning_msg
+            })
+        
+        # Gap #9: Validate llama.cpp flags and suggest corrections
+        elif engine_type == "llamacpp":
+            is_valid, suggestion, warning_msg = validate_llamacpp_flag(flag)
+            if not is_valid:
+                logger.info(f"Custom arg validation: {warning_msg}")
+                warnings.append({
+                    "flag": flag,
+                    "severity": "info",
+                    "message": warning_msg,
+                    "suggestion": suggestion
+                })
+    
+    return warnings
 
 
 def validate_custom_env_vars(env_list: List[Dict[str, Any]]) -> None:

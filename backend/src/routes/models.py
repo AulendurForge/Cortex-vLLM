@@ -140,6 +140,10 @@ async def list_models(_: dict = Depends(require_admin)):
                 # LoRA adapter support (Gap #10)
                 lora_adapters_json=getattr(r, 'lora_adapters_json', None),
                 lora_init_without_apply=getattr(r, 'lora_init_without_apply', None),
+                # Grammar support (Gap #11)
+                grammar_file=getattr(r, 'grammar_file', None),
+                # Embedding mode (Gap #13)
+                enable_embeddings=getattr(r, 'enable_embeddings', None),
                 state=r.state,
                 archived=bool(getattr(r, 'archived', False)),
                 port=r.port,
@@ -359,6 +363,10 @@ async def create_model(body: CreateModelRequest, _: dict = Depends(require_admin
             # LoRA adapter support (Gap #10)
             lora_adapters_json=getattr(body, 'lora_adapters_json', None),
             lora_init_without_apply=getattr(body, 'lora_init_without_apply', None),
+            # Grammar support (Gap #11)
+            grammar_file=getattr(body, 'grammar_file', None),
+            # Embedding mode (Gap #13)
+            enable_embeddings=getattr(body, 'enable_embeddings', None),
             state="stopped",
         )
         session.add(m)

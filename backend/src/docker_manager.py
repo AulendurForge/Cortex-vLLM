@@ -662,6 +662,25 @@ def _build_llamacpp_command(m: Model) -> list[str]:
     if lora_init_without_apply:
         cmd += ["--lora-init-without-apply"]
     
+    # Grammar support (Gap #11)
+    grammar_file = getattr(m, 'grammar_file', None)
+    if grammar_file:
+        # Grammar file path should be relative to models directory
+        container_grammar_path = f"/models/{grammar_file}"
+        cmd += ["--grammar-file", container_grammar_path]
+    
+    # Model alias (Gap #12) - Use served_model_name as alias
+    served_model_name = getattr(m, 'served_model_name', None)
+    if served_model_name:
+        cmd += ["--alias", served_model_name]
+    
+    # Embedding mode (Gap #13)
+    task = getattr(m, 'task', None)
+    enable_embeddings = getattr(m, 'enable_embeddings', None)
+    # Enable embeddings if task is 'embed' or explicitly enabled
+    if task == 'embed' or enable_embeddings:
+        cmd += ["--embeddings"]
+    
     # NOTE: Sampling parameters (temperature, top_p, repetition_penalty, etc.)
     # are request-time parameters, NOT container startup args.
     # They will be applied by the gateway when forwarding requests (Plane C).

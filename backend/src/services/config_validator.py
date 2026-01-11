@@ -347,7 +347,7 @@ def validate_model_config(m: Model, available_gpus: List[Dict] = None) -> List[V
     except Exception as e:
         logger.warning(f"VRAM estimation failed: {e}")
     
-    # 2. Custom Args Validation
+    # 2. Custom Args Validation (Gap #9: Enhanced with llama.cpp flag validation)
     try:
         from ..utils import validate_custom_startup_args, FORBIDDEN_CUSTOM_ARGS, REQUEST_TIME_PARAMS
         import json
@@ -356,28 +356,31 @@ def validate_model_config(m: Model, available_gpus: List[Dict] = None) -> List[V
         if custom_args_json:
             custom_args = json.loads(custom_args_json)
             
-            # Check for forbidden args
-            for arg in custom_args:
-                flag = arg.get('flag', '').lower()
-                
-                if flag in FORBIDDEN_CUSTOM_ARGS:
+            # Use enhanced validation with engine-specific checks
+            try:
+                arg_warnings = validate_custom_startup_args(custom_args, engine_type)
+                for w in arg_warnings:
+                    severity = w.get('severity', 'info')
+                    message = w.get('message', '')
+                    suggestion = w.get('suggestion')
+                    fix = f"Did you mean '{suggestion}'?" if suggestion else None
+                    
                     warnings.append(ValidationWarning(
-                        severity='error',
+                        severity=severity,
                         category='args',
-                        title='Forbidden Argument',
-                        message=f'{flag} is managed by Cortex and cannot be overridden',
-                        fix='Remove this argument from Custom Startup Arguments'
+                        title='Custom Argument Warning' if severity == 'warning' else 'Unknown Flag',
+                        message=message,
+                        fix=fix
                     ))
-                
-                # Check for request-time params
-                if flag in REQUEST_TIME_PARAMS:
-                    warnings.append(ValidationWarning(
-                        severity='warning',
-                        category='args',
-                        title='Request-Time Parameter',
-                        message=f'{flag} should be in Request Defaults, not startup args',
-                        fix='Move this to Request Defaults section instead'
-                    ))
+            except Exception as e:
+                # If validation raises (forbidden arg), convert to warning
+                warnings.append(ValidationWarning(
+                    severity='error',
+                    category='args',
+                    title='Forbidden Argument',
+                    message=str(e.detail if hasattr(e, 'detail') else e),
+                    fix='Remove this argument from Custom Startup Arguments'
+                ))
     except Exception as e:
         logger.warning(f"Custom args validation failed: {e}")
     
